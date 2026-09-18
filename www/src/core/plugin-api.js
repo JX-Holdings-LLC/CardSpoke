@@ -339,7 +339,8 @@ let nextDomHandleId = 1;
           const callArgs = Array.isArray(args) ? args : Array.prototype.slice.call(arguments, 1);
           handlers.slice().forEach(function(entry) {
             try {
-              entry.callback.apply(null, callArgs);
+              const result = entry.callback.apply(null, callArgs);
+              if (result && typeof result.catch === 'function') result.catch(err => console.error('[EventBus] Handler error in plugin ' + entry.pluginId + ':', err));
             } catch (err) {
               console.error('[EventBus] Handler error in plugin ' + entry.pluginId + ':', err);
             }
@@ -542,6 +543,7 @@ let nextDomHandleId = 1;
 
   function createWorkerUIHandlers(pluginId) {
     const domHandles = new Map(); // handleId -> { element, original? }
+    const ownedComponents = new Map();
 
     function doInject(selector, vnode, position) {
       if (!hasPermission(pluginId, 'ui-override')) {
@@ -621,13 +623,17 @@ let nextDomHandleId = 1;
         };
         const won = ComponentRegistry.register(name, component, priority || 0);
         if (won) {
+          ownedComponents.set(name, component);
           if (name === 'Card') cardRenderPluginIds.add(pluginId);
           trackResource(pluginId, { type: 'component', name: name, component: component });
         }
         return won;
       },
       unregisterComponent: function(name) {
-        if (ComponentRegistry) ComponentRegistry.unregister(name);
+        const owned = ownedComponents.get(name);
+        if (!owned) return;
+        if (ComponentRegistry) ComponentRegistry.unregister(name, owned);
+        ownedComponents.delete(name);
         if (name === 'Card') cardRenderPluginIds.delete(pluginId);
       },
       showToast: function(message, type, duration) {
@@ -697,16 +703,12 @@ let nextDomHandleId = 1;
 
   function createUtilsHandlers() {
     const utils = (window.CardSpoke && window.CardSpoke.utils) || {};
-    return new Proxy({}, {
-      get: function(_target, prop) {
-        if (typeof prop !== 'string') return undefined;
-        return async function() {
-          const fn = utils[prop];
-          if (typeof fn !== 'function') throw new Error('Unknown utils method: ' + prop);
-          return await fn.apply(utils, arguments);
-        };
-      }
+    const handlers = Object.create(null);
+    Object.keys(utils).forEach(prop => {
+      if (typeof utils[prop] !== 'function') return;
+      handlers[prop] = async function() { return await utils[prop].apply(utils, arguments); };
     });
+    return handlers;
   }
 
   function createLoggerHandlers() {
@@ -966,8 +968,12 @@ let nextDomHandleId = 1;
       // JS has no ambient access outside these permission-gated calls, so a
       // granted permission is an enforced capability grant, not a polite
       // request (CS-002, resolved).
-      if (instance.definition.manifest.permissions) {
-        const granted = await this._checkPermissions(id, instance.definition.manifest.permissions);
+      const requiredPermissions = [...(instance.definition.manifest.permissions || [])];
+      // A same-origin worker is useful isolation, but dynamic imports and new
+      // browser APIs mean it is not a complete hostile-code security boundary.
+      if (instance.definition.js || instance.definition.teardownJs) requiredPermissions.push('plugin-code');
+      if (requiredPermissions.length) {
+        const granted = await this._checkPermissions(id, requiredPermissions);
         if (!granted) {
           throw new Error('Permissions not granted for plugin: ' + id);
         }

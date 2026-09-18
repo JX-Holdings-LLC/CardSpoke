@@ -2,7 +2,7 @@
 
 ![CardSpoke logo](./CardSpoke.svg)
 
-**Version:** 0.20.0 Public Preview | **Schema:** v4
+**Version:** 0.21.1 Public Preview | **Schema:** v4
 
 CardSpoke is a lightweight, local-first, card-based knowledge app for organizing notes, ideas, references, writing, research, and personal information in flexible card trees.
 
@@ -89,11 +89,12 @@ Plugin layers:
 
 The plugin runtime includes consent prompts, risk labels, safe mode, resource cleanup, middleware hooks, component overrides, and sample plugins.
 
-**Trust model:** plugins that contain JavaScript run with full access to the app and its data — there is no sandbox, and declared permissions scope the plugin API rather than enforce a security boundary. CardSpoke asks for explicit consent before any plugin JavaScript runs; only install plugins from authors you trust. See [Security & Safety](./docs/policies/SECURITY_AND_SAFETY.md).
+**Trust model:** JavaScript packages run in dedicated workers with permission-checked API calls and restricted UI descriptions. Workers reduce risk but are not a complete hostile-code sandbox. The app asks for `plugin-code` trust consent before running any package JavaScript; plugins can read unlocked cards and dynamic imports are not covered by the host network permission. Only allow authors you trust. See [Security & Safety](./docs/policies/SECURITY_AND_SAFETY.md).
+
 
 ## Getting Started
 
-1. Install dependencies. Node 18+ is recommended.
+1. Install dependencies. Node 20.19+ or 22.12+ is recommended.
 
    ```bash
    npm install
@@ -234,7 +235,7 @@ Open the browser console. A missing `www/app.js` means the build has not been ru
 
 ### Tests fail with "Cannot find module"
 
-Ensure you are on Node 18 or later and that `npm install` completed successfully.
+Ensure you are on Node 20.19+ or 22.12+ and that `npm install` completed successfully.
 
 ### Capacitor sync fails
 

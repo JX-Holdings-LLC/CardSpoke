@@ -53,6 +53,7 @@ const grantedPermissions = new Map();
   }
 
   const PERMISSION_DESCRIPTIONS = {
+    'plugin-code': 'Run JavaScript from this author. Workers isolate the interface but are not a complete security sandbox. Plugins can read unlocked cards and may load code over the network. Only allow code you trust.',
     'ui-override': 'Modify the user interface and inject custom elements',
     'storage': 'Access and modify local storage',
     'network': 'Make network requests to external services',
@@ -165,8 +166,8 @@ const grantedPermissions = new Map();
     _showConsentDialog: async function(pluginId, pluginName, permissions) {
       return this._showDecisionDialog({
         titleText: 'Permission Request',
-        introText: '"' + pluginName + '" runs in a sandboxed worker with no access to this app ' +
-          'beyond what you grant below. It requests the following permissions:',
+        introText: '"' + pluginName + '" requests the permissions below. ' +
+          'Worker isolation reduces risk but does not make untrusted code safe:',
         bulletItems: permissions.map(function(perm) {
           return perm + ': ' + (PERMISSION_DESCRIPTIONS[perm] || 'Unknown permission');
         }),

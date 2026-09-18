@@ -42,7 +42,7 @@
 import { createServer } from 'http';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { resolve, dirname, extname, join, normalize } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { chromium } from 'playwright-core';
 import { encryptStorePayload, isEncryptedEnvelope, decryptStorePayload } from '../www/src/core/dataset-crypto.js';
 
@@ -427,82 +427,44 @@ await scenario('instance-import-round-trip (CS-005)', async () => {
   await context.close();
 });
 
-// 6 ─ Full-trust consent on enable (CS-002) ────────────────────────────────
-await scenario('plugin-full-trust (CS-002)', async () => {
+// 6 - Plugin trust and worker UI lifecycle
+await scenario('plugin-worker-consent', async () => {
   const errors = [];
   const { context, page } = await freshPage(errors);
   await page.goto(BASE);
   await page.waitForSelector('#main');
-
-  // Seed a JS feature plugin (suspended) directly in the store and register it.
   await page.evaluate(async () => {
     window.store.plugins['qa-badge'] = {
       definition: {
-        manifest: { id: 'qa-badge', name: 'QA Badge', version: '1.0.0', author: 'QA', layer: 'feature', permissions: [] },
-        css: null, js: "globalThis.__qaBadgeRan = (globalThis.__qaBadgeRan || 0) + 1;", teardownJs: null
-      },
-      enabled: false
+        manifest: { id: 'qa-badge', name: 'QA Badge', version: '1.0.0', author: 'QA', layer: 'feature', permissions: ['ui-override'] },
+        js: "await ctx.api.ui.inject('.header', ctx.h('span', { id: '__qaBadge' }, 'QA active'));"
+      }, enabled: false
     };
     window.save(true);
     await window.CardSpoke.Plugin.syncFromStore();
   });
-
   await openMenu(page);
   await page.click('#menuPluginManager');
-  await page.waitForSelector('.tab-btn');
-
-  const enableBtn = await page.waitForSelector('.modal-overlay.show .btn:has-text("Enable")');
-  await enableBtn.click();
-  const trustDialog = await page.waitForSelector('.permission-modal [role=dialog]', { timeout: 8000 });
-  check('full-trust dialog shown before plugin JS runs', !!trustDialog);
-  const trustText = await trustDialog.textContent();
-  check('dialog states plugins are NOT sandboxed', /not sandboxed/i.test(trustText));
-
-  // Decline first: plugin must stay suspended and JS must not have run
+  await page.click('.modal-overlay.show .btn:has-text("Enable")');
+  const dialog = await page.waitForSelector('.permission-modal [role=dialog]');
+  check('consent explains worker isolation limitations', /not a complete security sandbox/.test(await dialog.textContent()));
   await page.click('.permission-modal button.btn-secondary');
-  await page.waitForTimeout(300);
-  let state = await page.evaluate(() => ({
-    enabled: window.CardSpoke.Plugin.get('qa-badge').enabled,
-    ran: globalThis.__qaBadgeRan || 0,
-    trusted: localStorage.getItem('cardspoke_plugin_trust') || '[]'
-  }));
-  check('declining consent keeps plugin suspended', state.enabled === false);
-  check('declining consent means plugin JS never ran', state.ran === 0);
-  check('no trust recorded on decline', !state.trusted.includes('qa-badge'));
-
-  // Accept: plugin runs and consent persists
-  const enableBtn2 = await page.waitForSelector('.modal-overlay.show .btn:has-text("Enable")');
-  await enableBtn2.click();
+  await page.waitForTimeout(150);
+  check('declining consent leaves plugin disabled and UI untouched', await page.evaluate(() => !window.CardSpoke.Plugin.get('qa-badge').enabled && !document.getElementById('__qaBadge')));
+  // Denied permission is an expected diagnostic, not a runtime failure.
+  errors.length = 0;
+  await page.click('.modal-overlay.show .btn:has-text("Enable")');
   await page.waitForSelector('.permission-modal [role=dialog]');
   await page.click('.permission-modal button.btn-primary');
-  await page.waitForFunction(() => window.CardSpoke.Plugin.get('qa-badge').enabled === true, null, { timeout: 8000 });
-  state = await page.evaluate(() => ({
-    ran: globalThis.__qaBadgeRan || 0,
-    trusted: localStorage.getItem('cardspoke_plugin_trust') || '[]'
-  }));
-  check('accepting consent enables the plugin and runs its JS', state.ran === 1);
-  check('trust grant persisted', state.trusted.includes('qa-badge'));
-
-  // The enabled flag persists through the debounced save(); wait for it to
-  // actually land in localStorage before reloading, or the reload would read
-  // a store that still says enabled=false.
-  await page.waitForFunction(() => {
-    try {
-      const raw = localStorage.getItem(localStorage.getItem('activeInstance') || 'nested_cards_store');
-      return JSON.parse(raw).plugins['qa-badge'].enabled === true;
-    } catch { return false; }
-  }, null, { timeout: 8000 });
-
-  // Reload: trusted plugin re-enables without a new dialog
+  await page.waitForFunction(() => window.CardSpoke.Plugin.get('qa-badge').enabled && document.getElementById('__qaBadge'));
+  check('accepted worker plugin renders through vnode API', true);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('nested_cards_store')).plugins['qa-badge'].enabled);
   await page.reload();
-  await page.waitForSelector('#main');
-  await page.waitForFunction(() => {
-    const p = window.CardSpoke.Plugin.get('qa-badge');
-    return p && p.enabled === true;
-  }, null, { timeout: 8000 });
-  const dialogAfterReload = await page.$('.permission-modal');
-  check('trusted plugin re-enables on reload without re-prompt', !dialogAfterReload);
-  check('no console/page errors', errors.length === 0, errors.join(' | '));
+  await page.waitForSelector('#__qaBadge');
+  check('reload restores exactly one plugin element', await page.locator('#__qaBadge').count() === 1);
+  await page.evaluate(() => window.CardSpoke.Plugin.disable('qa-badge'));
+  check('suspend removes plugin UI', await page.locator('#__qaBadge').count() === 0);
+  check('no unexpected console/page errors', errors.length === 0, errors.join(' | '));
   await context.close();
 });
 
@@ -517,13 +479,13 @@ await scenario('plugin-dataset-round-trip (NEW-4/reconcile)', async () => {
   // header marker; a second empty dataset has no plugins. Trust is pre-granted
   // so enabling never prompts.
   await page.evaluate(() => {
-    localStorage.setItem('cardspoke_plugin_trust', JSON.stringify(['ds-marker']));
+    localStorage.setItem('cardspoke_plugin_permissions', JSON.stringify({ 'ds-marker': ['plugin-code', 'ui-override'] }));
     const pluginEntry = {
       definition: {
-        manifest: { id: 'ds-marker', name: 'DS Marker', version: '1.0.0', author: 'QA', layer: 'feature', permissions: [] },
+        manifest: { id: 'ds-marker', name: 'DS Marker', version: '1.0.0', author: 'QA', layer: 'feature', permissions: ['ui-override'] },
         css: null,
-        js: "var d=document.createElement('div'); d.id='__ds_marker'; document.body.appendChild(d); ctx._el=d;",
-        teardownJs: "if (ctx._el && ctx._el.parentNode) ctx._el.parentNode.removeChild(ctx._el);"
+        js: "await ctx.api.ui.inject('.header', ctx.h('span', { id: '__ds_marker' }, 'Dataset marker'));",
+        teardownJs: null
       },
       enabled: true
     };
@@ -556,6 +518,7 @@ await scenario('plugin-dataset-round-trip (NEW-4/reconcile)', async () => {
   await page.click('.modal-overlay.show .btn-primary:has-text("Open")'); // Open the empty vault
   await page.waitForFunction(() =>
     localStorage.getItem('activeInstance') === 'cards_empty_vault_1', null, { timeout: 8000 });
+  await page.waitForFunction(() => !window.CardSpoke.Plugin.get('ds-marker') && !document.getElementById('__ds_marker'));
   const afterSwitch = await page.evaluate(() => ({
     inRuntime: !!window.CardSpoke.Plugin.get('ds-marker'),
     markerPresent: !!document.getElementById('__ds_marker')
@@ -801,6 +764,7 @@ await scenario('responsive-360', async () => {
   await createCardViaUI(page, 'Mobile Layout Card', 'body text for the mobile smoke');
   const overflow = await page.evaluate(() =>
     document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  check('card navigation starts at the heading', await page.evaluate(() => scrollY === 0));
   check('no horizontal overflow at 360px', overflow <= 1, `overflow=${overflow}px`);
   await page.screenshot({ path: join(ART_DIR, 'mobile-360.png'), fullPage: false });
   check('no console/page errors', errors.length === 0, errors.join(' | '));
@@ -832,6 +796,119 @@ await scenario('card-title-not-css-selectable (SEC-1)', async () => {
   check('title is NOT exposed as a CSS-selectable value attribute (SEC-1)', probe.attr === null,
     `getAttribute('value')=${JSON.stringify(probe.attr)}`);
   check('no console/page errors', errors.length === 0, errors.join(' | '));
+  await context.close();
+});
+
+await scenario('loaded-data-survives-mutations', async () => {
+  const errors = [];
+  const { context, page } = await freshPage(errors);
+  await page.goto(BASE);
+  await page.waitForSelector('#main');
+  await createCardViaUI(page, 'Original preserved card', 'Original body');
+  await page.reload();
+  await page.waitForSelector('#main');
+  await createCardViaUI(page, 'Second after reload', 'New body');
+  check('creating after reload preserves original cards', await page.evaluate(() => Object.values(window.store.cards).some(c => c.title === 'Original preserved card')));
+  check('both cards are persisted', await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('nested_cards_store')).cards).length === 2));
+  const result = await page.evaluate(() => {
+    // Import/undo/reparent currently mutate the shell store directly.
+    window.store.cards.imported = { id: 'imported', title: 'Imported', body: '', children: [], tags: ['restored'], parentId: null };
+    window.store.rootOrder.push('imported');
+    window.updateCard('imported', { title: 'Imported edited' });
+    const afterEdit = window.store.cards.imported?.title;
+    window.createCard('After import', '');
+    return { afterEdit, count: Object.keys(window.store.cards).length, tags: window.getTags('imported') };
+  });
+  check('edit accepts a card restored outside the kernel', result.afterEdit === 'Imported edited');
+  check('later create preserves imported cards and tags', result.count === 4 && result.tags.includes('restored'));
+  check('no console/page errors', errors.length === 0, errors.join(' | '));
+  await context.close();
+});
+
+await scenario('worker-security-boundaries', async () => {
+  const { context, page } = await freshPage([]);
+  await page.goto(BASE);
+  await page.waitForSelector('#main');
+  const probe = await page.evaluate(async () => {
+    const { createPluginWorker } = await import('/src/core/plugin-worker-manager.js');
+    let result;
+    const worker = await createPluginWorker('ambient-probe', { js: `await ctx.api.storage.set('probe', {
+      fetch: typeof fetch, nested: typeof Worker, shared: typeof SharedWorker,
+      storage: typeof navigator.storage,
+      prototypeFetch: typeof Object.getPrototypeOf(self).fetch
+    });` }, (_path, args) => { result = args[1]; });
+    try { await worker.callWithDeadline(['lifecycle', 'runSetup'], [], 2000); } finally { worker.terminate(); }
+    return result;
+  });
+  check('raw and prototype worker capabilities are disabled', Object.values(probe).every(value => value === 'undefined'), JSON.stringify(probe));
+  const safe = await page.evaluate(async () => {
+    const { vnodeToDOM, h } = await import('/src/core/plugin-vnode.js');
+    const attacks = [h('script', { src: './app.js' }), h('iframe', { srcdoc: 'bad' }), h('a', { href: 'javascript:alert(1)' }), h('button', { onclick: 'alert(1)' })];
+    return attacks.every(node => { try { vnodeToDOM(node); return false; } catch { return true; } });
+  });
+  check('browser DOM rejects executable vnode descriptions', safe);
+  await context.close();
+});
+
+for (const width of [768, 1440]) {
+  await scenario('responsive-' + width, async () => {
+    const { context, page } = await freshPage([], { viewport: { width, height: 900 } });
+    await page.goto(BASE);
+    await page.waitForSelector('#main');
+    await createCardViaUI(page, 'Research project', 'A place for sources, notes, and linked ideas.');
+    check('no horizontal overflow', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.screenshot({ path: join(ART_DIR, 'review-' + width + '.png') });
+    await context.close();
+  });
+}
+
+await scenario('standalone-file', async () => {
+  const { context, page } = await freshPage([]);
+  await page.goto(pathToFileURL(join(WWW, 'index.html')).href);
+  await page.waitForSelector('#main');
+  await createCardViaUI(page, 'Standalone card', 'Works without a server');
+  await page.reload();
+  await page.waitForSelector('#main');
+  check('core file URL app persists cards through reload', await page.evaluate(() => Object.values(window.store.cards).some(c => c.title === 'Standalone card')));
+  await context.close();
+});
+
+await scenario('offline-reload', async () => {
+  const { context, page } = await freshPage([]);
+  await page.goto(BASE);
+  await page.waitForSelector('#main');
+  await createCardViaUI(page, 'Offline card', 'Local data');
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  await context.setOffline(true);
+  await page.reload();
+  await page.waitForSelector('#main');
+  check('cached app opens offline with local cards', await page.evaluate(() => Object.values(window.store.cards).some(c => c.title === 'Offline card')));
+  await context.close();
+});
+
+await scenario('thousand-card-search', async () => {
+  const { context, page } = await freshPage([]);
+  await page.goto(BASE);
+  await page.waitForSelector('#main');
+  await waitSaved(page);
+  await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('nested_cards_store'));
+    data.cards = {}; data.rootOrder = [];
+    for (let i=0; i<1000; i++) { const id = 'scale-' + i; data.cards[id] = { id, title: 'Research topic ' + i, body: 'Reference notes for a sample project', children: [], tags: [], parentId: null }; data.rootOrder.push(id); }
+    localStorage.setItem('nested_cards_store', JSON.stringify(data));
+  });
+  const start = Date.now();
+  await page.reload();
+  await page.waitForSelector('#main .card-tile');
+  check('1000-card fixture loads', await page.evaluate(() => Object.keys(window.store.cards).length === 1000), 'Load time ' + (Date.now()-start) + ' ms');
+  await goHome(page);
+  await page.fill('#searchInput', 'Research topic 999');
+  const searchStart = Date.now();
+  await page.press('#searchInput', 'Enter');
+  await page.waitForSelector('#searchResultGrid');
+  check('search returns target card', await page.locator('#searchResultGrid').innerText().then(text => text.includes('Research topic 999')), 'Search time ' + (Date.now()-searchStart) + ' ms');
+  writeFileSync(join(ART_DIR, 'scale-timing.json'), JSON.stringify({ loadAndSearchTotalMs: Date.now()-start, searchMs: Date.now()-searchStart, cards: 1000 }));
   await context.close();
 });
 

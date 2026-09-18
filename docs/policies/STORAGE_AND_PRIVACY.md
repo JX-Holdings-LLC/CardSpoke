@@ -76,3 +76,7 @@ Implementation: `www/src/core/dataset-crypto.js`.
 - Recommended backup cadence: before major edits/imports/plugin installs, and at regular intervals for active datasets.
 - Supported backup/export formats in current app flows: JSON, CSV, Markdown, TXT.
 - Encryption-at-export is not built in yet. Note that this is separate from dataset encryption at rest: exporting a PIN-protected dataset writes plaintext. Users handling sensitive data should encrypt exported files using trusted external tools before sharing or cloud sync.
+
+## Plugin trust and secondary storage
+
+The core app network behavior described above excludes user-installed plugin code. JavaScript packages require explicit plugin-code trust consent, can read unlocked cards, and may load modules outside the host network API. See the Security and Safety policy. LocalStorage remains primary even when an IndexedDB mirror is selected; a valid primary copy is not replaced by an older mirror during startup. Selected secondary writes must complete before Saved is displayed.

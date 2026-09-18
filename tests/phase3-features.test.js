@@ -420,7 +420,7 @@ test('buildSettingsPanel generates text input for string config values', () => {
 });
 
 test('buildSettingsPanel input onchange updates live config and context', async () => {
-  window.CardSpoke.Permissions.grantPermissions('live-config', []);
+  window.CardSpoke.Permissions.grantPermissions('live-config', ['plugin-code', ]);
   PluginManager.register('live-config', {
     manifest: {
       name: 'Live Config',
@@ -458,7 +458,7 @@ test('buildSettingsPanel input onchange updates live config and context', async 
 // have already captured, so it isn't a reliable "did it run" signal).
 
 test('install() runs plugin JS inside a sandboxed worker, not a main-thread function', async () => {
-  window.CardSpoke.Permissions.grantPermissions('sandbox-test', ['storage']);
+  window.CardSpoke.Permissions.grantPermissions('sandbox-test', ['plugin-code', 'storage']);
 
   const pkg = {
     manifest: {
@@ -479,7 +479,7 @@ test('install() runs plugin JS inside a sandboxed worker, not a main-thread func
 });
 
 test('sandboxed plugin JS has no ambient access to document, window, or fetch', async () => {
-  window.CardSpoke.Permissions.grantPermissions('sandbox-isolation-test', ['storage']);
+  window.CardSpoke.Permissions.grantPermissions('sandbox-isolation-test', ['plugin-code', 'storage']);
 
   const pkg = {
     manifest: {
@@ -501,7 +501,7 @@ test('sandboxed plugin JS has no ambient access to document, window, or fetch', 
 });
 
 test('syncFromStore reconstructs a plugin from its persisted js string but no callable setup', async () => {
-  window.CardSpoke.Permissions.grantPermissions('sandbox-sync-test', ['storage']);
+  window.CardSpoke.Permissions.grantPermissions('sandbox-sync-test', ['plugin-code', 'storage']);
 
   window.store.plugins['sandbox-sync-test'] = {
     definition: {

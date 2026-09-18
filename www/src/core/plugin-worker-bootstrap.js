@@ -14,54 +14,30 @@
  * limitations under the License.
  */
 
-// Plugin worker bootstrap — this file IS a plugin's sandbox.
-//
-// Loaded once per enabled JS-bearing plugin, in its own dedicated Worker. It
-// strips every ambient capability that would let plugin code reach the
-// network, storage, or another realm directly, then compiles and runs the
-// plugin's `js`/`teardownJs` source against a `ctx` object whose every
-// capability is a permission-checked round trip to the host (plugin-api.js).
-//
-// TRUST MODEL (CS-002, resolved): this worker has no DOM, no `window`, no
-// `localStorage`, and — as of the block below — no raw `fetch`/XHR/WebSocket/
-// IndexedDB either. The only way out is `ctx.api.*`, which the host enforces
-// for real. Full modern-JS/computation capability (crypto, WebAssembly,
-// timers, dynamic import, same-origin importScripts) is deliberately left
-// untouched — isolation should cost a plugin author DOM access, not
-// computational freedom.
+// Plugin worker bootstrap. Dedicated workers separate plugin computation
+// from the UI. Common ambient capabilities are disabled below; host API calls
+// use permission-checked RPC. This is defense in depth, not a complete
+// hostile-code sandbox: dynamic import and evolving browser capabilities
+// require explicit plugin-code trust consent (see SECURITY_AND_SAFETY.md).
 
 import { createRpcChannel, dispatch } from './plugin-rpc.js';
 import { h } from './plugin-vnode.js';
 
-// --- Strip ambient network/storage globals before any plugin code runs ---
-// (importScripts / dynamic import() are intentionally left alone — see
-// docs/architecture/PLUGIN_SYSTEM.md "What's open inside the sandbox".)
-//
-// Plain deletion (falling back to `undefined`), not a throwing getter: a
-// throwing getter would also fire on an innocuous `typeof fetch ===
-// 'function'` feature-detection check — a common pattern in general-purpose
-// JS libraries a plugin might legitimately importScripts() — and break it
-// with a confusing crash instead of the normal, expected `'undefined'`.
-// Calling the (now absent) identifier still fails loudly on its own
-// (`TypeError: fetch is not a function`); only the accessor-trap surprise
-// is removed.
-const REMOVED_GLOBALS = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'indexedDB', 'caches', 'BroadcastChannel'];
-REMOVED_GLOBALS.forEach(function(name) {
-  try {
-    delete self[name];
-  } catch (_e) { /* ignore */ }
-  if (name in self) {
-    try { self[name] = undefined; } catch (_e2) { /* non-configurable; leave as-is */ }
-  }
-});
-if (self.navigator && 'sendBeacon' in self.navigator) {
-  try {
-    delete self.navigator.sendBeacon;
-  } catch (_e) { /* ignore */ }
-  if ('sendBeacon' in self.navigator) {
-    try { self.navigator.sendBeacon = undefined; } catch (_e2) { /* ignore */ }
+// Disable common capabilities before evaluating plugin code. Shadowing alone
+// is insufficient because Web IDL methods can also live on prototypes.
+const REMOVED_GLOBALS = ['fetch', 'XMLHttpRequest', 'WebSocket', 'WebTransport', 'EventSource', 'indexedDB', 'caches', 'BroadcastChannel', 'Worker', 'SharedWorker', 'importScripts'];
+function removeCapability(object, name) {
+  // Shadow and remove prototype copies; deleting only an own property leaves
+  // Web IDL methods reachable through WorkerGlobalScope.prototype.
+  for (let current = object; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+    if (current === object || Object.hasOwn(current, name)) {
+      try { Object.defineProperty(current, name, { value: undefined, configurable: false, writable: false }); }
+      catch (_error) { throw new Error('Cannot disable worker capability: ' + name); }
+    }
   }
 }
+REMOVED_GLOBALS.forEach(name => removeCapability(self, name));
+if (self.navigator) ['sendBeacon', 'storage', 'serviceWorker', 'locks'].forEach(name => removeCapability(self.navigator, name));
 
 // --- Per-plugin runtime state ---
 let pluginId = null;

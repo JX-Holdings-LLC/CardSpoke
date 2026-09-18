@@ -206,22 +206,7 @@ Component Request: "Card"
 
 ### 4. Security Layers
 
-There is **no sandbox**. Plugin JavaScript is compiled with `new Function` and
-runs on the main thread in the page realm, with full reach over `window`,
-`document`, storage, and the network. The layers below manage *trust and
-expectations*, not isolation — see
-[Security & Safety](../policies/SECURITY_AND_SAFETY.md) for the full trust model.
-
-- **Full-trust consent**: any plugin shipping JavaScript requires explicit user
-  acceptance before it runs; CSS-only themes are the only auto-enabled layer
-- **Permissions**: a compatibility and UX contract that scopes what the
-  supported `ctx` API offers a well-behaved plugin — **not** a security boundary
-- **Risk labels**: `SAFE` / `LOW` / `HIGH` badges set expectations in the Plugin
-  Manager
-- **Safe Mode**: `?safemode` registers plugins without executing any of them
-- **Validation**: manifest, size, and footgun screening before registration
-- **Namespacing**: plugin storage keys are prefixed `plugin_<pluginId>_`, which
-  organizes data — it does not prevent one plugin from reading another's keys
+JavaScript packages execute inside dedicated workers with an explicit plugin-code trust grant, permission-checked host APIs, restricted vnode rendering and termination deadlines. CSS-only themes remain separate. Workers reduce risk but do not make hostile code safe; dynamic imports and browser capabilities require additional origin/CSP isolation. See [Plugin System](./PLUGIN_SYSTEM.md) and [Security and Safety](../policies/SECURITY_AND_SAFETY.md).
 
 ### 5. Compatibility
 
@@ -304,7 +289,7 @@ What this architecture provides:
 
 What it explicitly does **not** provide:
 
-- Plugin isolation or sandboxing of any kind
+- A complete hostile-code sandbox
 - A security boundary from the `permissions` array
 - Cloud storage drivers or remote sync
 - Guaranteed cleanup of plugin side effects made outside the `ctx` API

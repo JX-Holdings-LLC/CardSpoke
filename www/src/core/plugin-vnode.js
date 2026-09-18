@@ -29,6 +29,27 @@
 // host side.
 
 const EVENT_PROP_PATTERN = /^on([a-z]+)$/i;
+// Worker UI descriptions are untrusted input. Never create executable,
+// embedded-document, navigation-control, or custom elements on their behalf.
+const SAFE_TAGS = new Set(('a abbr b blockquote br button caption code col colgroup dd del details div dl dt em fieldset figcaption figure h1 h2 h3 h4 h5 h6 hr i img input kbd label legend li mark ol optgroup option p pre progress s samp section select small span strong sub summary sup table tbody td textarea th thead time tr u ul').split(' '));
+const SAFE_ATTRIBUTES = new Set(('id title role tabindex type name placeholder value checked disabled readonly multiple selected min max step rows cols maxlength minlength for colspan rowspan scope open hidden alt width height href src target rel download loading autocomplete').split(' '));
+const elementListeners = new WeakMap();
+
+function validateTag(tag) {
+  if (typeof tag !== 'string' || !SAFE_TAGS.has(tag.toLowerCase())) throw new Error('Unsupported plugin element: ' + tag);
+}
+
+function validateUrl(key, value) {
+  const text = String(value).trim();
+  if (/^[\u0000-\u0020]*[a-z][a-z0-9+.-]*:/i.test(text)) {
+    const scheme = text.slice(0, text.indexOf(':')).toLowerCase();
+    if (key === 'href' && ['https', 'http', 'mailto'].includes(scheme)) return;
+    if (key === 'src' && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(text)) return;
+    throw new Error('Unsupported plugin URL');
+  }
+  // Control characters can conceal a javascript: scheme from simple checks.
+  if (/[\u0000-\u0020]/.test(text) || text.startsWith('//') || text.includes(':')) throw new Error('Unsupported plugin URL');
+}
 
 /**
  * Build a vnode. Safe to call from a Worker (no DOM access required).
@@ -87,11 +108,20 @@ function applyProps(el, props) {
     }
 
     const eventMatch = key.match(EVENT_PROP_PATTERN);
-    if (eventMatch && typeof value === 'function') {
+    if (eventMatch) {
+      if (typeof value !== 'function') throw new Error('Plugin event handlers must be callbacks');
       const eventType = eventMatch[1].toLowerCase();
-      el.addEventListener(eventType, makeDomListener(value));
+      const listener = makeDomListener(value);
+      el.addEventListener(eventType, listener);
+      const listeners = elementListeners.get(el) || [];
+      listeners.push([eventType, listener]);
+      elementListeners.set(el, listeners);
       return;
     }
+
+    const attribute = key.toLowerCase();
+    if (!SAFE_ATTRIBUTES.has(attribute) && !/^(aria|data)-[a-z0-9_-]+$/.test(attribute)) throw new Error('Unsupported plugin attribute: ' + key);
+    if (attribute === 'href' || attribute === 'src') validateUrl(attribute, value);
 
     // Plain attribute. Booleans reflect as presence/absence (checked,
     // disabled, readOnly, ...); everything else is set via setAttribute so
@@ -154,6 +184,7 @@ export function vnodeToDOM(vnode) {
     throw new Error('Invalid vnode: expected the result of ctx.h(...)');
   }
 
+  validateTag(vnode.tag);
   const el = document.createElement(vnode.tag);
   applyProps(el, vnode.props);
   vnode.children.forEach(child => {
@@ -174,6 +205,9 @@ export function updateElementFromVnode(el, vnode) {
   if (!isVnode(vnode)) {
     throw new Error('Invalid vnode: expected the result of ctx.h(...)');
   }
+  validateTag(vnode.tag);
+  (elementListeners.get(el) || []).forEach(([type, listener]) => el.removeEventListener(type, listener));
+  elementListeners.delete(el);
   // Clear existing attributes (except housekeeping data-* the host itself
   // may have set, e.g. data-plugin-id) and children, then reapply.
   Array.from(el.attributes).forEach(attr => {

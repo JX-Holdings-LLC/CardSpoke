@@ -198,8 +198,9 @@ function freshHarness() {
 }
 
 function grantAll(id, manifest) {
+  Permissions.grantPermissions(id, ['plugin-code']);
   if (manifest.permissions && manifest.permissions.length) {
-    Permissions.grantPermissions(id, manifest.permissions);
+    Permissions.grantPermissions(id, ['plugin-code', ...manifest.permissions]);
   }
 }
 
@@ -332,7 +333,7 @@ test('feature sample wires live middleware through ctx.api.middleware', async ()
 
 test('createCard with tags emits a card.create event carrying the tagged card', async () => {
   freshHarness();
-  Permissions.grantPermissions('tag-watcher', ['data-modify', 'storage']);
+  Permissions.grantPermissions('tag-watcher', ['plugin-code', 'data-modify', 'storage']);
   // The whole onUpdate/createCard interaction runs inside the plugin's own
   // sandboxed worker now (ctx.api.data.onUpdate's callback and
   // ctx.api.data.createCard both live there); the result is recorded via
@@ -548,7 +549,7 @@ test('a setup failure after an appName override restores the brand button', asyn
 test('deleting a plugin sweeps its namespaced ctx.storage keys', async () => {
   freshHarness();
   const id = 'store-sweeper';
-  Permissions.grantPermissions(id, ['storage']);
+  Permissions.grantPermissions(id, ['plugin-code', 'storage']);
   await Plugin.install({
     manifest: { id, name: 'Store Sweeper', version: '1.0.0', author: 't', layer: 'feature', permissions: ['storage'] },
     js: "await ctx.api.storage.set('note', { v: 1 });"
@@ -583,6 +584,7 @@ test('a hung plugin setup is time-boxed so it cannot block boot forever', async 
 test('a hung sandboxed plugin setup is terminated, not just abandoned (CS-002 hardening)', async () => {
   freshHarness();
   const id = 'infinite-loop-plugin';
+  Permissions.grantPermissions(id, ['plugin-code']);
   Plugin.register(id, {
     manifest: { id, name: 'Infinite Loop', version: '1.0.0', author: 't', layer: 'feature' },
     js: 'while (true) {}'

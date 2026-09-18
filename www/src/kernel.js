@@ -46,6 +46,9 @@ function uid() {
  */
 function cloneCard(card) {
   if (!card) return null;
+  // Clone all JSON metadata, not only modsData: undo snapshots and callers
+  // must not retain writable references to meta/attributes/custom fields.
+  card = typeof structuredClone === 'function' ? structuredClone(card) : JSON.parse(JSON.stringify(card));
   let modsData = {};
   if (card.modsData) {
     try {
@@ -184,6 +187,7 @@ export class Kernel {
    * @returns {{ id: string, card: Object }} The new card (cloned).
    */
   createCard(title, body, parentId = null) {
+    if (parentId && !Object.hasOwn(this.cards, parentId)) throw new Error('Parent card not found');
     const id = uid();
     const now = Date.now();
     const card = {
@@ -240,8 +244,11 @@ export class Kernel {
   deleteCard(id) {
     const deleted = [];
     const affectedChildIds = [];
+    const visited = new Set();
 
     const remove = (cardId) => {
+      if (visited.has(cardId)) return;
+      visited.add(cardId);
       const card = this.cards[cardId];
       if (!card) return;
 
@@ -370,6 +377,7 @@ export class Kernel {
   reparent(id, newParentId) {
     const card = this.cards[id];
     if (!card) return { success: false, previousParentId: null };
+    if (newParentId && !Object.hasOwn(this.cards, newParentId)) return { success: false, previousParentId: card.parentId };
 
     // Guard: cannot reparent into own subtree
     if (newParentId) {
@@ -447,8 +455,11 @@ export class Kernel {
     if (!original) return { newId: null, allNewIds: [] };
 
     const allNewIds = [];
+    const visited = new Set();
 
     const dup = (sourceId, targetParentId) => {
+      if (visited.has(sourceId)) return null;
+      visited.add(sourceId);
       const src = this.cards[sourceId];
       if (!src) return null;
 

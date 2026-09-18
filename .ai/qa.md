@@ -1,7 +1,7 @@
 ---
 app: CardSpoke
 qa_doc_version: 1
-default_node_version: "18+"
+default_node_version: "20.19+ or 22.12+"
 default_package_manager: npm
 default_branch: main
 app_type: "Local-first Node/Vite web app"
@@ -80,7 +80,7 @@ For stress testing, use generated test data only.
 
 ## Required
 
-- Node.js 18 or newer
+- Node.js 20.19+ or 22.12+
 - npm
 - Git
 - Modern Chromium-based browser

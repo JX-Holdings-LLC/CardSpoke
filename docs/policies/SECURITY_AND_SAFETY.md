@@ -25,7 +25,7 @@ This guide outlines expectations for secure, transparent, and user-respecting be
 ## Data Handling
 
 - Avoid storing secrets in LocalStorage; prefer secure platform stores.
-  - **Mobile (Capacitor)**: Use `@capacitor/preferences` with encryption enabled for sensitive data
+  - **Mobile (Capacitor)**: Do not treat `@capacitor/preferences` as encrypted secret storage; use a reviewed platform secure-storage implementation for sensitive credentials
   - **Web**: The public app holds no credentials — there are no cloud storage drivers, no OAuth flows, and no hosted sync
   - **Desktop**: Consider using OS-level credential managers when available
 - Encrypt sensitive exports when feasible; document algorithms and key handling.
@@ -60,52 +60,15 @@ This guide outlines expectations for secure, transparent, and user-respecting be
 - For plugins introducing network access, include mockable clients and offline fallbacks.
 - Audit dependencies for known CVEs before releases.
 
-## Plugin Trust Model (v0.21.0 — CS-002 resolved)
+## Plugin Trust Model in 0.21.1
 
-**JavaScript plugins run inside a real sandbox.** Every JS-bearing plugin
-executes inside its own dedicated Web Worker (`www/src/core/plugin-worker-bootstrap.js`),
-compiled there — not on the main thread. That worker has no `window`, no
-`document`, no `localStorage`, and no raw `fetch`/`XMLHttpRequest`/`WebSocket`/
-`indexedDB`/`caches`/`BroadcastChannel` (all deliberately stripped before the
-plugin's own code ever runs). The only way out is `ctx.api.*`, which round-trips
-through the host over a `postMessage`-based RPC protocol (`www/src/core/plugin-rpc.js`)
-and is checked against the plugin's declared, user-granted `permissions` on
-every call. A denied permission is **unreachable**, not merely discouraged.
+JavaScript packages execute in dedicated workers, with permission checks on the host API and restricted vnode UI descriptions. The runtime also requires explicit `plugin-code` trust consent before any package JavaScript executes, including packages with no declared permissions. Existing plugins must obtain this new grant once; Safe Mode never enables them. CSS-only themes do not need a JavaScript trust grant.
 
-This replaces the previous "full-trust consent" model entirely — there is no
-blanket "trust this code" prompt anymore, because there is no longer a
-blanket capability grant to warn about. The remaining controls:
+Workers provide useful separation and can be terminated when code hangs, but the current same-origin architecture is not a complete sandbox for hostile code. Dynamic import remains available. HTTP workers use their own response CSP rather than inheriting the page's meta CSP. Plugins can read unlocked cards and register middleware. The UI therefore warns users to run code only from trusted authors. Do not interpret permission denial as proof that every browser-level capability is inaccessible.
 
-- **Per-permission consent (the real boundary now)**: the first time a plugin
-  needs a gated capability (`ui-override`, `data-modify`, `storage`,
-  `network`, `filesystem`), the user is asked to grant it — and that grant is
-  enforced by the sandbox construction itself, not just checked by a
-  cooperating wrapper.
-- **No silent JS enable for HIGH-risk plugins**: `app`-layer plugins (or any
-  plugin declaring `overrides`) always install suspended until the user
-  enables them manually. `SAFE`/`LOW` risk plugins (CSS-only themes, and
-  feature-layer plugins without overrides) auto-enable — the sandbox is what
-  makes that safe to do by default now, not a corner cut.
-- **Risk labeling**: `SAFE` = CSS-only theme; `LOW` = feature layer without
-  overrides; `HIGH` = app layer or overrides; visual badges shown in the
-  Plugin Manager.
-- **Safe Mode**: booting with `?safemode` registers plugins but never enables
-  them (no worker is ever spun up).
-- **Validation**: manifests, size limits, and obvious footguns (`eval`,
-  arbitrary `new Function`) are still screened before registration — a
-  defense-in-depth static check, not the primary boundary anymore.
-- **Hang/abuse containment**: a plugin whose setup never resolves (or spins
-  in an infinite loop) is time-boxed and its worker is forcibly terminated —
-  a capability the previous main-thread execution model could never offer,
-  since a genuine infinite loop there would have frozen the whole app with
-  no way to interrupt it.
+The audit hardens RPC dispatch against inherited-property traversal, rejects active vnode elements and unsafe attributes, disables common capabilities on worker prototypes, and terminates workers when initialization or timed calls fail. A separate-origin execution model with a restrictive response CSP would require further design and deployment work before untrusted plugins could be advertised as safe.
 
-Users should still only install plugins from authors they trust — sandboxing
-contains what a plugin's *code* can reach, not what it's allowed to do with a
-capability once granted (a plugin with `data-modify` can still delete every
-card; a plugin with `network` can still send your data somewhere you didn't
-expect). See `docs/architecture/PLUGIN_SYSTEM.md` for the full execution
-model and the complete `ctx.api` reference.
+Reference: [MDN worker CSP behavior](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers#content_security_policy).
 
 ## Security Improvements Implemented (v0.15.1+)
 
@@ -113,7 +76,7 @@ model and the complete `ctx.api` reference.
 - **Content Security Policy**: CSP headers added to limit attack surface
 - **Dependency Updates**: Regular `npm audit` to fix known vulnerabilities
 
-## Content Security Policy (v0.20.0)
+## Content Security Policy (v0.21.1)
 
 The app ships a hardened CSP in `www/index.html`:
 
@@ -127,7 +90,7 @@ The app ships a hardened CSP in `www/index.html`:
   own origin, and `worker-src 'self'` is what permits each plugin's dedicated
   sandbox Worker (a same-origin static file, `www/plugin-worker-bootstrap.js`
   — never a Blob URL, so this directive needs no further loosening).
-- `connect-src 'self' https://raw.githubusercontent.com` — the only permitted `fetch`/XHR destination beyond the app's own origin is the curated plugin gallery, and "Install from URL" only resolves gallery-hosted packages. A plugin's own `ctx.api.network.fetch` calls are proxied through this same main-thread chokepoint — the plugin's worker never performs a real network request itself, even once the `network` permission is granted.
+- `connect-src 'self' https://raw.githubusercontent.com` — the only permitted `fetch`/XHR destination beyond the app's own origin is the curated plugin gallery, and "Install from URL" only resolves gallery-hosted packages. A plugin's own `ctx.api.network.fetch` calls are proxied through this same main-thread chokepoint — this restricts host-proxied requests only; worker module loading needs its own response CSP.
 - `img-src 'self' data: blob:` — images are limited to the app's own origin plus inline `data:`/`blob:` data; arbitrary remote (`https:`) image loads are blocked. This closes the CSS `url()` / image-beacon channel a malicious or user-accepted plugin could otherwise use to signal data out of the page. It is paired with the app never reflecting user content (card titles, tags) into CSS-selectable DOM `value` attributes, so plugin CSS attribute selectors cannot read card content either.
 - `script-src 'self' 'unsafe-eval'` — `'unsafe-eval'` is required for `new Function`-based compilation of plugin `js`/`teardownJs` strings, which now happens exclusively **inside each plugin's own sandboxed Worker** (`www/src/core/plugin-worker-bootstrap.js`), not on the main thread. The directive is scoped to the app's own origin either way; what changed is that the compiled code it permits no longer has DOM/window/storage/network access by default (CS-002, resolved).
 - `frame-src 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` — frames, plugin objects, and external form posts are not used and are blocked outright.

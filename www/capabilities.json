@@ -1,7 +1,7 @@
 {
-  "version": "0.21.0",
+  "version": "0.21.1",
   "schemaVersion": 4,
-  "lastUpdated": "2026-07-28",
+  "lastUpdated": "2026-09-17",
   "description": "CardSpoke Plugin API Capabilities - Complete reference for plugin developers and AI agents. Every JS-bearing plugin runs inside its own sandboxed Worker (CS-002, resolved): no document/window/localStorage/raw fetch, every ctx.api call is async, and UI is described with ctx.h(tag, props, children) instead of document.createElement.",
   
   "permissions": [
@@ -496,7 +496,7 @@
       "appVersion": {
         "type": "string",
         "description": "CardSpoke application version",
-        "example": "'0.21.0'"
+        "example": "'0.21.1'"
       },
       "h": {
         "type": "function",

@@ -15,8 +15,8 @@ npm run test:watch
 ## Current Suite Status
 
 - Framework: [uvu](https://github.com/lukeed/uvu)
-- Test files: 33 (`*.test.js`)
-- Latest baseline: **403 / 403 passing** (`npm test`, verified at 0.20.0)
+- Test files: 35 (`*.test.js`)
+- Latest baseline: **423 / 423 passing** (`npm test`, verified at 0.21.1)
 
 ## What's Covered
 
@@ -37,3 +37,5 @@ npm run test:watch
 2. Import `test`/`assert` from `uvu` and any helpers from `./helpers.js`.
 3. Keep each case focused on one behavior and include edge conditions.
 4. Run `npm test` before submitting changes.
+
+The September 2026 review adds real RPC/vnode/worker regression tests and controlled-IO tests of the production persistence functions. Browser QA now has 95 assertions across 20 scenarios, including standalone file loading, offline reload, 1000-card search, current worker consent, and data preservation after reload. Unit helpers and static assertions are useful but do not replace these built-app checks.

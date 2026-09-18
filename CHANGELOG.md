@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.21.1] - 2026-09-17
+
+### Fixed
+- Escape every CSV field, preserve multiline bodies, and neutralize spreadsheet formula-like text. Open newly navigated cards at the top on mobile.
+- Preserve loaded, imported, reparented and undo-restored cards when using kernel-backed operations. Deep-clone metadata and guard cyclic delete/duplicate and missing parents.
+- Serialize encrypted saves, await selected secondary storage, reject failed switch flushes, cancel obsolete writes, and wait for IndexedDB transaction commit. Do not overwrite primary data with a stale mirror.
+- Restrict plugin RPC dispatch, vnode elements/attributes/URLs, and component unregistration; replace UI listeners on update and catch async event-handler errors.
+- Terminate failed worker initialization and timed calls; disable common ambient worker capabilities on prototypes as well as the global.
+- Require an explicit plugin-code trust grant and document worker isolation limits. Existing JS packages prompt once; CSS-only themes are unchanged.
+- Refresh five vulnerable transitive dependencies, align browser QA with worker plugins, expand regression coverage, restrict offline caching to shell assets, and document supported Node versions.
+
+### Compatibility
+- Schema remains 4. JS plugin packages retain their format and now require a new trust grant. Active HTML elements and unsafe vnode attributes are rejected.
+
+
 All notable changes to CardSpoke are documented in this file.
 
 The format follows Keep a Changelog and the project uses semantic versioning where practical.

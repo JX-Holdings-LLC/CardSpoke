@@ -5,14 +5,14 @@ how to build one for each of the three layers, how the lifecycle works
 (install, enable, suspend, delete, reload), and the complete `ctx` API
 reference.
 
-**App Version:** 0.21.0 | **Schema Version:** 4
+**App Version:** 0.21.1 | **Schema Version:** 4
 
 Companion documents:
 
 - [`PLUGIN_INVARIANTS.md`](./PLUGIN_INVARIANTS.md) — the stability contract:
   everything that must **not** change or the plugin system breaks. Read it
   before touching runtime code.
-- [`../sample-plugins/`](../sample-plugins/) — nine working packages (three
+- [`../../sample-plugins/`](../../sample-plugins/) — nine working packages (three
   per layer) plus `TEMPLATE.json`. Every sample installs, enables, suspends,
   deletes, and survives reload; `tests/plugin-lifecycle.test.js` proves it on
   every test run.
@@ -26,46 +26,14 @@ architectural layers, preserved from the original design:
 | Layer | Contents | Risk | Enable behavior |
 |---|---|---|---|
 | `theme` | CSS only | SAFE | Auto-enabled on install (no JavaScript runs, no worker spun up) |
-| `feature` | CSS + JS | LOW (unless it declares overrides) | Auto-enabled at install (JS runs inside its own sandboxed worker) |
+| `feature` | CSS + JS | LOW (unless it declares overrides) | Enabled at install only after required consent (JS runs in a worker) |
 | `app` | CSS + JS + overrides | HIGH | Installed **suspended**; the user must enable it manually |
 
-The runtime lives in `www/src/core/` (ES modules) and is exposed to both the
-app and to plugins as `window.CardSpoke`. There is exactly one plugin runtime
-and one build (`npm run build`, Vite + a separate worker bundle step). The
-safety model is **isolation-based**, not consent-based (CS-002, resolved):
+The runtime lives in `www/src/core/` and runs JavaScript packages in dedicated workers. Version 0.21.1 uses both worker isolation and explicit `plugin-code` trust consent. The worker has no DOM; common network, storage and nested-worker globals are disabled on the global object and its prototypes. Host RPC dispatch accepts only explicitly exported methods, and vnode rendering rejects active elements, inline event-handler strings and unsafe URLs.
 
-1. **The sandbox (the real boundary)**: every JS-bearing plugin package runs
-   inside its own dedicated Web Worker
-   (`www/src/core/plugin-worker-bootstrap.js`). That worker has no `window`,
-   `document`, `localStorage`, or raw `fetch`/`XMLHttpRequest`/`WebSocket`/
-   `indexedDB`/`caches` — the only way it can affect the app at all is
-   `ctx.api.*`, which is a permission-checked RPC round trip into the host.
-   A denied permission is genuinely unreachable from inside the worker, not
-   just discouraged.
-2. The **validator** still screens every package before registration
-   (manifest shape, CSS/JS size limits, obvious footguns) as defense in
-   depth, but it is no longer the thing standing between a plugin and your
-   data — the sandbox is.
-3. **Permission consent** is now an accurate capability grant: the first
-   time a plugin needs `ui-override`, `data-modify`, `storage`, `network`,
-   or `filesystem`, the user is asked once, and the grant is enforced by the
-   worker's construction (dangerous globals never exist there in the first
-   place), not by a cooperating wrapper a plugin could route around.
-4. **Risk labels** by layer set expectations; `app`-layer plugins never run
-   until the user enables them.
-5. **`?safemode`** in the URL boots the app with every plugin registered but
-   disabled — no worker is created for any of them.
-6. Everything a plugin creates through `ctx.api.*` is **tracked and
-   automatically removed** when the plugin is suspended or deleted,
-   including its dedicated worker (which is terminated outright — a genuine
-   `while(true){}` in a plugin's `js` only pins that one worker's thread and
-   is killed on suspend/timeout, never freezing the app).
+This is not a complete hostile-code security sandbox. Dynamic `import()` cannot be disabled by deleting global properties. An HTTP worker does not inherit the page's meta CSP; deployments need a worker response CSP to constrain module loading. Plugins can read unlocked cards and middleware is available without a separate permission. Permission checks constrain the host API, not every possible browser capability. Only run trusted plugin code. Existing JavaScript plugins require the new trust grant on their next enable; CSS-only themes do not.
 
-Sandboxing contains what a plugin's *code* can reach on its own — it does not
-limit what a plugin is allowed to do with a capability once you grant it (a
-plugin with `data-modify` can still delete every card; one with `network` can
-still send data somewhere unexpected). Treat granting permissions like
-installing software: only accept them for authors you trust.
+Safe Mode registers plugins without enabling them. Startup, initialization and RPC deadlines terminate failing workers. Tracked UI and components are cleaned up on suspend; component unregistration cannot remove another plugin's registration.
 
 ## Quick Start: your first plugin in five minutes
 
@@ -483,13 +451,7 @@ typography getters/setters, and accessibility queries. See
 | `filesystem` | Capacitor file access (mobile) |
 | `core-override` | Reserved for future core-function overrides |
 
-Declare what you use in `manifest.permissions`. On first enable the user
-sees a consent dialog listing each permission with its description; denial
-fails the enable, and — unlike before the sandbox — a denied permission is
-not merely "not offered by the convenience API," it is **unreachable** from
-inside the plugin's worker at all. Grants persist (localStorage key
-`cardspoke_plugin_permissions`) until the plugin is deleted — deleting a
-plugin revokes its grants, so a reinstall must ask again.
+Declare host capabilities in `manifest.permissions`. The runtime adds `plugin-code` for every package containing JavaScript, even when the manifest declares no permissions. Denial leaves the plugin disabled. Grants persist under `cardspoke_plugin_permissions` until revoked or the plugin is deleted. Legacy `cardspoke_plugin_trust` values are not imported into the new grant.
 
 Calling a gated API without the permission throws
 `Plugin does not have <permission> permission`.
@@ -588,7 +550,7 @@ and for advanced host-code integrations.
   `sample-plugins/manifest.json` (`id`, `name`, `description`, `layer`,
   `url`) in a PR. `tests/sample-extensions.test.js` verifies gallery
   entries point at real packages.
-- Start from [`sample-plugins/TEMPLATE.json`](../sample-plugins/TEMPLATE.json).
+- Start from [`sample-plugins/TEMPLATE.json`](../../sample-plugins/TEMPLATE.json).
 
 ## Testing your plugin
 
@@ -617,7 +579,7 @@ sample-extensions suite validates it automatically.
 |---|---|
 | "Plugin validation failed …" | Manifest missing `name`/`version`/`layer`, or JS contains `eval(`/`new Function(`, or size limits exceeded. |
 | "Plugin … is already registered" | Your `js` calls `registerPlugin` — remove it; packages self-register via `install()`. |
-| "Plugin does not have X permission" | Add the permission to `manifest.permissions` and re-enable (consent dialog appears). This is now enforced, not just descriptive — there is no way around it from inside the worker. |
+| "Plugin does not have X permission" | Add the permission to `manifest.permissions` and re-enable (consent dialog appears). The host API enforces this grant; see the trust limitations above. |
 | `ReferenceError: document is not defined` (or `window`) | Your `js` is using `document.createElement`/`window.*` directly — rewrite the UI with `ctx.h(...)` (see [Building UI](#building-ui-ctxh-and-the-vnode-model)); there is no DOM inside the sandbox. |
 | `cardsPromise.filter is not a function` (or similar) | You called an async `ctx.api.data.*`/`ctx.api.storage.*`/etc. method without `await`. Every `ctx.api` method is async now. |
 | Plugin installed but did nothing after reload | It was registered with `setup` as a function (session-only, host code). Ship `js` as a string so it persists and is sandboxed. |
@@ -651,3 +613,9 @@ globals, the persistence schema, validator limits, middleware operation
 names, the sandbox execution model — are specified in
 [`PLUGIN_INVARIANTS.md`](./PLUGIN_INVARIANTS.md). Change those only with a
 migration plan.
+
+## Changes in 0.21.1
+
+Worker UI supports ordinary text, layout, form, image and table elements. Active elements such as script, iframe, object, embed, link, meta, SVG and custom elements are rejected. Event properties must be RPC callbacks. Relative links, HTTP/HTTPS/mailto links and base64 raster images are supported; arbitrary image URLs and executable URL schemes are rejected. Updating an injected element replaces its event listeners rather than accumulating them. Source of truth for the allowlists is `plugin-vnode.js`.
+
+Common raw network/storage globals, nested Worker/SharedWorker constructors and importScripts are disabled. Dynamic import remains a trust limitation. The package API and persisted definition shape are unchanged, and schema version remains 4.
