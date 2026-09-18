@@ -10,7 +10,7 @@
 // cache namespace — and the worker's own bytes — change on every release.
 // A byte-identical worker is never re-installed by the browser, which is how
 // 0.18.1 shipped while returning users stayed pinned to the 0.18.0 cache.
-const CACHE_VERSION = 'cardspoke-app-shell-v0.21.0-public-1';
+const CACHE_VERSION = 'cardspoke-app-shell-v0.21.1-public-1';
 const APP_SHELL = [
   './',
   './index.html',
@@ -54,6 +54,10 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) {
     return;
   }
+  // Cache only the declared shell, never arbitrary same-origin content or
+  // query-bearing requests from extensions.
+  const shellUrls = APP_SHELL.map(path => new URL(path, self.location.href).href);
+  if (request.mode !== 'navigate' && !shellUrls.includes(url.href)) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(

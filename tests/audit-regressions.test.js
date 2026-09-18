@@ -187,7 +187,7 @@ test('CS-002: sandboxed plugin JS has no ambient access to document, window, or 
   global.localStorage = global.window.localStorage;
   global.document = { querySelector: () => null, getElementById: () => null };
 
-  Permissions.grantPermissions('trust-probe', ['storage']);
+  Permissions.grantPermissions('trust-probe', ['plugin-code', 'storage']);
   const id = await Plugin.install({
     manifest: {
       id: 'trust-probe', name: 'Trust Probe', version: '1.0.0', author: 't', layer: 'feature',

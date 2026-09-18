@@ -36,7 +36,7 @@ function createRpcChannel(options) {
     }
     if (isPlainObject(value)) {
       const out = {};
-      for (const key of Object.keys(value)) out[key] = serialize(value[key]);
+      for (const key of Object.keys(value)) Object.defineProperty(out, key, { value: serialize(value[key]), enumerable: true, writable: true, configurable: true });
       return out;
     }
     return value;
@@ -58,7 +58,7 @@ function createRpcChannel(options) {
     }
     if (isPlainObject(value)) {
       const out = {};
-      for (const key of Object.keys(value)) out[key] = deserialize(value[key]);
+      for (const key of Object.keys(value)) Object.defineProperty(out, key, { value: deserialize(value[key]), enumerable: true, writable: true, configurable: true });
       return out;
     }
     return value;
@@ -68,7 +68,12 @@ function createRpcChannel(options) {
     const promise = new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject, sentAt: Date.now() });
     });
-    send({ id, kind: "call", path, args: serialize(args || []) });
+    try {
+      send({ id, kind: "call", path, args: serialize(args || []) });
+    } catch (error) {
+      pending.get(id).reject(error);
+      pending.delete(id);
+    }
     return withTimeout(id, promise, opts && opts.timeoutMs);
   }
   function invoke(handle, args, opts) {
@@ -76,7 +81,12 @@ function createRpcChannel(options) {
     const promise = new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject, sentAt: Date.now() });
     });
-    send({ id, kind: "invoke", handle, args: serialize(args || []) });
+    try {
+      send({ id, kind: "invoke", handle, args: serialize(args || []) });
+    } catch (error) {
+      pending.get(id).reject(error);
+      pending.delete(id);
+    }
     return withTimeout(id, promise, opts && opts.timeoutMs);
   }
   function withTimeout(id, promise, timeoutMs) {
@@ -174,15 +184,15 @@ function createRpcChannel(options) {
   };
 }
 function dispatch(handlers, path, args) {
-  if (!Array.isArray(path) || path.length === 0) {
+  if (!Array.isArray(path) || path.length === 0 || path.some((key) => typeof key !== "string" || ["__proto__", "constructor", "prototype"].includes(key)) || args !== void 0 && !Array.isArray(args)) {
     throw new Error("Invalid RPC path");
   }
   let target = handlers;
   for (let i = 0; i < path.length - 1; i++) {
-    target = target && target[path[i]];
+    target = target && typeof target === "object" && Object.hasOwn(target, path[i]) ? target[path[i]] : void 0;
     if (!target) throw new Error("Unknown RPC path: " + path.join("."));
   }
-  const method = target && target[path[path.length - 1]];
+  const method = target && typeof target === "object" && Object.hasOwn(target, path[path.length - 1]) ? target[path[path.length - 1]] : void 0;
   if (typeof method !== "function") {
     throw new Error("Unknown RPC method: " + path.join("."));
   }
@@ -190,6 +200,8 @@ function dispatch(handlers, path, args) {
 }
 
 // www/src/core/plugin-vnode.js
+var SAFE_TAGS = new Set("a abbr b blockquote br button caption code col colgroup dd del details div dl dt em fieldset figcaption figure h1 h2 h3 h4 h5 h6 hr i img input kbd label legend li mark ol optgroup option p pre progress s samp section select small span strong sub summary sup table tbody td textarea th thead time tr u ul".split(" "));
+var SAFE_ATTRIBUTES = new Set("id title role tabindex type name placeholder value checked disabled readonly multiple selected min max step rows cols maxlength minlength for colspan rowspan scope open hidden alt width height href src target rel download loading autocomplete".split(" "));
 function h(tag, props, children) {
   if (typeof tag !== "string" || !tag) {
     throw new Error("ctx.h: tag must be a non-empty string");
@@ -208,31 +220,20 @@ function normalizeChildren(children) {
 }
 
 // www/src/core/plugin-worker-bootstrap.js
-var REMOVED_GLOBALS = ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "indexedDB", "caches", "BroadcastChannel"];
-REMOVED_GLOBALS.forEach(function(name) {
-  try {
-    delete self[name];
-  } catch (_e) {
-  }
-  if (name in self) {
-    try {
-      self[name] = void 0;
-    } catch (_e2) {
-    }
-  }
-});
-if (self.navigator && "sendBeacon" in self.navigator) {
-  try {
-    delete self.navigator.sendBeacon;
-  } catch (_e) {
-  }
-  if ("sendBeacon" in self.navigator) {
-    try {
-      self.navigator.sendBeacon = void 0;
-    } catch (_e2) {
+var REMOVED_GLOBALS = ["fetch", "XMLHttpRequest", "WebSocket", "WebTransport", "EventSource", "indexedDB", "caches", "BroadcastChannel", "Worker", "SharedWorker", "importScripts"];
+function removeCapability(object, name) {
+  for (let current = object; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+    if (current === object || Object.hasOwn(current, name)) {
+      try {
+        Object.defineProperty(current, name, { value: void 0, configurable: false, writable: false });
+      } catch (_error) {
+        throw new Error("Cannot disable worker capability: " + name);
+      }
     }
   }
 }
+REMOVED_GLOBALS.forEach((name) => removeCapability(self, name));
+if (self.navigator) ["sendBeacon", "storage", "serviceWorker", "locks"].forEach((name) => removeCapability(self.navigator, name));
 var pluginId = null;
 var ctx = null;
 var setupFn = null;

@@ -4,7 +4,7 @@ This guide covers platform prerequisites and workflows for building and running 
 
 ## Prerequisites
 
-- Node 18+
+- Node 20.19+ or 22.12+
 - Capacitor CLI (`npx cap`, via the `@capacitor/cli` project dependency)
 - Android: Android Studio, Android SDK + platform tools, Java 17+
 - iOS: Xcode, CocoaPods, iOS device/simulator provisioning

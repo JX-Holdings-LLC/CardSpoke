@@ -46,7 +46,10 @@ export async function createPluginWorker(pluginId, initPayload, onCall) {
   const readyTimer = setTimeout(() => readyReject(new Error('Plugin worker for "' + pluginId + '" failed to start')), READY_TIMEOUT_MS);
 
   const channel = createRpcChannel({
-    postMessage: (msg) => { if (!terminated) worker.postMessage(msg); },
+    postMessage: (msg) => {
+      if (terminated) throw new Error('Plugin worker was terminated');
+      worker.postMessage(msg);
+    },
     addListener: (handler) => {
       worker.addEventListener('message', (evt) => {
         const data = evt.data;
@@ -63,6 +66,7 @@ export async function createPluginWorker(pluginId, initPayload, onCall) {
 
   let onError = () => {};
   worker.addEventListener('error', (evt) => {
+    readyReject(new Error('Plugin worker failed to start: ' + (evt.message || 'unknown error')));
     channel.rejectAll(new Error('Plugin worker error: ' + (evt.message || 'unknown error')));
     onError(evt);
   });
@@ -70,12 +74,18 @@ export async function createPluginWorker(pluginId, initPayload, onCall) {
     channel.rejectAll(new Error('Plugin worker sent an unclonable message'));
   });
 
-  await ready;
-  await channel.call(['lifecycle', 'init'], [Object.assign({ id: pluginId }, initPayload)]);
+  try {
+    await ready;
+    await channel.call(['lifecycle', 'init'], [Object.assign({ id: pluginId }, initPayload)], { timeoutMs: READY_TIMEOUT_MS });
+  } catch (error) {
+    terminate();
+    throw error;
+  }
 
   function terminate() {
     if (terminated) return;
     terminated = true;
+    clearTimeout(readyTimer);
     channel.rejectAll(new Error('Plugin "' + pluginId + '" worker was terminated'));
     worker.terminate();
   }
@@ -97,12 +107,15 @@ export async function createPluginWorker(pluginId, initPayload, onCall) {
       });
       try {
         return await Promise.race([channel.call(path, args), timeout]);
+      } catch (error) {
+        terminate();
+        throw error;
       } finally {
         clearTimeout(timer);
       }
     },
     isHung(hangThresholdMs) {
-      return channel.oldestPendingAgeMs() > hangThresholdMs;
+      return terminated || channel.oldestPendingAgeMs() > hangThresholdMs;
     }
   };
 }

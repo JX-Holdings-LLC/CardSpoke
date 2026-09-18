@@ -78,6 +78,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
        * @returns {string} New card ID
        */
       function createCard(title, body, parentId = null, skipSave = false, skipHooks = false) {
+        _syncStoreToKernel();
         const result = _kernel.createCard(title, body, parentId);
         _syncKernelToStore();
 
@@ -104,6 +105,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
        * @param {boolean} skipHooks - Skip running plugin hooks
        */
       function updateCard(id, updates, skipSave = false, skipHooks = false) {
+        _syncStoreToKernel();
         const result = _kernel.updateCard(id, updates);
         if (!result.previousState) return;
         _syncKernelToStore();
@@ -131,6 +133,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
        * @param {string} id - Card ID to delete
        */
       function deleteCard(id, opts = {}) {
+        _syncStoreToKernel();
         const { skipSave = false, skipHooks = false } = opts;
 
         // Snapshot deleted cards via kernel before removal
@@ -334,6 +337,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
        * @returns {string} New card ID
        */
       function duplicateCard(id, withChildren = false) {
+        _syncStoreToKernel();
         if (!_kernel.hasCard(id)) return null;
 
         const result = _kernel.duplicateHierarchy(id, withChildren);
@@ -365,6 +369,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
        * @returns {string} New card ID
        */
       function duplicateCardAsChild(id, newParentId, withChildren = false) {
+        _syncStoreToKernel();
         if (!_kernel.hasCard(id)) return null;
 
         const result = _kernel.duplicateHierarchy(id, withChildren);
@@ -620,22 +625,21 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
       /**
        * Export cards to CSV format (flat structure)
        */
+      // Spreadsheet-safe text encoding. Quotes escape CSV delimiters, while
+      // a leading apostrophe prevents spreadsheet formula interpretation.
+      function csvCell(value) {
+        let text = String(value == null ? '' : value);
+        if (/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
+        return '"' + text.replace(/"/g, '""') + '"';
+      }
+
       function exportCSV() {
         let csv = 'ID,Title,Body,Parent ID,Tags,Children Count,Created,Updated\n';
-        
         Object.values(store.cards).forEach(card => {
-          const id = card.id || '';
-          const title = (card.title || '').replace(/"/g, '""');
-          const body = (card.body || '').replace(/"/g, '""').replace(/\n/g, ' ');
-          const parentId = card.parentId || '';
-          const tags = (card.tags || []).join(';');
-          const childrenCount = (card.children || []).length;
-          const created = card.createdAt || '';
-          const updated = card.updatedAt || '';
-
-          csv += `"${id}","${title}","${body}","${parentId}","${tags}",${childrenCount},"${created}","${updated}"\n`;
+          csv += [card.id || '', card.title || '', card.body || '', card.parentId || '',
+            (card.tags || []).join(';'), (card.children || []).length,
+            card.createdAt || '', card.updatedAt || ''].map(csvCell).join(',') + '\n';
         });
-
         const blob = new Blob([csv], { type: 'text/csv' });
         const filename = `cardspoke-${new Date().toISOString().slice(0,10)}.csv`;
         downloadWithFeedback(blob, filename, 'CSV');
@@ -664,7 +668,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         }
 
         // Validate cards object
-        if (pkg.cards && typeof pkg.cards !== 'object') {
+        if (pkg.cards && (typeof pkg.cards !== 'object' || Array.isArray(pkg.cards))) {
           showToast('Invalid import: cards must be an object', 'error');
           throw new Error('Invalid cards structure');
         }
@@ -672,7 +676,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         // Validate each card has required fields
         if (pkg.cards) {
           for (const [cardId, card] of Object.entries(pkg.cards)) {
-            if (!card || typeof card !== 'object') {
+            if (!card || typeof card !== 'object' || Array.isArray(card)) {
               showToast(`Invalid card structure for ID: ${cardId}`, 'error');
               throw new Error('Invalid card structure');
             }
@@ -730,7 +734,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         }
 
         const importedIds = [];
-        const idMap = {};
+        const idMap = Object.create(null);
         const remappedCards = {};
 
         Object.entries(pkg.cards || {}).forEach(([oldId, card]) => {
@@ -2408,6 +2412,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
       }
 
       function getTags(cardId) {
+        _syncStoreToKernel();
         return _kernel.getTags(cardId);
       }
 

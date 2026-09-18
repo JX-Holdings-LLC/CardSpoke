@@ -1,4 +1,4 @@
-// Version: 0.21.0
+// Version: 0.21.1
 (function() {
   "use strict";
   const middlewares = [];
@@ -403,6 +403,7 @@
     }
   }
   const PERMISSION_DESCRIPTIONS = {
+    "plugin-code": "Run JavaScript from this author. Workers isolate the interface but are not a complete security sandbox. Plugins can read unlocked cards and may load code over the network. Only allow code you trust.",
     "ui-override": "Modify the user interface and inject custom elements",
     "storage": "Access and modify local storage",
     "network": "Make network requests to external services",
@@ -498,7 +499,7 @@
     _showConsentDialog: async function(pluginId, pluginName, permissions) {
       return this._showDecisionDialog({
         titleText: "Permission Request",
-        introText: '"' + pluginName + '" runs in a sandboxed worker with no access to this app beyond what you grant below. It requests the following permissions:',
+        introText: '"' + pluginName + '" requests the permissions below. Worker isolation reduces risk but does not make untrusted code safe:',
         bulletItems: permissions.map(function(perm) {
           return perm + ": " + (PERMISSION_DESCRIPTIONS[perm] || "Unknown permission");
         }),
@@ -745,7 +746,7 @@
       }
       if (isPlainObject(value)) {
         const out = {};
-        for (const key of Object.keys(value)) out[key] = serialize(value[key]);
+        for (const key of Object.keys(value)) Object.defineProperty(out, key, { value: serialize(value[key]), enumerable: true, writable: true, configurable: true });
         return out;
       }
       return value;
@@ -767,7 +768,7 @@
       }
       if (isPlainObject(value)) {
         const out = {};
-        for (const key of Object.keys(value)) out[key] = deserialize(value[key]);
+        for (const key of Object.keys(value)) Object.defineProperty(out, key, { value: deserialize(value[key]), enumerable: true, writable: true, configurable: true });
         return out;
       }
       return value;
@@ -777,7 +778,12 @@
       const promise = new Promise((resolve, reject) => {
         pending.set(id, { resolve, reject, sentAt: Date.now() });
       });
-      send({ id, kind: "call", path, args: serialize(args || []) });
+      try {
+        send({ id, kind: "call", path, args: serialize(args || []) });
+      } catch (error) {
+        pending.get(id).reject(error);
+        pending.delete(id);
+      }
       return withTimeout(id, promise, opts && opts.timeoutMs);
     }
     function invoke(handle, args, opts) {
@@ -785,7 +791,12 @@
       const promise = new Promise((resolve, reject) => {
         pending.set(id, { resolve, reject, sentAt: Date.now() });
       });
-      send({ id, kind: "invoke", handle, args: serialize(args || []) });
+      try {
+        send({ id, kind: "invoke", handle, args: serialize(args || []) });
+      } catch (error) {
+        pending.get(id).reject(error);
+        pending.delete(id);
+      }
       return withTimeout(id, promise, opts && opts.timeoutMs);
     }
     function withTimeout(id, promise, timeoutMs) {
@@ -883,15 +894,15 @@
     };
   }
   function dispatch(handlers, path, args) {
-    if (!Array.isArray(path) || path.length === 0) {
+    if (!Array.isArray(path) || path.length === 0 || path.some((key) => typeof key !== "string" || ["__proto__", "constructor", "prototype"].includes(key)) || args !== void 0 && !Array.isArray(args)) {
       throw new Error("Invalid RPC path");
     }
     let target = handlers;
     for (let i = 0; i < path.length - 1; i++) {
-      target = target && target[path[i]];
+      target = target && typeof target === "object" && Object.hasOwn(target, path[i]) ? target[path[i]] : void 0;
       if (!target) throw new Error("Unknown RPC path: " + path.join("."));
     }
-    const method = target && target[path[path.length - 1]];
+    const method = target && typeof target === "object" && Object.hasOwn(target, path[path.length - 1]) ? target[path[path.length - 1]] : void 0;
     if (typeof method !== "function") {
       throw new Error("Unknown RPC method: " + path.join("."));
     }
@@ -910,7 +921,8 @@
     const readyTimer = setTimeout(() => readyReject(new Error('Plugin worker for "' + pluginId + '" failed to start')), READY_TIMEOUT_MS);
     const channel = createRpcChannel({
       postMessage: (msg) => {
-        if (!terminated) worker.postMessage(msg);
+        if (terminated) throw new Error("Plugin worker was terminated");
+        worker.postMessage(msg);
       },
       addListener: (handler) => {
         worker.addEventListener("message", (evt) => {
@@ -928,17 +940,24 @@
     let onError = () => {
     };
     worker.addEventListener("error", (evt) => {
+      readyReject(new Error("Plugin worker failed to start: " + (evt.message || "unknown error")));
       channel.rejectAll(new Error("Plugin worker error: " + (evt.message || "unknown error")));
       onError(evt);
     });
     worker.addEventListener("messageerror", () => {
       channel.rejectAll(new Error("Plugin worker sent an unclonable message"));
     });
-    await ready;
-    await channel.call(["lifecycle", "init"], [Object.assign({ id: pluginId }, initPayload)]);
+    try {
+      await ready;
+      await channel.call(["lifecycle", "init"], [Object.assign({ id: pluginId }, initPayload)], { timeoutMs: READY_TIMEOUT_MS });
+    } catch (error) {
+      terminate();
+      throw error;
+    }
     function terminate() {
       if (terminated) return;
       terminated = true;
+      clearTimeout(readyTimer);
       channel.rejectAll(new Error('Plugin "' + pluginId + '" worker was terminated'));
       worker.terminate();
     }
@@ -961,16 +980,35 @@
         });
         try {
           return await Promise.race([channel.call(path, args), timeout]);
+        } catch (error) {
+          terminate();
+          throw error;
         } finally {
           clearTimeout(timer);
         }
       },
       isHung(hangThresholdMs) {
-        return channel.oldestPendingAgeMs() > hangThresholdMs;
+        return terminated || channel.oldestPendingAgeMs() > hangThresholdMs;
       }
     };
   }
   const EVENT_PROP_PATTERN = /^on([a-z]+)$/i;
+  const SAFE_TAGS = new Set("a abbr b blockquote br button caption code col colgroup dd del details div dl dt em fieldset figcaption figure h1 h2 h3 h4 h5 h6 hr i img input kbd label legend li mark ol optgroup option p pre progress s samp section select small span strong sub summary sup table tbody td textarea th thead time tr u ul".split(" "));
+  const SAFE_ATTRIBUTES = new Set("id title role tabindex type name placeholder value checked disabled readonly multiple selected min max step rows cols maxlength minlength for colspan rowspan scope open hidden alt width height href src target rel download loading autocomplete".split(" "));
+  const elementListeners = /* @__PURE__ */ new WeakMap();
+  function validateTag(tag) {
+    if (typeof tag !== "string" || !SAFE_TAGS.has(tag.toLowerCase())) throw new Error("Unsupported plugin element: " + tag);
+  }
+  function validateUrl(key, value) {
+    const text = String(value).trim();
+    if (/^[\u0000-\u0020]*[a-z][a-z0-9+.-]*:/i.test(text)) {
+      const scheme = text.slice(0, text.indexOf(":")).toLowerCase();
+      if (key === "href" && ["https", "http", "mailto"].includes(scheme)) return;
+      if (key === "src" && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(text)) return;
+      throw new Error("Unsupported plugin URL");
+    }
+    if (/[\u0000-\u0020]/.test(text) || text.startsWith("//") || text.includes(":")) throw new Error("Unsupported plugin URL");
+  }
   function h$1(tag, props, children) {
     if (typeof tag !== "string" || !tag) {
       throw new Error("ctx.h: tag must be a non-empty string");
@@ -1015,11 +1053,19 @@
         return;
       }
       const eventMatch = key.match(EVENT_PROP_PATTERN);
-      if (eventMatch && typeof value === "function") {
+      if (eventMatch) {
+        if (typeof value !== "function") throw new Error("Plugin event handlers must be callbacks");
         const eventType = eventMatch[1].toLowerCase();
-        el.addEventListener(eventType, makeDomListener(value));
+        const listener = makeDomListener(value);
+        el.addEventListener(eventType, listener);
+        const listeners = elementListeners.get(el) || [];
+        listeners.push([eventType, listener]);
+        elementListeners.set(el, listeners);
         return;
       }
+      const attribute = key.toLowerCase();
+      if (!SAFE_ATTRIBUTES.has(attribute) && !/^(aria|data)-[a-z0-9_-]+$/.test(attribute)) throw new Error("Unsupported plugin attribute: " + key);
+      if (attribute === "href" || attribute === "src") validateUrl(attribute, value);
       if (typeof value === "boolean") {
         if (value) el.setAttribute(key, "");
         else el.removeAttribute(key);
@@ -1065,6 +1111,7 @@
     if (!isVnode(vnode)) {
       throw new Error("Invalid vnode: expected the result of ctx.h(...)");
     }
+    validateTag(vnode.tag);
     const el = document.createElement(vnode.tag);
     applyProps(el, vnode.props);
     vnode.children.forEach((child) => {
@@ -1076,6 +1123,9 @@
     if (!isVnode(vnode)) {
       throw new Error("Invalid vnode: expected the result of ctx.h(...)");
     }
+    validateTag(vnode.tag);
+    (elementListeners.get(el) || []).forEach(([type, listener]) => el.removeEventListener(type, listener));
+    elementListeners.delete(el);
     Array.from(el.attributes).forEach((attr) => {
       if (attr.name.indexOf("data-plugin") !== 0) el.removeAttribute(attr.name);
     });
@@ -1366,7 +1416,8 @@
           const callArgs = Array.isArray(args) ? args : Array.prototype.slice.call(arguments, 1);
           handlers.slice().forEach(function(entry) {
             try {
-              entry.callback.apply(null, callArgs);
+              const result = entry.callback.apply(null, callArgs);
+              if (result && typeof result.catch === "function") result.catch((err) => console.error("[EventBus] Handler error in plugin " + entry.pluginId + ":", err));
             } catch (err) {
               console.error("[EventBus] Handler error in plugin " + entry.pluginId + ":", err);
             }
@@ -1556,6 +1607,7 @@
   }
   function createWorkerUIHandlers(pluginId) {
     const domHandles = /* @__PURE__ */ new Map();
+    const ownedComponents = /* @__PURE__ */ new Map();
     function doInject(selector, vnode, position) {
       if (!hasPermission(pluginId, "ui-override")) {
         throw new Error("Plugin does not have ui-override permission");
@@ -1636,13 +1688,17 @@
         };
         const won = ComponentRegistry.register(name, component, priority || 0);
         if (won) {
+          ownedComponents.set(name, component);
           if (name === "Card") cardRenderPluginIds.add(pluginId);
           trackResource(pluginId, { type: "component", name, component });
         }
         return won;
       },
       unregisterComponent: function(name) {
-        if (ComponentRegistry) ComponentRegistry.unregister(name);
+        const owned = ownedComponents.get(name);
+        if (!owned) return;
+        if (ComponentRegistry) ComponentRegistry.unregister(name, owned);
+        ownedComponents.delete(name);
         if (name === "Card") cardRenderPluginIds.delete(pluginId);
       },
       showToast: function(message, type, duration) {
@@ -1713,16 +1769,14 @@
   }
   function createUtilsHandlers() {
     const utils2 = window.CardSpoke && window.CardSpoke.utils || {};
-    return new Proxy({}, {
-      get: function(_target, prop) {
-        if (typeof prop !== "string") return void 0;
-        return async function() {
-          const fn = utils2[prop];
-          if (typeof fn !== "function") throw new Error("Unknown utils method: " + prop);
-          return await fn.apply(utils2, arguments);
-        };
-      }
+    const handlers = /* @__PURE__ */ Object.create(null);
+    Object.keys(utils2).forEach((prop) => {
+      if (typeof utils2[prop] !== "function") return;
+      handlers[prop] = async function() {
+        return await utils2[prop].apply(utils2, arguments);
+      };
     });
+    return handlers;
   }
   function createLoggerHandlers() {
     return {
@@ -1915,8 +1969,10 @@
       if (instance.context && instance.definition.manifest.config) {
         instance.context.config = instance.definition.manifest.config;
       }
-      if (instance.definition.manifest.permissions) {
-        const granted = await this._checkPermissions(id, instance.definition.manifest.permissions);
+      const requiredPermissions = [...instance.definition.manifest.permissions || []];
+      if (instance.definition.js || instance.definition.teardownJs) requiredPermissions.push("plugin-code");
+      if (requiredPermissions.length) {
+        const granted = await this._checkPermissions(id, requiredPermissions);
         if (!granted) {
           throw new Error("Permissions not granted for plugin: " + id);
         }
@@ -2625,8 +2681,8 @@
   }
   "use strict";
   const APP_CREATOR = "Jeffrey Guntly";
-  const APP_VERSION = '0.21.0';
-  const APP_RELEASE_DATE = "2026-07-28";
+  const APP_VERSION = '0.21.1';
+  const APP_RELEASE_DATE = "2026-09-17";
   const APP_UPDATER = "JX Holdings, LLC";
   const SCHEMA_VERSION = 4;
   const MAX_UNDO_STACK = 50;
@@ -2699,6 +2755,7 @@
   }
   function cloneCard(card) {
     if (!card) return null;
+    card = typeof structuredClone === "function" ? structuredClone(card) : JSON.parse(JSON.stringify(card));
     let modsData = {};
     if (card.modsData) {
       try {
@@ -2802,6 +2859,7 @@
      * @returns {{ id: string, card: Object }} The new card (cloned).
      */
     createCard(title, body, parentId = null) {
+      if (parentId && !Object.hasOwn(this.cards, parentId)) throw new Error("Parent card not found");
       const id = uid();
       const now = Date.now();
       const card = {
@@ -2851,7 +2909,10 @@
     deleteCard(id) {
       const deleted = [];
       const affectedChildIds = [];
+      const visited = /* @__PURE__ */ new Set();
       const remove = (cardId) => {
+        if (visited.has(cardId)) return;
+        visited.add(cardId);
         const card = this.cards[cardId];
         if (!card) return;
         deleted.push(cloneCard(card));
@@ -2958,6 +3019,7 @@
     reparent(id, newParentId) {
       const card = this.cards[id];
       if (!card) return { success: false, previousParentId: null };
+      if (newParentId && !Object.hasOwn(this.cards, newParentId)) return { success: false, previousParentId: card.parentId };
       if (newParentId) {
         const descendantIds = this.getDescendantIds(id);
         if (descendantIds.includes(newParentId) || newParentId === id) {
@@ -3015,7 +3077,10 @@
       const original = this.cards[id];
       if (!original) return { newId: null, allNewIds: [] };
       const allNewIds = [];
+      const visited = /* @__PURE__ */ new Set();
       const dup = (sourceId, targetParentId) => {
+        if (visited.has(sourceId)) return null;
+        visited.add(sourceId);
         const src = this.cards[sourceId];
         if (!src) return null;
         const newId2 = uid();
@@ -3925,7 +3990,9 @@
         const store2 = transaction.objectStore(this.storeName);
         const request = store2.put(value, key);
         request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve();
+        transaction.oncomplete = () => resolve();
+        transaction.onabort = () => reject(transaction.error || new Error("IndexedDB transaction aborted"));
+        transaction.onerror = () => reject(transaction.error);
       });
     }
     async remove(key) {
@@ -3934,7 +4001,9 @@
         const store2 = transaction.objectStore(this.storeName);
         const request = store2.delete(key);
         request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve();
+        transaction.oncomplete = () => resolve();
+        transaction.onabort = () => reject(transaction.error || new Error("IndexedDB transaction aborted"));
+        transaction.onerror = () => reject(transaction.error);
       });
     }
     async list(prefix = "") {
@@ -4390,6 +4459,9 @@
   let datasetManager = null;
   let saveTimeout = null;
   let savePending = false;
+  let saveRevision = 0;
+  let saveEpoch = 0;
+  let saveWriteQueue = Promise.resolve();
   let lastSaveTime = 0;
   const SAVE_DEBOUNCE_MS = 500;
   const MIN_SAVE_INTERVAL_MS = 100;
@@ -4569,6 +4641,8 @@
     }
   }
   async function saveNow() {
+    const savingStore = store;
+    const savingKey = instanceKey;
     try {
       if (storageWriteLock) {
         savePending = false;
@@ -4579,13 +4653,14 @@
         try {
           const result = await window.CardSpoke.Middleware.run("card.save", [store]);
           if (result && result.prevented) {
-            savePending = false;
+            savePending = true;
             return;
           }
         } catch (err) {
           console.error("[Middleware] card.save pipeline error:", err);
         }
       }
+      if (store !== savingStore || instanceKey !== savingKey || storageWriteLock) return;
       const key = instanceKey || "nested_cards_store";
       const startTime = performance.now();
       if (!store.metadata) store.metadata = {};
@@ -4595,11 +4670,15 @@
         try {
           await persistStoreNow(key);
           const duration = performance.now() - startTime;
-          updateSaveStatus("saved");
-          setTimeout(() => updateSaveStatus("idle"), 1e3);
+          if (!savePending && store === savingStore) {
+            updateSaveStatus("saved");
+            setTimeout(() => {
+              if (!savePending && store === savingStore) updateSaveStatus("idle");
+            }, 1e3);
+          }
           console.log(`Saved in ${duration.toFixed(2)}ms`);
         } catch (e) {
-          savePending = false;
+          savePending = true;
           if (isQuotaError(e)) {
             showToast("Storage quota exceeded! Please clear old data or export your cards.", "error");
           } else {
@@ -4608,16 +4687,10 @@
           updateSaveStatus("error");
         }
       };
-      if (window.requestIdleCallback) {
-        requestIdleCallback(() => {
-          doSave();
-        }, { timeout: 2e3 });
-      } else {
-        doSave();
-      }
+      await doSave();
     } catch (e) {
       showToast("Failed to save: " + e.message, "error");
-      savePending = false;
+      savePending = true;
       updateSaveStatus("error");
     }
   }
@@ -4625,20 +4698,37 @@
     stripLegacyPinMetadata();
     const payload = JSON.stringify(store);
     const activePin = activeSessionPin;
-    const finalPayload = activePin ? await encryptStorePayload(payload, activePin) : payload;
-    localStorage.setItem(key, finalPayload);
-    if (isIndexedDbDataset()) {
-      getIndexedDbMirrorDriver().then((driver) => driver.set(key, finalPayload)).catch((err) => console.error("[IndexedDB] Mirror save failed:", err));
-    }
-    if (getStorageType() === "localfile") {
-      writeDatasetToLocalFile(finalPayload).catch((err) => {
-        console.error("[Local File] Save failed:", err);
-        showToast("Local file save failed: " + err.message, "error");
-      });
-    }
-    lastSaveTime = Date.now();
-    savePending = false;
-    if (typeof setDirty === "function") setDirty(false);
+    const revision = saveRevision;
+    const epoch = saveEpoch;
+    const storageType = getStorageType();
+    const fileHandle = storageType === "localfile" ? ensureLocalFileHandle() : null;
+    if (fileHandle) fileHandle.catch(() => {
+    });
+    const write = async () => {
+      const finalPayload = activePin ? await encryptStorePayload(payload, activePin) : payload;
+      if (epoch !== saveEpoch) return;
+      localStorage.setItem(key, finalPayload);
+      if (storageType === "indexeddb") {
+        const driver = await getIndexedDbMirrorDriver();
+        await driver.set(key, finalPayload);
+      }
+      if (fileHandle) {
+        const handle = await fileHandle;
+        if (epoch !== saveEpoch) return;
+        const writable = await handle.createWritable();
+        await writable.write(finalPayload);
+        await writable.close();
+      }
+      lastSaveTime = Date.now();
+      if (revision === saveRevision && epoch === saveEpoch) {
+        savePending = false;
+        if (typeof setDirty === "function") setDirty(false);
+      }
+    };
+    const result = saveWriteQueue.then(write);
+    saveWriteQueue = result.catch(() => {
+    });
+    return result;
   }
   function isQuotaError(e) {
     return !!e && (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED" || e.code === 22 || e.code === 1014);
@@ -4648,6 +4738,7 @@
       clearTimeout(saveTimeout);
       saveTimeout = null;
     }
+    await saveWriteQueue;
     if (!savePending) return;
     if (storageWriteLock) {
       savePending = false;
@@ -4667,9 +4758,11 @@
         showToast("Failed to save: " + e.message, "error");
       }
       updateSaveStatus("error");
+      throw e;
     }
   }
   function cancelPendingSave() {
+    saveEpoch++;
     if (saveTimeout) {
       clearTimeout(saveTimeout);
       saveTimeout = null;
@@ -4677,6 +4770,7 @@
     savePending = false;
   }
   function save(immediate = false) {
+    saveRevision++;
     if (saveTimeout) {
       clearTimeout(saveTimeout);
       saveTimeout = null;
@@ -4687,6 +4781,7 @@
       return;
     }
     if (immediate) {
+      savePending = true;
       saveNow();
       return;
     }
@@ -4986,45 +5081,8 @@
         if (repaired) showToast("Data integrity check repaired structural metadata", "info");
       }
       const storageType = getStorageType();
-      if (storageType === "indexeddb") {
-        getIndexedDbMirrorDriver().then((driver) => driver.get(key)).then(async (payload) => {
-          if (!payload) return;
-          let parsedMirror = typeof payload === "string" ? JSON.parse(payload) : payload;
-          if (isEncryptedEnvelope(parsedMirror)) {
-            if (!activeSessionPin) return;
-            try {
-              parsedMirror = JSON.parse(await decryptStorePayload(parsedMirror, activeSessionPin));
-            } catch (_mirrorErr) {
-              console.warn("[IndexedDB] Mirror payload could not be decrypted; skipping");
-              return;
-            }
-          }
-          if (!parsedMirror || typeof parsedMirror !== "object") return;
-          setStore({
-            rootOrder: parsedMirror.rootOrder || [],
-            cards: parsedMirror.cards || {},
-            plugins: parsedMirror.plugins || {},
-            bookmarks: parsedMirror.bookmarks || [],
-            recentCards: parsedMirror.recentCards || [],
-            viewMode: parsedMirror.viewMode || "normal",
-            activeTheme: parsedMirror.activeTheme || "light",
-            metadata: parsedMirror.metadata || store.metadata
-          });
-          if (store.metadata && store.metadata.navState) setNavState({ ...navState, ...store.metadata.navState });
-          if (store.metadata && Array.isArray(store.metadata.navHistory)) setNavHistory(store.metadata.navHistory.slice(-100));
-          const mirrorPinMigrated = stripLegacyPinMetadata();
-          const mirrorRepaired = validateStoreConsistency();
-          const mirrorTypedChanged = migrateTypedCards();
-          if (mirrorRepaired || mirrorTypedChanged || mirrorPinMigrated) save();
-          if (window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.syncFromStore) {
-            window.CardSpoke.Plugin.syncFromStore().catch((err) => console.error("[Plugin] Re-sync after IndexedDB load failed:", err));
-          }
-          render();
-        }).catch((err) => {
-          console.error("[IndexedDB] Load failed, using LocalStorage fallback:", err);
-        });
-      } else if (storageType === "localfile") {
-        readDatasetFromLocalFile().then(async (payload) => {
+      if (storageType === "localfile") {
+        await readDatasetFromLocalFile().then(async (payload) => {
           if (!payload) return;
           let parsedFile = JSON.parse(payload);
           if (isEncryptedEnvelope(parsedFile)) {
@@ -5095,6 +5153,7 @@
       addToRecentCards(opts.cardId);
     }
     render();
+    if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
   }
   function goBack() {
     if (navHistory.length) {
@@ -5245,6 +5304,7 @@
     _kernel.hydrate({ cards: store.cards, rootOrder: store.rootOrder });
   }
   function createCard(title, body, parentId = null, skipSave = false, skipHooks = false) {
+    _syncStoreToKernel();
     const result = _kernel.createCard(title, body, parentId);
     _syncKernelToStore();
     pushUndo("createCard", { cardId: result.id, card: result.card });
@@ -5258,6 +5318,7 @@
     return result.id;
   }
   function updateCard(id, updates, skipSave = false, skipHooks = false) {
+    _syncStoreToKernel();
     const result = _kernel.updateCard(id, updates);
     if (!result.previousState) return;
     _syncKernelToStore();
@@ -5275,6 +5336,7 @@
     }
   }
   function deleteCard(id, opts = {}) {
+    _syncStoreToKernel();
     const { skipSave = false, skipHooks = false } = opts;
     const result = _kernel.deleteCard(id);
     _syncKernelToStore();
@@ -5425,6 +5487,7 @@
     };
   }
   function duplicateCard(id, withChildren = false) {
+    _syncStoreToKernel();
     if (!_kernel.hasCard(id)) return null;
     const result = _kernel.duplicateHierarchy(id, withChildren);
     _syncKernelToStore();
@@ -5438,6 +5501,7 @@
     return result.newId;
   }
   function duplicateCardAsChild(id, newParentId, withChildren = false) {
+    _syncStoreToKernel();
     if (!_kernel.hasCard(id)) return null;
     const result = _kernel.duplicateHierarchy(id, withChildren);
     if (!result.newId) return null;
@@ -5619,19 +5683,24 @@
     const filename = `cardspoke-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.md`;
     downloadWithFeedback(blob, filename, "Markdown");
   }
+  function csvCell(value) {
+    let text = String(value == null ? "" : value);
+    if (/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
   function exportCSV() {
     let csv = "ID,Title,Body,Parent ID,Tags,Children Count,Created,Updated\n";
     Object.values(store.cards).forEach((card) => {
-      const id = card.id || "";
-      const title = (card.title || "").replace(/"/g, '""');
-      const body = (card.body || "").replace(/"/g, '""').replace(/\n/g, " ");
-      const parentId = card.parentId || "";
-      const tags = (card.tags || []).join(";");
-      const childrenCount = (card.children || []).length;
-      const created = card.createdAt || "";
-      const updated = card.updatedAt || "";
-      csv += `"${id}","${title}","${body}","${parentId}","${tags}",${childrenCount},"${created}","${updated}"
-`;
+      csv += [
+        card.id || "",
+        card.title || "",
+        card.body || "",
+        card.parentId || "",
+        (card.tags || []).join(";"),
+        (card.children || []).length,
+        card.createdAt || "",
+        card.updatedAt || ""
+      ].map(csvCell).join(",") + "\n";
     });
     const blob = new Blob([csv], { type: "text/csv" });
     const filename = `cardspoke-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`;
@@ -5656,13 +5725,13 @@
         showToast("Invalid import: data must be an object", "error");
         throw new Error("Invalid import data structure");
       }
-      if (pkg.cards && typeof pkg.cards !== "object") {
+      if (pkg.cards && (typeof pkg.cards !== "object" || Array.isArray(pkg.cards))) {
         showToast("Invalid import: cards must be an object", "error");
         throw new Error("Invalid cards structure");
       }
       if (pkg.cards) {
         for (const [cardId, card] of Object.entries(pkg.cards)) {
-          if (!card || typeof card !== "object") {
+          if (!card || typeof card !== "object" || Array.isArray(card)) {
             showToast(`Invalid card structure for ID: ${cardId}`, "error");
             throw new Error("Invalid card structure");
           }
@@ -5714,7 +5783,7 @@ Do you want to import the plugins?
         }
       }
       const importedIds = [];
-      const idMap = {};
+      const idMap = /* @__PURE__ */ Object.create(null);
       const remappedCards = {};
       Object.entries(pkg.cards || {}).forEach(([oldId, card]) => {
         const newId = uid();
@@ -7122,6 +7191,7 @@ This action cannot be undone!`, {
     return _kernel.resolveCardLinks(text);
   }
   function getTags(cardId) {
+    _syncStoreToKernel();
     return _kernel.getTags(cardId);
   }
   function addTag(cardId, tag, skipSave = false, skipUndo = false) {

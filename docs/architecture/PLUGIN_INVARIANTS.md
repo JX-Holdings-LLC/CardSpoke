@@ -194,9 +194,8 @@ corresponding `ctx.api` methods.
 `data-modify` — these six strings are persisted in user grants and written
 in plugin manifests. Add new permissions if needed; never rename or reuse
 the existing ones. Deleting a plugin (`unregister`) must keep revoking its
-grants. **Unchanged in meaning by the v0.21.0 sandbox** — but now genuinely
-enforced (the worker cannot reach an ungated capability at all), not merely
-descriptive.
+grants. Host API checks are
+enforced by RPC handlers. Worker isolation is not a complete browser capability boundary.
 
 ## 7. Middleware operations
 
@@ -310,3 +309,7 @@ Changing anything above? Then in the same PR:
    and make `npm test` pass.
 4. Add a CHANGELOG entry and consider the version bump (contract changes
    are at least a minor bump; persisted-schema changes are major).
+
+## 0.21.1 trust migration and UI validation
+
+Every JS-bearing package now requires the persisted `plugin-code` grant in addition to manifest permissions. Existing packages prompt once at their next enable. No schema migration is needed (schema 4); the old trust key does not grant this permission. CSS-only themes are unaffected. Worker UI permits a safe element/attribute set; code that attempted active elements must use supported vnode UI. RPC paths cannot traverse inherited properties. See the canonical Plugin System trust model for limitations; do not describe workers as a complete hostile-code sandbox.

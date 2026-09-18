@@ -82,7 +82,7 @@ function bootWorker({ cacheStores = {}, network = {} } = {}) {
     addEventListener: (name, fn) => { listeners[name] = fn; },
     skipWaiting: () => { state.skipWaited = true; },
     clients: { claim: () => { state.claimed = true; } },
-    location: { origin: ORIGIN }
+    location: { origin: ORIGIN, href: ORIGIN + '/service-worker.js' }
   };
 
   new Function('self', 'caches', 'fetch', WORKER_SOURCE)(self, caches, fetch);
@@ -193,4 +193,12 @@ test('offline navigation falls back to the cached index.html', async () => {
   assert.is(response.body, 'cached-shell');
 });
 
+test('same-origin non-shell requests are not intercepted or cached', () => {
+  const w = bootWorker();
+  for (const path of ['/private.json', '/app.js?private=data']) {
+    let intercepted = false;
+    w.listeners.fetch({ request: { method: 'GET', url: ORIGIN + path, mode: 'cors' }, respondWith() { intercepted = true; }, waitUntil() {} });
+    assert.not.ok(intercepted);
+  }
+});
 test.run();

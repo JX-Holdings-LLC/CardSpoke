@@ -119,7 +119,7 @@ test('listCards returns deep copies when cloneCard unavailable', () => {
 // Task 2.3: Storage API JSON Formatting
 test('storage.set/get round-trips objects correctly', async () => {
   // Grant storage permission
-  window.CardSpoke.Permissions.grantPermissions('storage-test', ['storage']);
+  window.CardSpoke.Permissions.grantPermissions('storage-test', ['plugin-code', 'storage']);
 
   PluginManager.register('storage-test', {
     manifest: { name: 'Storage Test', version: '1.0.0', layer: 'feature', permissions: ['storage'] }
@@ -193,7 +193,7 @@ test('syncFromStore reconstructs and runs a plugin from its persisted js string'
   // no-op set in test.before(). ctx.api.storage isn't cached that way — it
   // reads/writes window.localStorage directly — so it is an accurate
   // side-channel for "the worker actually ran this code."
-  window.CardSpoke.Permissions.grantPermissions('persist-test', ['storage']);
+  window.CardSpoke.Permissions.grantPermissions('persist-test', ['plugin-code', 'storage']);
 
   // Simulate what gets stored in window.store.plugins after install
   window.store.plugins['persist-test'] = {
@@ -225,7 +225,7 @@ test('syncFromStore reconstructs and runs a plugin from its persisted js string'
 test('enable() passes config to plugin context', async () => {
   let receivedConfig = null;
 
-  window.CardSpoke.Permissions.grantPermissions('config-test', []);
+  window.CardSpoke.Permissions.grantPermissions('config-test', ['plugin-code', ]);
 
   PluginManager.register('config-test', {
     manifest: {
@@ -270,7 +270,7 @@ test('network API denies fetch without network permission', async () => {
 });
 
 test('network API allows fetch with network permission', async () => {
-  window.CardSpoke.Permissions.grantPermissions('network-allowed', ['network']);
+  window.CardSpoke.Permissions.grantPermissions('network-allowed', ['plugin-code', 'network']);
 
   PluginManager.register('network-allowed', {
     manifest: { name: 'Network Allowed', version: '1.0.0', layer: 'feature', permissions: ['network'] }
@@ -321,7 +321,7 @@ test('filesystem API denies access without filesystem permission', async () => {
 // `js` string and runs it inside a dedicated worker — it no longer compiles
 // a main-thread-callable `setup` function (CS-002, resolved).
 test('install() runs plugin JS inside a sandboxed worker, not as a main-thread setup function', async () => {
-  window.CardSpoke.Permissions.grantPermissions('js-install-test', ['storage']);
+  window.CardSpoke.Permissions.grantPermissions('js-install-test', ['plugin-code', 'storage']);
 
   const pkg = {
     manifest: {

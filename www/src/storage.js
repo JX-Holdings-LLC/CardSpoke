@@ -126,7 +126,9 @@ import {
             const request = store.put(value, key);
       
             request.onerror = () => reject(request.error);
-            request.onsuccess = () => resolve();
+            transaction.oncomplete = () => resolve();
+            transaction.onabort = () => reject(transaction.error || new Error('IndexedDB transaction aborted'));
+            transaction.onerror = () => reject(transaction.error);
           });
         }
       
@@ -137,7 +139,9 @@ import {
             const request = store.delete(key);
       
             request.onerror = () => reject(request.error);
-            request.onsuccess = () => resolve();
+            transaction.oncomplete = () => resolve();
+            transaction.onabort = () => reject(transaction.error || new Error('IndexedDB transaction aborted'));
+            transaction.onerror = () => reject(transaction.error);
           });
         }
       
@@ -709,6 +713,9 @@ import {
       // Save state tracking
       let saveTimeout = null;
       let savePending = false;
+      let saveRevision = 0;
+      let saveEpoch = 0;
+      let saveWriteQueue = Promise.resolve();
       let lastSaveTime = 0;
       const SAVE_DEBOUNCE_MS = 500; // Wait 500ms after last change before saving
       const MIN_SAVE_INTERVAL_MS = 100; // Minimum time between actual saves
@@ -953,6 +960,8 @@ import {
       }
 
       async function saveNow() {
+        const savingStore = store;
+        const savingKey = instanceKey;
         try {
           // Never write while the dataset is locked (encrypted-but-not-
           // unlocked) or awaiting corruption recovery: the stored payload
@@ -968,7 +977,7 @@ import {
             try {
               const result = await window.CardSpoke.Middleware.run('card.save', [store]);
               if (result && result.prevented) {
-                savePending = false;
+                savePending = true;
                 return;
               }
             } catch (err) {
@@ -976,6 +985,7 @@ import {
             }
           }
 
+          if (store !== savingStore || instanceKey !== savingKey || storageWriteLock) return;
           const key = instanceKey || 'nested_cards_store';
           const startTime = performance.now();
 
@@ -983,17 +993,19 @@ import {
           store.metadata.navState = { ...navState };
           store.metadata.navHistory = Array.isArray(navHistory) ? navHistory.slice(-100) : [];
 
-          // Use requestIdleCallback if available to avoid blocking UI
+          // Await the write; an untracked idle callback can outlive a dataset switch.
           const doSave = async () => {
             try {
               await persistStoreNow(key);
               const duration = performance.now() - startTime;
               // Show success indicator briefly
-              updateSaveStatus('saved');
-              setTimeout(() => updateSaveStatus('idle'), 1000);
+              if (!savePending && store === savingStore) {
+                updateSaveStatus('saved');
+                setTimeout(() => { if (!savePending && store === savingStore) updateSaveStatus('idle'); }, 1000);
+              }
               console.log(`Saved in ${duration.toFixed(2)}ms`);
             } catch (e) {
-              savePending = false;
+              savePending = true;
               if (isQuotaError(e)) {
                 showToast('Storage quota exceeded! Please clear old data or export your cards.', 'error');
               } else {
@@ -1003,14 +1015,10 @@ import {
             }
           };
 
-          if (window.requestIdleCallback) {
-            requestIdleCallback(() => { doSave(); }, { timeout: 2000 });
-          } else {
-            doSave();
-          }
+          await doSave();
         } catch (e) {
           showToast('Failed to save: ' + e.message, 'error');
-          savePending = false;
+          savePending = true;
           updateSaveStatus('error');
         }
       }
@@ -1023,35 +1031,41 @@ import {
        * can report it. (CS-001: never write plaintext for an encrypted dataset.)
        */
       async function persistStoreNow(key) {
-        // The PIN must never be part of the persisted payload; if a legacy
-        // store still carries one, adopt it for the session and strip it
-        // before serializing (CS-001).
         stripLegacyPinMetadata();
         const payload = JSON.stringify(store);
         const activePin = activeSessionPin;
-        const finalPayload = activePin
-          ? await encryptStorePayload(payload, activePin)
-          : payload;
-
-        localStorage.setItem(key, finalPayload);
-
-        if (isIndexedDbDataset()) {
-          getIndexedDbMirrorDriver()
-            .then(driver => driver.set(key, finalPayload))
-            .catch(err => console.error('[IndexedDB] Mirror save failed:', err));
-        }
-
-        if (getStorageType() === 'localfile') {
-          writeDatasetToLocalFile(finalPayload)
-            .catch(err => {
-              console.error('[Local File] Save failed:', err);
-              showToast('Local file save failed: ' + err.message, 'error');
-            });
-        }
-
-        lastSaveTime = Date.now();
-        savePending = false;
-        if (typeof setDirty === 'function') setDirty(false);
+        const revision = saveRevision;
+        const epoch = saveEpoch;
+        const storageType = getStorageType();
+        // Capture the file handle before yielding so a later dataset cannot
+        // redirect this write. Writes serialize in invocation order, including
+        // encryption, which can otherwise finish out of order.
+        const fileHandle = storageType === 'localfile' ? ensureLocalFileHandle() : null;
+        if (fileHandle) fileHandle.catch(() => {});
+        const write = async () => {
+          const finalPayload = activePin ? await encryptStorePayload(payload, activePin) : payload;
+          if (epoch !== saveEpoch) return;
+          localStorage.setItem(key, finalPayload);
+          if (storageType === 'indexeddb') {
+            const driver = await getIndexedDbMirrorDriver();
+            await driver.set(key, finalPayload);
+          }
+          if (fileHandle) {
+            const handle = await fileHandle;
+            if (epoch !== saveEpoch) return;
+            const writable = await handle.createWritable();
+            await writable.write(finalPayload);
+            await writable.close();
+          }
+          lastSaveTime = Date.now();
+          if (revision === saveRevision && epoch === saveEpoch) {
+            savePending = false;
+            if (typeof setDirty === 'function') setDirty(false);
+          }
+        };
+        const result = saveWriteQueue.then(write);
+        saveWriteQueue = result.catch(() => {});
+        return result;
       }
 
       // QuotaExceededError is named differently across engines; match the
@@ -1070,6 +1084,7 @@ import {
        */
       async function flushPendingSave() {
         if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
+        await saveWriteQueue;
         if (!savePending) return;
         if (storageWriteLock) { savePending = false; return; }
         const key = instanceKey || 'nested_cards_store';
@@ -1086,6 +1101,7 @@ import {
             showToast('Failed to save: ' + e.message, 'error');
           }
           updateSaveStatus('error');
+          throw e; // Keep the current dataset open when its latest data could not be saved.
         }
       }
 
@@ -1095,11 +1111,13 @@ import {
        * (now removed) key after the switch.
        */
       function cancelPendingSave() {
+        saveEpoch++;
         if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
         savePending = false;
       }
 
       function save(immediate = false) {
+        saveRevision++;
         // Clear any pending save
         if (saveTimeout) {
           clearTimeout(saveTimeout);
@@ -1116,6 +1134,7 @@ import {
 
         // If immediate save requested, save now
         if (immediate) {
+          savePending = true;
           saveNow();
           return;
         }
@@ -1485,53 +1504,10 @@ import {
           }
 
           const storageType = getStorageType();
-          if (storageType === 'indexeddb') {
-            getIndexedDbMirrorDriver()
-              .then(driver => driver.get(key))
-              .then(async payload => {
-                if (!payload) return;
-                let parsedMirror = typeof payload === 'string' ? JSON.parse(payload) : payload;
-                if (isEncryptedEnvelope(parsedMirror)) {
-                  // Only merge the mirror if the session PIN can open it;
-                  // otherwise leave the already-loaded store untouched.
-                  if (!activeSessionPin) return;
-                  try {
-                    parsedMirror = JSON.parse(await decryptStorePayload(parsedMirror, activeSessionPin));
-                  } catch (_mirrorErr) {
-                    console.warn('[IndexedDB] Mirror payload could not be decrypted; skipping');
-                    return;
-                  }
-                }
-                if (!parsedMirror || typeof parsedMirror !== 'object') return;
-                setStore({
-                  rootOrder: parsedMirror.rootOrder || [],
-                  cards: parsedMirror.cards || {},
-                  plugins: parsedMirror.plugins || {},
-                  bookmarks: parsedMirror.bookmarks || [],
-                  recentCards: parsedMirror.recentCards || [],
-                  viewMode: parsedMirror.viewMode || 'normal',
-                  activeTheme: parsedMirror.activeTheme || 'light',
-                  metadata: parsedMirror.metadata || store.metadata
-                });
-                if (store.metadata && store.metadata.navState) setNavState({ ...navState, ...store.metadata.navState });
-                if (store.metadata && Array.isArray(store.metadata.navHistory)) setNavHistory(store.metadata.navHistory.slice(-100));
-                const mirrorPinMigrated = stripLegacyPinMetadata();
-                const mirrorRepaired = validateStoreConsistency();
-                const mirrorTypedChanged = migrateTypedCards();
-                if (mirrorRepaired || mirrorTypedChanged || mirrorPinMigrated) save();
-                // The mirror payload may contain plugins the boot-time sync
-                // never saw; syncFromStore is idempotent, so re-run it.
-                if (window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.syncFromStore) {
-                  window.CardSpoke.Plugin.syncFromStore()
-                    .catch(err => console.error('[Plugin] Re-sync after IndexedDB load failed:', err));
-                }
-                render();
-              })
-              .catch(err => {
-                console.error('[IndexedDB] Load failed, using LocalStorage fallback:', err);
-              });
-          } else if (storageType === 'localfile') {
-            readDatasetFromLocalFile()
+          // LocalStorage is the primary committed payload. An older mirror
+          // must never replace it on startup after a failed secondary write.
+          if (storageType === 'localfile') {
+            await readDatasetFromLocalFile()
               .then(async payload => {
                 if (!payload) return;
                 let parsedFile = JSON.parse(payload);
@@ -1622,6 +1598,8 @@ import {
         }
 
         render();
+        // A saved card opens at its heading, not the editor button scroll offset.
+        if (typeof window.scrollTo === 'function') window.scrollTo(0, 0);
       }
 
       function goBack() {

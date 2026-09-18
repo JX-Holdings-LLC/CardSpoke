@@ -64,3 +64,11 @@ The following may return later, but they are not current public app scope:
 - Encrypted cloud vault integrations
 
 Future cloud/off-device storage work should include a separate product decision, security review, permission model, user-facing recovery plan, and tests before being reintroduced.
+
+## Save consistency in 0.21.1
+
+LocalStorage remains the primary committed dataset. IndexedDB is a secondary mirror; a stale mirror no longer replaces a valid primary payload at startup. Choosing IndexedDB does not remove the primary LocalStorage quota requirement. Local-file loading completes before the dataset becomes available. Writes serialize in order, including encryption, and a selected secondary write must finish before the app reports Saved. A failed flush blocks a dataset switch so unsaved changes remain open. Deleting a dataset cancels queued writes.
+
+The shell refreshes the kernel from the current store before card mutations, duplication and tag reads, preserving loaded/imported/undo-restored data. IndexedDB writes resolve on transaction completion and reject aborted transactions.
+
+CSV export quotes every field and doubles embedded quotes, including tags and IDs. Formula-like text receives a leading apostrophe for spreadsheet safety; multiline body text remains within its quoted cell. JSON remains the lossless backup format.

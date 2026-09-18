@@ -91,7 +91,7 @@ export function createRpcChannel(options) {
     }
     if (isPlainObject(value)) {
       const out = {};
-      for (const key of Object.keys(value)) out[key] = serialize(value[key]);
+      for (const key of Object.keys(value)) Object.defineProperty(out, key, { value: serialize(value[key]), enumerable: true, writable: true, configurable: true });
       return out;
     }
     // Primitives, Date/Map/Set/typed arrays: handed to postMessage as-is and
@@ -116,7 +116,7 @@ export function createRpcChannel(options) {
     }
     if (isPlainObject(value)) {
       const out = {};
-      for (const key of Object.keys(value)) out[key] = deserialize(value[key]);
+      for (const key of Object.keys(value)) Object.defineProperty(out, key, { value: deserialize(value[key]), enumerable: true, writable: true, configurable: true });
       return out;
     }
     return value;
@@ -127,7 +127,8 @@ export function createRpcChannel(options) {
     const promise = new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject, sentAt: Date.now() });
     });
-    send({ id, kind: 'call', path, args: serialize(args || []) });
+    try { send({ id, kind: 'call', path, args: serialize(args || []) }); }
+    catch (error) { pending.get(id).reject(error); pending.delete(id); }
     return withTimeout(id, promise, opts && opts.timeoutMs);
   }
 
@@ -136,7 +137,8 @@ export function createRpcChannel(options) {
     const promise = new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject, sentAt: Date.now() });
     });
-    send({ id, kind: 'invoke', handle, args: serialize(args || []) });
+    try { send({ id, kind: 'invoke', handle, args: serialize(args || []) }); }
+    catch (error) { pending.get(id).reject(error); pending.delete(id); }
     return withTimeout(id, promise, opts && opts.timeoutMs);
   }
 
@@ -252,15 +254,20 @@ export function createRpcChannel(options) {
  * "cannot read property of undefined".
  */
 export function dispatch(handlers, path, args) {
-  if (!Array.isArray(path) || path.length === 0) {
+  if (!Array.isArray(path) || path.length === 0 || path.some(key =>
+    typeof key !== 'string' || ['__proto__', 'constructor', 'prototype'].includes(key)) ||
+    (args !== undefined && !Array.isArray(args))) {
     throw new Error('Invalid RPC path');
   }
   let target = handlers;
   for (let i = 0; i < path.length - 1; i++) {
-    target = target && target[path[i]];
+    // Only traverse explicitly exported namespaces, never function objects or
+    // inherited properties such as Function.prototype.constructor.
+    target = target && typeof target === 'object' && Object.hasOwn(target, path[i]) ? target[path[i]] : undefined;
     if (!target) throw new Error('Unknown RPC path: ' + path.join('.'));
   }
-  const method = target && target[path[path.length - 1]];
+  const method = target && typeof target === 'object' && Object.hasOwn(target, path[path.length - 1])
+    ? target[path[path.length - 1]] : undefined;
   if (typeof method !== 'function') {
     throw new Error('Unknown RPC method: ' + path.join('.'));
   }

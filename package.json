@@ -1,6 +1,6 @@
 {
   "name": "cardspoke",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "A lightweight, local-first card-based knowledge app",
   "scripts": {
     "test": "uvu tests -i helpers",
@@ -48,5 +48,8 @@
     "uvu": "^0.5.6",
     "vite": "^7.3.1"
   },
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
 }

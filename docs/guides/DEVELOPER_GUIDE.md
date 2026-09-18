@@ -2,7 +2,7 @@
 
 This guide explains how to work on the main CardSpoke web app, run tests, and align with the project's lightweight, local-first, plugins-first philosophy.
 
-**Current Public Preview:** 0.20.0 | **Schema Version:** 4
+**Current Public Preview:** 0.21.1 | **Schema Version:** 4
 
 ## Product Scope
 
