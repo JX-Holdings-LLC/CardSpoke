@@ -110,6 +110,50 @@ function hasCardLink(text, cardName) {
 }
 
 /**
+ * Rewrite every [[Old Name]] link token in text so it points at newName.
+ * Matching uses the same normalization as link resolution (case- and
+ * whitespace-insensitive), so exactly the tokens that currently resolve to
+ * the old title are rewritten. parseCardLinks has no alias syntax
+ * ([[Name|label]] is not a link to "Name"), so only the plain form exists.
+ * @param {string} text
+ * @param {string} oldName
+ * @param {string} newName - Must not contain '[' or ']' (not expressible as a link).
+ * @returns {{ text: string, count: number }}
+ */
+function replaceCardLinks(text, oldName, newName) {
+  if (!text || typeof text !== 'string' || !oldName || !newName) return { text, count: 0 };
+  const replacementName = String(newName).trim();
+  if (!replacementName || /[[\]]/.test(replacementName)) return { text, count: 0 };
+  const target = normalizeCardName(String(oldName));
+  if (!target) return { text, count: 0 };
+  let count = 0;
+  const out = text.replace(/\[\[([^\]]+)\]\]/g, (match, inner) => {
+    if (normalizeCardName(inner) !== target) return match;
+    count++;
+    return '[[' + replacementName + ']]';
+  });
+  return { text: out, count };
+}
+
+/**
+ * Normalize one tag value: strip a leading '#', lowercase, trim. Non-string
+ * primitives are stringified; null/undefined/objects yield '' (dropped).
+ * @param {*} tag
+ * @returns {string}
+ */
+function normalizeTag(tag) {
+  if (tag == null || typeof tag === 'object' || typeof tag === 'function') return '';
+  return String(tag).trim().replace(/^#/, '').trim().toLowerCase();
+}
+
+/**
+ * Fields a generic update may never change: identity, hierarchy (moves go
+ * through reparent so both sides of the parent/child link stay consistent)
+ * and creation time. Prototype-mutating keys are refused as well.
+ */
+const PROTECTED_UPDATE_FIELDS = new Set(['id', 'parentId', 'children', 'createdAt', '__proto__', 'constructor', 'prototype']);
+
+/**
  * Extract inline #tags from body text.
  * @param {string} body
  * @returns {string[]}
@@ -218,7 +262,9 @@ export class Kernel {
   }
 
   /**
-   * Update fields on an existing card.
+   * Update content fields on an existing card. Structural fields (id,
+   * parentId, children, createdAt) are ignored — moves go through reparent()
+   * so parent.children / rootOrder can never disagree with card.parentId.
    * @param {string} id
    * @param {Object} updates - Fields to merge onto the card.
    * @returns {{ previousState: Object|null, card: Object|null }} Cloned before/after.
@@ -229,7 +275,13 @@ export class Kernel {
 
     const previousState = cloneCard(card);
     const updateTimestamp = Date.now();
-    Object.assign(card, updates, { updatedAt: updateTimestamp });
+    const safeUpdates = {};
+    if (updates && typeof updates === 'object') {
+      for (const key of Object.keys(updates)) {
+        if (!PROTECTED_UPDATE_FIELDS.has(key)) safeUpdates[key] = updates[key];
+      }
+    }
+    Object.assign(card, safeUpdates, { updatedAt: updateTimestamp });
 
     return { previousState, card: cloneCard(card) };
   }
@@ -525,11 +577,11 @@ export class Kernel {
     const card = this.cards[cardId];
     if (!card) return false;
 
-    const normalized = tag.replace(/^#/, '').toLowerCase().trim();
+    const normalized = normalizeTag(tag);
     if (!normalized) return false;
 
-    if (!card.tags) card.tags = [];
-    if (card.tags.some(t => t.toLowerCase() === normalized)) return false;
+    if (!Array.isArray(card.tags)) card.tags = [];
+    if (card.tags.some(t => normalizeTag(t) === normalized)) return false;
 
     card.tags.push(normalized);
     card.updatedAt = Date.now();
@@ -544,11 +596,12 @@ export class Kernel {
    */
   removeTag(cardId, tag) {
     const card = this.cards[cardId];
-    if (!card || !card.tags) return false;
+    if (!card || !Array.isArray(card.tags)) return false;
 
-    const normalized = tag.replace(/^#/, '').toLowerCase().trim();
+    const normalized = normalizeTag(tag);
+    if (!normalized) return false;
     const before = card.tags.length;
-    card.tags = card.tags.filter(t => t.toLowerCase() !== normalized);
+    card.tags = card.tags.filter(t => normalizeTag(t) !== normalized);
 
     if (card.tags.length === before) return false;
     card.updatedAt = Date.now();
@@ -565,8 +618,8 @@ export class Kernel {
     const card = this.cards[cardId];
     if (!card) return false;
 
-    const normalized = tags
-      .map(t => t.replace(/^#/, '').toLowerCase().trim())
+    const normalized = (Array.isArray(tags) ? tags : [])
+      .map(normalizeTag)
       .filter(Boolean);
 
     card.tags = [...new Set(normalized)];
@@ -643,6 +696,26 @@ export class Kernel {
   }
 
   /**
+   * Rewrite [[oldName]] links to [[newName]] in every card body. Pure data
+   * operation: returns cloned before/after snapshots so the Shell can record
+   * undo entries and fire hooks.
+   * @param {string} oldName
+   * @param {string} newName
+   * @returns {Array<{id: string, previousState: Object, card: Object, count: number}>}
+   */
+  rewriteCardLinks(oldName, newName) {
+    const changes = [];
+    for (const [id, card] of Object.entries(this.cards)) {
+      if (!card || typeof card.body !== 'string' || !card.body.includes('[[')) continue;
+      const { text, count } = replaceCardLinks(card.body, oldName, newName);
+      if (!count) continue;
+      const result = this.updateCard(id, { body: text });
+      changes.push({ id, previousState: result.previousState, card: result.card, count });
+    }
+    return changes;
+  }
+
+  /**
    * Get all cards that link to a given card via [[Title]] references.
    * @param {string} cardId
    * @returns {Array<{id: string, title: string}>}
@@ -696,4 +769,4 @@ export class Kernel {
 
 // ── Standalone utility re-exports (useful for Shell / Layer 2) ───────────────
 
-export { uid, cloneCard, normalizeCardName, parseCardLinks, hasCardLink, extractTags };
+export { uid, cloneCard, normalizeCardName, parseCardLinks, hasCardLink, extractTags, replaceCardLinks, normalizeTag };

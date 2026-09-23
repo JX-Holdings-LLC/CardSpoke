@@ -123,30 +123,100 @@ import {
         }
       }
 
+      /**
+       * Put a previously deleted card back into the tree (undo of a delete,
+       * or a Trash Bin restore). If its parent still exists it re-attaches
+       * there; if the parent is gone (e.g. restoring a child before its
+       * still-trashed parent) the card is parked at root so it stays
+       * reachable instead of becoming an invisible orphan. Its parentId is
+       * kept, so restoring the parent later re-adopts it (and removes it
+       * from root) instead of listing it twice.
+       * @param {Object} cardData - Card snapshot to restore
+       */
+      function restoreCardIntoTree(cardData) {
+        if (!cardData || !cardData.id) return;
+        const id = cardData.id;
+        const restored = typeof cloneCard === 'function' ? cloneCard(cardData) : cardData;
+        store.cards[id] = restored;
+        if (!Array.isArray(store.rootOrder)) store.rootOrder = [];
+        const parent = restored.parentId ? store.cards[restored.parentId] : null;
+        if (parent) {
+          if (!Array.isArray(parent.children)) parent.children = [];
+          if (!parent.children.includes(id)) parent.children.push(id);
+          store.rootOrder = store.rootOrder.filter(c => c !== id);
+        } else if (!store.rootOrder.includes(id)) {
+          store.rootOrder.push(id);
+        }
+        // Children restored earlier (while this card was still gone) were
+        // parked at root — re-adopt them now that their parent is back.
+        (restored.children || []).forEach(childId => {
+          const child = store.cards[childId];
+          if (child && child.parentId === id && store.rootOrder.includes(childId)) {
+            store.rootOrder = store.rootOrder.filter(c => c !== childId);
+          }
+        });
+        const trashIndex = trashBin.findIndex(t => t && t.card && t.card.id === id);
+        if (trashIndex > -1) trashBin.splice(trashIndex, 1);
+      }
+
+      // Undo/redo of an updateCard entry restores CONTENT only. Hierarchy is
+      // owned by create/delete/move entries; replaying a stale children or
+      // parentId snapshot would detach children created (or moves made)
+      // after the edit and desync parent.children from card.parentId.
+      const UNDO_STRUCTURAL_FIELDS = ['id', 'parentId', 'children', 'createdAt'];
+
+      function applyCardContentState(cardId, state, otherState) {
+        const target = store.cards[cardId];
+        if (!target || !state) return;
+        Object.keys(state).forEach(key => {
+          if (UNDO_STRUCTURAL_FIELDS.includes(key)) return;
+          target[key] = state[key] && typeof state[key] === 'object'
+            ? JSON.parse(JSON.stringify(state[key]))
+            : state[key];
+        });
+        // Fields the edit introduced (absent from the state being restored)
+        // are removed so e.g. a newly added flag does not survive the undo.
+        if (otherState) {
+          Object.keys(otherState).forEach(key => {
+            if (!UNDO_STRUCTURAL_FIELDS.includes(key) && !(key in state)) delete target[key];
+          });
+        }
+      }
+
+      /**
+       * Drop undo/redo entries that could resurrect permanently deleted
+       * cards (deleteCard entries, including those nested in undo groups).
+       * @param {string[]} cardIds
+       */
+      function purgeUndoEntriesForCards(cardIds) {
+        const ids = new Set((cardIds || []).filter(Boolean));
+        if (!ids.size) return;
+        const resurrects = entry => entry && entry.action === 'deleteCard' &&
+          entry.data && entry.data.card && ids.has(entry.data.card.id);
+        [undoStack, redoStack].forEach(stack => {
+          for (let i = stack.length - 1; i >= 0; i--) {
+            const entry = stack[i];
+            if (entry && entry.action === 'undoGroup' && entry.data && Array.isArray(entry.data.actions)) {
+              entry.data.actions = entry.data.actions.filter(a => !resurrects(a));
+              if (!entry.data.actions.length) stack.splice(i, 1);
+            } else if (resurrects(entry)) {
+              stack.splice(i, 1);
+            }
+          }
+        });
+        if (undoGroupState.active) {
+          undoGroupState.actions = undoGroupState.actions.filter(a => !resurrects(a));
+        }
+      }
+
       function applyUndoAction(action) {
         switch (action.action) {
             case 'deleteCard':
-              const cardData = action.data.card;
-              store.cards[cardData.id] = cardData;
-              const undelParent = cardData.parentId ? store.cards[cardData.parentId] : null;
-              if (undelParent) {
-                if (Array.isArray(undelParent.children) && !undelParent.children.includes(cardData.id)) {
-                  undelParent.children.push(cardData.id);
-                }
-              } else {
-                // Root card, OR the parent no longer exists (e.g. restoring a
-                // child before its still-deleted parent): keep the card
-                // reachable at root instead of leaving it an invisible orphan.
-                if (!store.rootOrder.includes(cardData.id)) {
-                  store.rootOrder.push(cardData.id);
-                }
-              }
-              const trashIndex = trashBin.findIndex(t => t.card.id === cardData.id);
-              if (trashIndex > -1) trashBin.splice(trashIndex, 1);
+              restoreCardIntoTree(action.data.card);
               break;
-              
+
             case 'updateCard':
-              Object.assign(store.cards[action.data.cardId], action.data.previousState);
+              applyCardContentState(action.data.cardId, action.data.previousState, action.data.newState);
               break;
               
             case 'createCard':
@@ -250,11 +320,11 @@ import {
               break;
               
             case 'updateCard':
-              Object.assign(store.cards[action.data.cardId], action.data.newState);
+              applyCardContentState(action.data.cardId, action.data.newState, action.data.previousState);
               break;
-              
+
             case 'createCard':
-              const newCard = action.data.card;
+              const newCard = typeof cloneCard === 'function' ? cloneCard(action.data.card) : action.data.card;
               store.cards[newCard.id] = newCard;
               if (newCard.parentId) {
                 const parent = store.cards[newCard.parentId];
@@ -341,18 +411,11 @@ import {
             const restoreBtn = h('button', {
               className: 'btn btn-primary',
               onclick: () => {
-                store.cards[item.card.id] = item.card;
-                if (item.card.parentId) {
-                  const parent = store.cards[item.card.parentId];
-                  if (parent && !parent.children.includes(item.card.id)) {
-                    parent.children.push(item.card.id);
-                  }
-                } else {
-                  if (!store.rootOrder.includes(item.card.id)) {
-                    store.rootOrder.push(item.card.id);
-                  }
-                }
-                trashBin.splice(index, 1);
+                // Same restore path as Undo: re-attach to a live parent, or
+                // park at root when the parent is itself still trashed.
+                restoreCardIntoTree(item.card);
+                const staleIndex = trashBin.indexOf(item);
+                if (staleIndex > -1) trashBin.splice(staleIndex, 1);
                 save();
                 overlay.remove();
                 showTrashBin();
@@ -371,7 +434,10 @@ import {
                   cancelLabel: 'Cancel',
                   confirmClassName: 'btn btn-danger'
                 })) {
-                  trashBin.splice(index, 1);
+                  const removeIndex = trashBin.indexOf(item);
+                  if (removeIndex > -1) trashBin.splice(removeIndex, 1);
+                  // Permanent means permanent: Ctrl+Z must not resurrect it.
+                  purgeUndoEntriesForCards([item.card.id]);
                   overlay.remove();
                   showTrashBin();
                   showToast('Card permanently deleted');
@@ -394,6 +460,7 @@ import {
                 cancelLabel: 'Cancel',
                 confirmClassName: 'btn btn-danger'
               })) {
+                purgeUndoEntriesForCards(trashBin.map(t => t && t.card && t.card.id));
                 trashBin.length = 0;
                 overlay.remove();
                 showToast('Trash emptied');
@@ -420,16 +487,18 @@ import {
        * Rename a tag across all cards
        */
       function renameTag(oldTag, newTag) {
-        const normalizedOld = oldTag.replace(/^#/, '').toLowerCase().trim();
-        const normalizedNew = newTag.replace(/^#/, '').toLowerCase().trim();
-        
+        const normalizedOld = normalizeTag(oldTag);
+        const normalizedNew = normalizeTag(newTag);
+
         if (!normalizedOld || !normalizedNew) return 0;
         if (normalizedOld === normalizedNew) return 0;
-        
+
+        // Compare case-insensitively: imported/legacy data can hold mixed-
+        // case or '#'-prefixed tags that an exact match would never find.
         let count = 0;
         Object.values(store.cards).forEach(card => {
-          if (card.tags && card.tags.includes(normalizedOld)) {
-            card.tags = card.tags.map(t => t === normalizedOld ? normalizedNew : t);
+          if (Array.isArray(card.tags) && card.tags.some(t => normalizeTag(t) === normalizedOld)) {
+            card.tags = card.tags.map(t => normalizeTag(t) === normalizedOld ? normalizedNew : t);
             card.tags = [...new Set(card.tags)];
             card.updatedAt = Date.now();
             count++;
@@ -451,13 +520,13 @@ import {
        * Delete a tag from all cards
        */
       function deleteTagGlobal(tag) {
-        const normalizedTag = tag.replace(/^#/, '').toLowerCase().trim();
+        const normalizedTag = normalizeTag(tag);
         if (!normalizedTag) return 0;
-        
+
         let count = 0;
         Object.values(store.cards).forEach(card => {
-          if (card.tags && card.tags.includes(normalizedTag)) {
-            card.tags = card.tags.filter(t => t !== normalizedTag);
+          if (Array.isArray(card.tags) && card.tags.some(t => normalizeTag(t) === normalizedTag)) {
+            card.tags = card.tags.filter(t => normalizeTag(t) !== normalizedTag);
             card.updatedAt = Date.now();
             count++;
           }
@@ -473,8 +542,11 @@ import {
       function getTagStats() {
         const tagCounts = {};
         Object.values(store.cards).forEach(card => {
-          if (card.tags) {
-            card.tags.forEach(tag => {
+          if (Array.isArray(card.tags)) {
+            // Group case/'#' variants under one normalized tag so the
+            // manager's rename/merge/delete (which match normalized) cover
+            // every variant; count each card once per tag.
+            new Set(card.tags.map(normalizeTag).filter(Boolean)).forEach(tag => {
               tagCounts[tag] = (tagCounts[tag] || 0) + 1;
             });
           }
@@ -575,7 +647,7 @@ import {
                   confirmLabel: 'Merge',
                   cancelLabel: 'Cancel'
                 });
-                if (targetTag && otherTags.includes(targetTag.trim().toLowerCase())) {
+                if (targetTag && otherTags.includes(normalizeTag(targetTag))) {
                   const affected = mergeTags(tag, targetTag.trim());
                   if (affected > 0) {
                     showToast('Merged "' + tag + '" into "' + targetTag.trim() + '" (' + affected + ' card(s))');
@@ -800,10 +872,16 @@ import {
       /**
        * Bulk export cards
        */
-      function bulkExportCards(cardIds, format) {
+      async function bulkExportCards(cardIds, format) {
         format = format || 'json';
         if (!cardIds || cardIds.length === 0) {
           showToast('No cards selected for export', 'error');
+          return;
+        }
+        // Bulk exports are always plaintext; a PIN-protected dataset needs
+        // an explicit acknowledgement first (same gate as TXT/MD/CSV).
+        if (typeof confirmUnencryptedExport === 'function' &&
+            !(await confirmUnencryptedExport(format === 'markdown' ? 'Markdown' : format.toUpperCase()))) {
           return;
         }
         

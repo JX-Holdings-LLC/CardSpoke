@@ -627,46 +627,48 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
             const parentVal = form.querySelector('#cardParent').value || null;
             const tagsVal = (tagEditor.getTags && tagEditor.getTags()) || [];
             if (editing) {
-              const oldParentId = card.parentId;
-              if (oldParentId !== parentVal) {
-                if (oldParentId) {
-                  const oldParent = store.cards[oldParentId];
-                  if (oldParent) oldParent.children = oldParent.children.filter(c => c !== card.id);
-                } else {
-                  store.rootOrder = store.rootOrder.filter(c => c !== card.id);
+              // One save = one undoable step (move + edits + new children).
+              const editGroup = window.startUndoGroup && window.startUndoGroup('edit card');
+              try {
+                // Moves go through the kernel's reparent (cycle-safe, undoable).
+                if ((card.parentId || null) !== parentVal && !moveCard(card.id, parentVal, true)) {
+                  showToast('Cannot move a card into itself or its own child', 'error');
                 }
-                if (parentVal) {
-                  const newParent = store.cards[parentVal];
-                  if (newParent && !newParent.children.includes(card.id)) newParent.children.push(card.id);
-                } else {
-                  if (!store.rootOrder.includes(card.id)) store.rootOrder.push(card.id);
-                }
-                card.parentId = parentVal;
+                // Hooks fire so plugin card.update/card.create middleware sees UI edits.
+                updateCard(card.id, { title: titleVal, body: bodyVal, tags: tagsVal, isRichText: richToggle.checked }, true, false);
+                (store.cards[card.id].children || []).forEach(cid => {
+                  const inp = childrenInpMap[cid];
+                  if (inp && store.cards[cid] && inp.value.trim() !== store.cards[cid].title) updateCard(cid, { title: inp.value.trim() }, true, false);
+                });
+                const newKidRows = form.querySelectorAll('#addChildList .form-child-row input');
+                newKidRows.forEach(inp => {
+                  const t = inp.value.trim();
+                  if (t) createCard(t, '', card.id, true, false);
+                });
+              } finally {
+                if (editGroup && window.endUndoGroup) window.endUndoGroup();
               }
-              updateCard(card.id, { title: titleVal, body: bodyVal, tags: tagsVal, isRichText: richToggle.checked }, true, true);
-              card.children.forEach(cid => {
-                const inp = childrenInpMap[cid];
-                if (inp) updateCard(cid, { title: inp.value.trim() }, true, true);
-              });
-              const newKidRows = form.querySelectorAll('#addChildList .form-child-row input');
-              newKidRows.forEach(inp => {
-                const t = inp.value.trim();
-                if (t) createCard(t, '', card.id, true, true);
-              });
               save();
               goTo('read', { cardId: card.id });
             } else {
-              const newId = createCard(titleVal, bodyVal, parentVal, true, true);
-              // Persist tags and formatting through the same update path as
-              // edit mode so first-save tags are never dropped (QA FUNC-1).
-              updateCard(newId, { tags: tagsVal, isRichText: richToggle.checked }, true, true);
-              const newKidRows = form.querySelectorAll('#addChildList .form-child-row input');
-              newKidRows.forEach(inp => {
-                const t = inp.value.trim();
-                if (t) createCard(t, '', newId, true, true);
-              });
-              save();
-              goTo('read', { cardId: newId });
+              const createGroup = window.startUndoGroup && window.startUndoGroup('create card');
+              try {
+                const newId = createCard(titleVal, bodyVal, parentVal, true, true);
+                // Persist tags and formatting through the same update path as
+                // edit mode so first-save tags are never dropped (QA FUNC-1).
+                updateCard(newId, { tags: tagsVal, isRichText: richToggle.checked }, true, true);
+                // One card.create hook, carrying the tags/formatting just set.
+                runCardHooks('card.create', newId);
+                const newKidRows = form.querySelectorAll('#addChildList .form-child-row input');
+                newKidRows.forEach(inp => {
+                  const t = inp.value.trim();
+                  if (t) createCard(t, '', newId, true, false);
+                });
+                save();
+                goTo('read', { cardId: newId });
+              } finally {
+                if (createGroup && window.endUndoGroup) window.endUndoGroup();
+              }
             }
           }
         });
