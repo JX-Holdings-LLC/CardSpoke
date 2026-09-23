@@ -24,6 +24,9 @@ var VALID_LAYERS = ['theme', 'feature', 'app'];
   var VALID_PERMISSIONS = ['ui-override', 'storage', 'network', 'filesystem', 'core-override', 'data-modify'];
   var MAX_CSS_LENGTH = 100000;   // 100KB max CSS
   var MAX_JS_LENGTH = 500000;    // 500KB max JS
+  // Documented plugin id format: lowercase letters, digits and hyphens,
+  // no leading/trailing hyphen.
+  var PLUGIN_ID_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
   // Dangerous CSS patterns that could be used for attacks
   var DANGEROUS_CSS_PATTERNS = [
@@ -59,8 +62,13 @@ var VALID_LAYERS = ['theme', 'feature', 'app'];
 
       if (!plugin.id || typeof plugin.id !== 'string') {
         errors.push('Plugin must have a string id');
-      } else if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(plugin.id)) {
-        warnings.push('Plugin id should use lowercase letters, numbers, and hyphens only');
+      } else if (!PLUGIN_ID_PATTERN.test(plugin.id)) {
+        // An error, not a warning: the id is interpolated into CSS selectors
+        // (style[data-plugin-id="..."]), storage namespaces and middleware
+        // names, so quotes, brackets or path-like characters must never
+        // reach those sinks.
+        errors.push('Plugin id must use lowercase letters, numbers, and hyphens only ' +
+          '(no leading/trailing hyphen): ' + JSON.stringify(plugin.id));
       }
 
       // 2. Validate manifest

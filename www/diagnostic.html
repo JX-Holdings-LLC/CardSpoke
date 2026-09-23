@@ -2,6 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!-- Dev-only harness (not deployed). Same policy as index.html; the
+       inline harness script is allowed by hash only (tests/dev-pages-csp.test.js
+       keeps the hash in sync). 'unsafe-eval' is needed because this page
+       evals the bundle. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-eval' 'sha256-oc6r9zFc7K3m+l48cQJfdWENQ+I1rzvqI5jYMYIoMZc=';
+    style-src 'self' 'unsafe-inline';
+    font-src 'self';
+    connect-src 'self' https://raw.githubusercontent.com;
+    img-src 'self' data: blob:;
+    frame-src 'none';
+    worker-src 'self';
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self';
+  ">
   <title>CardSpoke Diagnostic</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
@@ -20,10 +37,33 @@
   <script>
     const results = document.getElementById('results');
     
+    // Everything here is written with textContent/DOM APIs, never innerHTML:
+    // details include localStorage key names and error messages, which are
+    // attacker-influenced (e.g. a key created by an imported dataset).
     function addResult(name, status, details = '') {
       const div = document.createElement('div');
-      div.className = `test ${status}`;
-      div.innerHTML = `<strong>${status.toUpperCase()}:</strong> ${name}${details ? '<pre>' + details + '</pre>' : ''}`;
+      div.className = 'test ' + status;
+      const label = document.createElement('strong');
+      label.textContent = status.toUpperCase() + ':';
+      div.appendChild(label);
+      div.appendChild(document.createTextNode(' ' + name));
+      if (details) {
+        const pre = document.createElement('pre');
+        pre.textContent = String(details);
+        div.appendChild(pre);
+      }
+      results.appendChild(div);
+    }
+
+    function addConclusion(status, heading, text) {
+      const div = document.createElement('div');
+      div.className = 'test ' + status;
+      const h2 = document.createElement('h2');
+      h2.textContent = heading;
+      const p = document.createElement('p');
+      p.textContent = text;
+      div.appendChild(h2);
+      div.appendChild(p);
       results.appendChild(div);
     }
     
@@ -97,20 +137,15 @@
             }
             
             // Final verdict
-            const finalDiv = document.createElement('div');
-            finalDiv.className = 'test pass';
-            finalDiv.innerHTML = '<h2>[OK] CONCLUSION: The HTML app is working correctly!</h2><p>All JavaScript files load and execute without errors. The app is ready to use.</p>';
-            results.appendChild(finalDiv);
+            addConclusion('pass', '[OK] CONCLUSION: The HTML app is working correctly!',
+              'All JavaScript files load and execute without errors. The app is ready to use.');
           }, 500);
           
         } catch (e) {
           addResult('Execute app.js', 'fail', e.message + '\n\nStack:\n' + e.stack);
           
           // Final verdict for failure
-          const finalDiv = document.createElement('div');
-          finalDiv.className = 'test fail';
-          finalDiv.innerHTML = '<h2>[ERROR] CONCLUSION: The HTML app has errors!</h2><p>See the error details above.</p>';
-          results.appendChild(finalDiv);
+          addConclusion('fail', '[ERROR] CONCLUSION: The HTML app has errors!', 'See the error details above.');
         }
       })
       .catch(e => {

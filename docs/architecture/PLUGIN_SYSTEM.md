@@ -513,11 +513,12 @@ those are tracked and reversible without a reload.
    }); // registers AND enables
    ```
 
-4. **ES-module dev loader** — `www/src/examples/dynamic-plugin-loader.js`
-   shows `import()`-based loading of module plugins from URLs/files. These
-   register with real `setup`/`teardown` functions, so — like all
-   function-form registrations — they run unsandboxed, on the main thread;
-   only download/import code you already trust through this path.
+4. **Remote package loader example** — `www/src/examples/dynamic-plugin-loader.js`
+   fetches plugin package JSON (from a URL or a gallery manifest) and
+   installs it with `Plugin.install()`, so the code runs sandboxed in a
+   worker. It does not `import()` plugin modules: `install()` drops
+   function-form `setup`/`teardown`, and `Plugin.register()` rejects them
+   (only `registerPlugin` above accepts host code).
 
 ## The `window.CardSpoke` surface
 

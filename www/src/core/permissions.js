@@ -18,9 +18,57 @@
 // Permissions System
 // Manages plugin permissions and user consent
 // Provides security layer for plugin capabilities
+//
+// Grants are bound to a plugin *fingerprint* (see computeFingerprint), not
+// only to its id. A plugin id is chosen by the package author, so a
+// different package reusing an id (for example one arriving in an imported
+// dataset) must never silently inherit an earlier package's consent. Any
+// change to the plugin's code or requested permissions changes the
+// fingerprint and requires fresh consent.
+//
+// Storage layout (both keys hold JSON objects keyed by plugin id):
+//   cardspoke_plugin_permissions         { [id]: string[] }  (format unchanged)
+//   cardspoke_plugin_permission_bindings { [id]: fingerprint }
+// A persisted grant with no binding predates fingerprinting ("legacy"): it
+// stays readable but never satisfies a fingerprinted check, so the user is
+// asked once more and the fresh grant is saved bound to the current code.
 
 const STORAGE_KEY = 'cardspoke_plugin_permissions';
+const BINDINGS_KEY = 'cardspoke_plugin_permission_bindings';
+// pluginId -> { perms: Set<string>, fingerprint: string|null, legacy: boolean }
+//   fingerprint null, legacy false: granted programmatically this session
+//     without a fingerprint (host code / tests); bound on first enable.
+//   legacy true: loaded from storage without a binding.
 const grantedPermissions = new Map();
+
+  /**
+   * Stable, synchronous change-detection hash (FNV-1a, 32-bit) over what
+   * consent covers: the plugin's setup/teardown source and its sorted
+   * requested permissions. Not a cryptographic commitment — it only has to
+   * notice that a same-id plugin's code or permissions changed.
+   *
+   * @param {{manifest?: {permissions?: string[]}, js?: string|null, teardownJs?: string|null}} definition
+   * @returns {string} e.g. "fnv1a-1a2b3c4d-2s"
+   */
+  function computeFingerprint(definition) {
+    const def = definition || {};
+    const manifest = def.manifest || {};
+    const perms = Array.isArray(manifest.permissions)
+      ? manifest.permissions.map(String).slice().sort()
+      : [];
+    const js = typeof def.js === 'string' ? def.js : '';
+    const teardownJs = typeof def.teardownJs === 'string' ? def.teardownJs : '';
+    // Length-prefix each field so content can't be shifted between fields.
+    const input = 'js:' + js.length + ':' + js +
+      '|teardown:' + teardownJs.length + ':' + teardownJs +
+      '|perms:' + JSON.stringify(perms);
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return 'fnv1a-' + hash.toString(16).padStart(8, '0') + '-' + input.length.toString(36);
+  }
 
   // Load saved permissions from localStorage.
   function loadPermissions() {
@@ -29,8 +77,20 @@ const grantedPermissions = new Map();
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        let bindings = {};
+        try {
+          bindings = JSON.parse(localStorage.getItem(BINDINGS_KEY) || '{}') || {};
+        } catch (_bindErr) {
+          bindings = {};
+        }
         Object.keys(parsed).forEach(pluginId => {
-          grantedPermissions.set(pluginId, new Set(parsed[pluginId]));
+          if (!Array.isArray(parsed[pluginId])) return;
+          const fp = typeof bindings[pluginId] === 'string' ? bindings[pluginId] : null;
+          grantedPermissions.set(pluginId, {
+            perms: new Set(parsed[pluginId]),
+            fingerprint: fp,
+            legacy: !fp
+          });
         });
       }
     } catch (err) {
@@ -43,13 +103,28 @@ const grantedPermissions = new Map();
     try {
       if (typeof localStorage === 'undefined') return;
       const data = {};
-      grantedPermissions.forEach((perms, pluginId) => {
-        data[pluginId] = Array.from(perms);
+      const bindings = {};
+      grantedPermissions.forEach((entry, pluginId) => {
+        data[pluginId] = Array.from(entry.perms);
+        if (entry.fingerprint) bindings[pluginId] = entry.fingerprint;
       });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(BINDINGS_KEY, JSON.stringify(bindings));
     } catch (err) {
       console.error('[Permissions] Failed to save permissions:', err);
     }
+  }
+
+  /**
+   * May this stored grant be used for a plugin whose current fingerprint is
+   * `fingerprint`? An omitted fingerprint (undefined/null) means the caller
+   * is not asking about a specific plugin build, so any entry counts.
+   */
+  function entryMatches(entry, fingerprint) {
+    if (!entry) return false;
+    if (fingerprint === undefined || fingerprint === null) return true;
+    if (entry.legacy) return false;
+    return entry.fingerprint === null || entry.fingerprint === fingerprint;
   }
 
   const PERMISSION_DESCRIPTIONS = {
@@ -66,40 +141,51 @@ const grantedPermissions = new Map();
     /**
      * Check if a plugin has a specific permission
      */
-    hasPermission: function(pluginId, permission) {
-      const perms = grantedPermissions.get(pluginId);
-      return perms && perms.has(permission);
+    hasPermission: function(pluginId, permission, fingerprint) {
+      const entry = grantedPermissions.get(pluginId);
+      return !!(entry && entryMatches(entry, fingerprint) && entry.perms.has(permission));
     },
 
     /**
-     * Check if a plugin has all required permissions
+     * Check if a plugin has all required permissions. When `fingerprint` is
+     * given, the grant must also be bound to that exact plugin build (or be
+     * an unbound grant made programmatically this session).
      */
-    hasAllPermissions: function(pluginId, permissions) {
+    hasAllPermissions: function(pluginId, permissions, fingerprint) {
       if (!permissions || permissions.length === 0) {
         return true;
       }
-      const perms = grantedPermissions.get(pluginId);
-      if (!perms) {
+      const entry = grantedPermissions.get(pluginId);
+      if (!entry || !entryMatches(entry, fingerprint)) {
         return false;
       }
-      return permissions.every(p => perms.has(p));
+      return permissions.every(p => entry.perms.has(p));
     },
 
     /**
-     * Grant permissions to a plugin
+     * Grant permissions to a plugin. Passing a `fingerprint` binds the grant
+     * to that plugin build; if the existing grant was for a different build
+     * (or is a legacy, unbound grant) its old permissions are discarded
+     * rather than merged, so stale consent never widens a new build.
      */
-    grantPermissions: function(pluginId, permissions) {
+    grantPermissions: function(pluginId, permissions, fingerprint) {
       if (!permissions || permissions.length === 0) {
         return;
       }
 
-      let perms = grantedPermissions.get(pluginId);
-      if (!perms) {
-        perms = new Set();
-        grantedPermissions.set(pluginId, perms);
+      let entry = grantedPermissions.get(pluginId);
+      const hasFp = typeof fingerprint === 'string' && fingerprint.length > 0;
+      if (entry && hasFp && (entry.legacy || (entry.fingerprint && entry.fingerprint !== fingerprint))) {
+        entry = null;
       }
+      if (!entry) {
+        entry = { perms: new Set(), fingerprint: null, legacy: false };
+        grantedPermissions.set(pluginId, entry);
+      }
+      if (hasFp) entry.fingerprint = fingerprint;
+      entry.legacy = false;
 
-      permissions.forEach(p => perms.add(p));
+      permissions.forEach(p => entry.perms.add(p));
       savePermissions();
 
       console.log('[Permissions] Granted to', pluginId, ':', permissions);
@@ -109,16 +195,16 @@ const grantedPermissions = new Map();
      * Revoke permissions from a plugin
      */
     revokePermissions: function(pluginId, permissions) {
-      const perms = grantedPermissions.get(pluginId);
-      if (!perms) {
+      const entry = grantedPermissions.get(pluginId);
+      if (!entry) {
         return;
       }
 
       if (!permissions) {
         grantedPermissions.delete(pluginId);
       } else {
-        permissions.forEach(p => perms.delete(p));
-        if (perms.size === 0) {
+        permissions.forEach(p => entry.perms.delete(p));
+        if (entry.perms.size === 0) {
           grantedPermissions.delete(pluginId);
         }
       }
@@ -131,27 +217,51 @@ const grantedPermissions = new Map();
      * Get all permissions for a plugin
      */
     getPermissions: function(pluginId) {
-      const perms = grantedPermissions.get(pluginId);
-      return perms ? Array.from(perms) : [];
+      const entry = grantedPermissions.get(pluginId);
+      return entry ? Array.from(entry.perms) : [];
     },
 
+    /** The fingerprint a plugin's grant is bound to, or null (unbound/legacy/none). */
+    getFingerprint: function(pluginId) {
+      const entry = grantedPermissions.get(pluginId);
+      return entry ? entry.fingerprint : null;
+    },
+
+    /** See computeFingerprint() above. */
+    computeFingerprint: computeFingerprint,
+
     /**
-     * Request permissions with user consent
+     * Request permissions with user consent. `fingerprint` (optional) is the
+     * current plugin build's computeFingerprint(); a grant bound to another
+     * build, or a legacy grant with no binding, does not count and the user
+     * is asked again.
      */
-    requestPermissions: async function(pluginId, pluginName, permissions) {
+    requestPermissions: async function(pluginId, pluginName, permissions, fingerprint) {
       if (!permissions || permissions.length === 0) {
         return true;
       }
 
-      // Check if already granted
-      if (this.hasAllPermissions(pluginId, permissions)) {
+      const hasFp = typeof fingerprint === 'string' && fingerprint.length > 0;
+
+      // Check if already granted (for this exact build when fingerprinted).
+      if (this.hasAllPermissions(pluginId, permissions, hasFp ? fingerprint : undefined)) {
+        const entry = grantedPermissions.get(pluginId);
+        if (hasFp && entry && !entry.fingerprint) {
+          // Unbound in-session grant: bind it to the build it was used for.
+          entry.fingerprint = fingerprint;
+          savePermissions();
+        }
         return true;
       }
 
+      const existing = grantedPermissions.get(pluginId);
+      const changed = !!(hasFp && existing && existing.perms.size > 0 &&
+        (existing.legacy || (existing.fingerprint && existing.fingerprint !== fingerprint)));
+
       // Show consent dialog
-      const granted = await this._showConsentDialog(pluginId, pluginName, permissions);
+      const granted = await this._showConsentDialog(pluginId, pluginName, permissions, { changed: changed });
       if (granted) {
-        this.grantPermissions(pluginId, permissions);
+        this.grantPermissions(pluginId, permissions, hasFp ? fingerprint : undefined);
       }
 
       return granted;
@@ -163,10 +273,12 @@ const grantedPermissions = new Map();
      * its own (CS-002, resolved) — granting one of these permissions is a
      * real, enforced capability grant, not a description of intent.
      */
-    _showConsentDialog: async function(pluginId, pluginName, permissions) {
+    _showConsentDialog: async function(pluginId, pluginName, permissions, opts) {
+      const changed = !!(opts && opts.changed);
       return this._showDecisionDialog({
         titleText: 'Permission Request',
         introText: '"' + pluginName + '" requests the permissions below. ' +
+          (changed ? 'Its code or requested permissions changed since you last allowed it, so it needs your approval again. ' : '') +
           'Worker isolation reduces risk but does not make untrusted code safe:',
         bulletItems: permissions.map(function(perm) {
           return perm + ': ' + (PERMISSION_DESCRIPTIONS[perm] || 'Unknown permission');
@@ -310,3 +422,5 @@ export function showPermissionDialog(pluginId, permissions) {
   const pluginName = pluginId; // Fallback to ID if name not available
   return PermissionsManager.requestPermissions(pluginId, pluginName, permissions);
 }
+
+export { computeFingerprint };

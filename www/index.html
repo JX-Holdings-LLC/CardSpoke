@@ -10,8 +10,12 @@
   <link rel="manifest" href="manifest.webmanifest">
 
   <!-- Content Security Policy.
-       'unsafe-eval' is required by the plugin runtime, which compiles JSON
-       plugin setup/teardown functions (see docs/policies/SECURITY_AND_SAFETY.md).
+       'unsafe-eval' is required on this page only because the plugin
+       runtime syntax-checks plugin js/teardownJs source at install time via
+       `new AsyncFunction(...)` (_checkSyntax in www/src/core/plugin-api.js,
+       also exposed as CardSpoke.PluginSandbox.createFunction). That check
+       parses but never executes the code; plugin code only ever runs inside
+       its dedicated module Worker (see docs/policies/SECURITY_AND_SAFETY.md).
        connect-src is limited to same-origin plus the curated plugin gallery. -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';

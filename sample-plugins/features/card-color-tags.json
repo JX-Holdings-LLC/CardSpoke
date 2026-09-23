@@ -7,7 +7,7 @@
     "author": "CardSpoke Community",
     "description": "Gives every tag a stable color derived from its text. Demonstrates the 'card.render' decorator contract.",
     "layer": "feature",
-    "permissions": [],
+    "permissions": ["ui-override"],
     "compatibility": ">=0.21.0"
   },
   "css": "",

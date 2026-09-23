@@ -223,6 +223,7 @@
   var VALID_PERMISSIONS = ["ui-override", "storage", "network", "filesystem", "core-override", "data-modify"];
   var MAX_CSS_LENGTH = 1e5;
   var MAX_JS_LENGTH = 5e5;
+  var PLUGIN_ID_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
   var DANGEROUS_CSS_PATTERNS = [
     { pattern: /@import/gi, name: "@import (external resource loading)" },
     { pattern: /javascript:/gi, name: "javascript: protocol" },
@@ -248,8 +249,8 @@
       }
       if (!plugin.id || typeof plugin.id !== "string") {
         errors.push("Plugin must have a string id");
-      } else if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(plugin.id)) {
-        warnings.push("Plugin id should use lowercase letters, numbers, and hyphens only");
+      } else if (!PLUGIN_ID_PATTERN.test(plugin.id)) {
+        errors.push("Plugin id must use lowercase letters, numbers, and hyphens only (no leading/trailing hyphen): " + JSON.stringify(plugin.id));
       }
       var manifestResult = this.validateManifest(plugin.manifest);
       errors = errors.concat(manifestResult.errors);
@@ -375,15 +376,42 @@
   };
   console.log("[PluginValidator] Validation system initialized");
   const STORAGE_KEY = "cardspoke_plugin_permissions";
+  const BINDINGS_KEY = "cardspoke_plugin_permission_bindings";
   const grantedPermissions = /* @__PURE__ */ new Map();
+  function computeFingerprint(definition) {
+    const def = definition || {};
+    const manifest = def.manifest || {};
+    const perms = Array.isArray(manifest.permissions) ? manifest.permissions.map(String).slice().sort() : [];
+    const js = typeof def.js === "string" ? def.js : "";
+    const teardownJs = typeof def.teardownJs === "string" ? def.teardownJs : "";
+    const input = "js:" + js.length + ":" + js + "|teardown:" + teardownJs.length + ":" + teardownJs + "|perms:" + JSON.stringify(perms);
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    return "fnv1a-" + hash.toString(16).padStart(8, "0") + "-" + input.length.toString(36);
+  }
   function loadPermissions() {
     if (typeof localStorage === "undefined") return;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        let bindings = {};
+        try {
+          bindings = JSON.parse(localStorage.getItem(BINDINGS_KEY) || "{}") || {};
+        } catch (_bindErr) {
+          bindings = {};
+        }
         Object.keys(parsed).forEach((pluginId) => {
-          grantedPermissions.set(pluginId, new Set(parsed[pluginId]));
+          if (!Array.isArray(parsed[pluginId])) return;
+          const fp = typeof bindings[pluginId] === "string" ? bindings[pluginId] : null;
+          grantedPermissions.set(pluginId, {
+            perms: new Set(parsed[pluginId]),
+            fingerprint: fp,
+            legacy: !fp
+          });
         });
       }
     } catch (err) {
@@ -394,13 +422,22 @@
     try {
       if (typeof localStorage === "undefined") return;
       const data = {};
-      grantedPermissions.forEach((perms, pluginId) => {
-        data[pluginId] = Array.from(perms);
+      const bindings = {};
+      grantedPermissions.forEach((entry, pluginId) => {
+        data[pluginId] = Array.from(entry.perms);
+        if (entry.fingerprint) bindings[pluginId] = entry.fingerprint;
       });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(BINDINGS_KEY, JSON.stringify(bindings));
     } catch (err) {
       console.error("[Permissions] Failed to save permissions:", err);
     }
+  }
+  function entryMatches(entry, fingerprint) {
+    if (!entry) return false;
+    if (fingerprint === void 0 || fingerprint === null) return true;
+    if (entry.legacy) return false;
+    return entry.fingerprint === null || entry.fingerprint === fingerprint;
   }
   const PERMISSION_DESCRIPTIONS = {
     "plugin-code": "Run JavaScript from this author. Workers isolate the interface but are not a complete security sandbox. Plugins can read unlocked cards and may load code over the network. Only allow code you trust.",
@@ -415,36 +452,47 @@
     /**
      * Check if a plugin has a specific permission
      */
-    hasPermission: function(pluginId, permission) {
-      const perms = grantedPermissions.get(pluginId);
-      return perms && perms.has(permission);
+    hasPermission: function(pluginId, permission, fingerprint) {
+      const entry = grantedPermissions.get(pluginId);
+      return !!(entry && entryMatches(entry, fingerprint) && entry.perms.has(permission));
     },
     /**
-     * Check if a plugin has all required permissions
+     * Check if a plugin has all required permissions. When `fingerprint` is
+     * given, the grant must also be bound to that exact plugin build (or be
+     * an unbound grant made programmatically this session).
      */
-    hasAllPermissions: function(pluginId, permissions) {
+    hasAllPermissions: function(pluginId, permissions, fingerprint) {
       if (!permissions || permissions.length === 0) {
         return true;
       }
-      const perms = grantedPermissions.get(pluginId);
-      if (!perms) {
+      const entry = grantedPermissions.get(pluginId);
+      if (!entry || !entryMatches(entry, fingerprint)) {
         return false;
       }
-      return permissions.every((p) => perms.has(p));
+      return permissions.every((p) => entry.perms.has(p));
     },
     /**
-     * Grant permissions to a plugin
+     * Grant permissions to a plugin. Passing a `fingerprint` binds the grant
+     * to that plugin build; if the existing grant was for a different build
+     * (or is a legacy, unbound grant) its old permissions are discarded
+     * rather than merged, so stale consent never widens a new build.
      */
-    grantPermissions: function(pluginId, permissions) {
+    grantPermissions: function(pluginId, permissions, fingerprint) {
       if (!permissions || permissions.length === 0) {
         return;
       }
-      let perms = grantedPermissions.get(pluginId);
-      if (!perms) {
-        perms = /* @__PURE__ */ new Set();
-        grantedPermissions.set(pluginId, perms);
+      let entry = grantedPermissions.get(pluginId);
+      const hasFp = typeof fingerprint === "string" && fingerprint.length > 0;
+      if (entry && hasFp && (entry.legacy || entry.fingerprint && entry.fingerprint !== fingerprint)) {
+        entry = null;
       }
-      permissions.forEach((p) => perms.add(p));
+      if (!entry) {
+        entry = { perms: /* @__PURE__ */ new Set(), fingerprint: null, legacy: false };
+        grantedPermissions.set(pluginId, entry);
+      }
+      if (hasFp) entry.fingerprint = fingerprint;
+      entry.legacy = false;
+      permissions.forEach((p) => entry.perms.add(p));
       savePermissions();
       console.log("[Permissions] Granted to", pluginId, ":", permissions);
     },
@@ -452,15 +500,15 @@
      * Revoke permissions from a plugin
      */
     revokePermissions: function(pluginId, permissions) {
-      const perms = grantedPermissions.get(pluginId);
-      if (!perms) {
+      const entry = grantedPermissions.get(pluginId);
+      if (!entry) {
         return;
       }
       if (!permissions) {
         grantedPermissions.delete(pluginId);
       } else {
-        permissions.forEach((p) => perms.delete(p));
-        if (perms.size === 0) {
+        permissions.forEach((p) => entry.perms.delete(p));
+        if (entry.perms.size === 0) {
           grantedPermissions.delete(pluginId);
         }
       }
@@ -471,22 +519,40 @@
      * Get all permissions for a plugin
      */
     getPermissions: function(pluginId) {
-      const perms = grantedPermissions.get(pluginId);
-      return perms ? Array.from(perms) : [];
+      const entry = grantedPermissions.get(pluginId);
+      return entry ? Array.from(entry.perms) : [];
     },
+    /** The fingerprint a plugin's grant is bound to, or null (unbound/legacy/none). */
+    getFingerprint: function(pluginId) {
+      const entry = grantedPermissions.get(pluginId);
+      return entry ? entry.fingerprint : null;
+    },
+    /** See computeFingerprint() above. */
+    computeFingerprint,
     /**
-     * Request permissions with user consent
+     * Request permissions with user consent. `fingerprint` (optional) is the
+     * current plugin build's computeFingerprint(); a grant bound to another
+     * build, or a legacy grant with no binding, does not count and the user
+     * is asked again.
      */
-    requestPermissions: async function(pluginId, pluginName, permissions) {
+    requestPermissions: async function(pluginId, pluginName, permissions, fingerprint) {
       if (!permissions || permissions.length === 0) {
         return true;
       }
-      if (this.hasAllPermissions(pluginId, permissions)) {
+      const hasFp = typeof fingerprint === "string" && fingerprint.length > 0;
+      if (this.hasAllPermissions(pluginId, permissions, hasFp ? fingerprint : void 0)) {
+        const entry = grantedPermissions.get(pluginId);
+        if (hasFp && entry && !entry.fingerprint) {
+          entry.fingerprint = fingerprint;
+          savePermissions();
+        }
         return true;
       }
-      const granted = await this._showConsentDialog(pluginId, pluginName, permissions);
+      const existing = grantedPermissions.get(pluginId);
+      const changed = !!(hasFp && existing && existing.perms.size > 0 && (existing.legacy || existing.fingerprint && existing.fingerprint !== fingerprint));
+      const granted = await this._showConsentDialog(pluginId, pluginName, permissions, { changed });
       if (granted) {
-        this.grantPermissions(pluginId, permissions);
+        this.grantPermissions(pluginId, permissions, hasFp ? fingerprint : void 0);
       }
       return granted;
     },
@@ -496,10 +562,11 @@
      * its own (CS-002, resolved) — granting one of these permissions is a
      * real, enforced capability grant, not a description of intent.
      */
-    _showConsentDialog: async function(pluginId, pluginName, permissions) {
+    _showConsentDialog: async function(pluginId, pluginName, permissions, opts) {
+      const changed = !!(opts && opts.changed);
       return this._showDecisionDialog({
         titleText: "Permission Request",
-        introText: '"' + pluginName + '" requests the permissions below. Worker isolation reduces risk but does not make untrusted code safe:',
+        introText: '"' + pluginName + '" requests the permissions below. ' + (changed ? "Its code or requested permissions changed since you last allowed it, so it needs your approval again. " : "") + "Worker isolation reduces risk but does not make untrusted code safe:",
         bulletItems: permissions.map(function(perm) {
           return perm + ": " + (PERMISSION_DESCRIPTIONS[perm] || "Unknown permission");
         }),
@@ -1179,6 +1246,43 @@
   let nextDomHandleId = 1;
   const globalEventBus = /* @__PURE__ */ new Map();
   const cardRenderPluginIds = /* @__PURE__ */ new Set();
+  const cardComponentPluginIds = /* @__PURE__ */ new Set();
+  const cardDecorators = /* @__PURE__ */ new Map();
+  function syncCardRenderMembership(pluginId) {
+    const decorators = cardDecorators.get(pluginId);
+    if (cardComponentPluginIds.has(pluginId) || decorators && decorators.size > 0) {
+      cardRenderPluginIds.add(pluginId);
+    } else {
+      cardRenderPluginIds.delete(pluginId);
+    }
+  }
+  function setCardComponentOwner(pluginId, owns) {
+    if (owns) cardComponentPluginIds.add(pluginId);
+    else cardComponentPluginIds.delete(pluginId);
+    syncCardRenderMembership(pluginId);
+  }
+  function addCardDecorator(pluginId, name) {
+    let names = cardDecorators.get(pluginId);
+    if (!names) {
+      names = /* @__PURE__ */ new Set();
+      cardDecorators.set(pluginId, names);
+    }
+    names.add(name);
+    syncCardRenderMembership(pluginId);
+  }
+  function removeCardDecorator(pluginId, name) {
+    const names = cardDecorators.get(pluginId);
+    if (names) {
+      names.delete(name);
+      if (names.size === 0) cardDecorators.delete(pluginId);
+    }
+    syncCardRenderMembership(pluginId);
+  }
+  function clearCardRender(pluginId) {
+    cardComponentPluginIds.delete(pluginId);
+    cardDecorators.delete(pluginId);
+    cardRenderPluginIds.delete(pluginId);
+  }
   const InternalAPI = {
     data: {},
     ui: {},
@@ -1198,7 +1302,9 @@
   }
   function hasPermission(pluginId, permission) {
     if (PermissionsManager) {
-      return PermissionsManager.hasPermission(pluginId, permission);
+      const instance = plugins.get(pluginId);
+      const fingerprint = instance ? instance.fingerprint : void 0;
+      return PermissionsManager.hasPermission(pluginId, permission, fingerprint);
     }
     return true;
   }
@@ -1515,14 +1621,14 @@
         if (ComponentRegistry) {
           const won = ComponentRegistry.register(name, component, component.priority || 0);
           if (won) {
-            if (name === "Card") cardRenderPluginIds.add(pluginId);
+            if (name === "Card") setCardComponentOwner(pluginId, true);
             trackResource(pluginId, { type: "component", name, component });
           }
         }
       },
       unregisterComponent: function(name) {
         if (ComponentRegistry) ComponentRegistry.unregister(name);
-        if (name === "Card") cardRenderPluginIds.delete(pluginId);
+        if (name === "Card") setCardComponentOwner(pluginId, false);
       },
       showToast: function(message, type, duration) {
         var fn = InternalAPI.ui.showToast || window.showToast;
@@ -1689,7 +1795,10 @@
         const won = ComponentRegistry.register(name, component, priority || 0);
         if (won) {
           ownedComponents.set(name, component);
-          if (name === "Card") cardRenderPluginIds.add(pluginId);
+          if (name === "Card") {
+            if (instance) instance.cardComponent = component;
+            setCardComponentOwner(pluginId, true);
+          }
           trackResource(pluginId, { type: "component", name, component });
         }
         return won;
@@ -1699,7 +1808,7 @@
         if (!owned) return;
         if (ComponentRegistry) ComponentRegistry.unregister(name, owned);
         ownedComponents.delete(name);
-        if (name === "Card") cardRenderPluginIds.delete(pluginId);
+        if (name === "Card") setCardComponentOwner(pluginId, false);
       },
       showToast: function(message, type, duration) {
         var fn = InternalAPI.ui.showToast || window.showToast;
@@ -1707,14 +1816,25 @@
       }
     };
   }
+  const CARD_WRITE_OPERATIONS = ["card.create", "card.update", "card.delete"];
   function createWorkerMiddlewareHandlers(pluginId) {
     return {
       register: function(name, priority, operations) {
-        const ops = operations || ["*"];
+        if (typeof name !== "string" || !name) {
+          throw new Error("Middleware must have a name");
+        }
+        const ops = Array.isArray(operations) && operations.length ? operations.map(String) : ["*"];
         if (ops.indexOf("card.render") !== -1) {
-          cardRenderPluginIds.add(pluginId);
+          if (!hasPermission(pluginId, "ui-override")) {
+            throw new Error("Plugin does not have ui-override permission (required for card.render middleware)");
+          }
+          addCardDecorator(pluginId, name);
           trackResource(pluginId, { type: "card-decorator", name });
           return true;
+        }
+        const hooksWrites = ops.some((op) => op === "*" || CARD_WRITE_OPERATIONS.indexOf(op) !== -1);
+        if (hooksWrites && !hasPermission(pluginId, "data-modify")) {
+          throw new Error("Plugin does not have data-modify permission (required for middleware on " + ops.join(", ") + ")");
         }
         const namespacedName = pluginId + ":" + name;
         const wrapper = async function(mwCtx, realNext) {
@@ -1732,7 +1852,7 @@
             [name, mwCtx.operation, mwCtx.args, nextProxy],
             MIDDLEWARE_TIMEOUT_MS
           );
-          if (outcome) {
+          if (outcome && hasPermission(pluginId, "data-modify")) {
             if (outcome.args !== void 0) mwCtx.args = outcome.args;
             if (outcome.prevented) mwCtx.preventDefault();
             if (outcome.stopped) mwCtx.stopPropagation();
@@ -1743,7 +1863,7 @@
         return true;
       },
       unregister: function(name) {
-        cardRenderPluginIds.delete(pluginId);
+        removeCardDecorator(pluginId, name);
         MiddlewareManager.unregister(pluginId + ":" + name);
       }
     };
@@ -1767,12 +1887,43 @@
       }
     };
   }
-  function createUtilsHandlers() {
+  const UTILS_PERMISSIONS = Object.freeze({
+    // Reads
+    getTags: null,
+    getAllTags: null,
+    getCard: null,
+    searchCards: null,
+    getDatasetMeta: null,
+    getAccessibilitySettings: null,
+    getTheme: null,
+    getTypography: null,
+    isHighContrast: null,
+    prefersReducedMotion: null,
+    getThemeVariables: null,
+    showToast: null,
+    // same as the ungated ctx.api.ui.showToast
+    // Card/tag writes — same gate as ctx.api.data.*
+    createCard: "data-modify",
+    updateCard: "data-modify",
+    addTag: "data-modify",
+    removeTag: "data-modify",
+    setTags: "data-modify",
+    // Global UI/appearance changes
+    setTheme: "ui-override",
+    setTypography: "ui-override",
+    setHighContrast: "ui-override"
+  });
+  function createUtilsHandlers(pluginId) {
     const utils2 = window.CardSpoke && window.CardSpoke.utils || {};
     const handlers = /* @__PURE__ */ Object.create(null);
     Object.keys(utils2).forEach((prop) => {
       if (typeof utils2[prop] !== "function") return;
+      if (!Object.prototype.hasOwnProperty.call(UTILS_PERMISSIONS, prop)) return;
+      const required = UTILS_PERMISSIONS[prop];
       handlers[prop] = async function() {
+        if (required && !hasPermission(pluginId, required)) {
+          throw new Error("Plugin does not have " + required + " permission (required for utils." + prop + ")");
+        }
         return await utils2[prop].apply(utils2, arguments);
       };
     });
@@ -1803,7 +1954,7 @@
       network: createWorkerNetworkHandlers(pluginId),
       ui: createWorkerUIHandlers(pluginId),
       middleware: createWorkerMiddlewareHandlers(pluginId),
-      utils: createUtilsHandlers(),
+      utils: createUtilsHandlers(pluginId),
       logger: createLoggerHandlers()
     };
   }
@@ -1828,13 +1979,34 @@
   const CARD_RENDER_DEADLINE_MS = 80;
   const HANG_BACKSTOP_MS = 1e4;
   let hangWatcherTimer = null;
+  function hasSourceStrings(definition) {
+    return !!(typeof definition.js === "string" && definition.js || typeof definition.teardownJs === "string" && definition.teardownJs);
+  }
+  function hasHostFunctions(definition) {
+    return typeof definition.setup === "function" || typeof definition.teardown === "function";
+  }
   const PluginManager = {
+    /**
+     * Register a plugin definition. Definitions carrying `js`/`teardownJs`
+     * source strings run sandboxed in a worker. A definition whose only code
+     * is real `setup`/`teardown` FUNCTIONS would run unsandboxed on the main
+     * thread, so it is rejected here — host code must opt in explicitly via
+     * the host-only registerHostPlugin() (what CardSpoke.registerPlugin uses).
+     */
     register: function(id, definition) {
+      return this._registerInternal(id, definition, false);
+    },
+    _registerInternal: function(id, definition, allowHostCode) {
       if (!id || !definition) {
         throw new Error("Plugin ID and definition are required");
       }
       if (!definition.manifest) {
         throw new Error("Plugin manifest is required");
+      }
+      if (!allowHostCode && hasHostFunctions(definition) && !hasSourceStrings(definition)) {
+        throw new Error(
+          'Plugin "' + id + '" supplies setup/teardown functions, which would run unsandboxed on the main thread. Provide js/teardownJs source strings (sandboxed), or register trusted host code explicitly with CardSpoke.registerPlugin().'
+        );
       }
       if (plugins.has(id)) {
         throw new Error(
@@ -1866,7 +2038,11 @@
         context,
         enabled: false,
         workerHandle: null,
-        resources
+        resources,
+        // Permission grants are bound to this (code + requested permissions)
+        // fingerprint, so a same-id plugin with different code needs fresh
+        // consent (see permissions.js).
+        fingerprint: PermissionsManager && typeof PermissionsManager.computeFingerprint === "function" ? PermissionsManager.computeFingerprint(definition) : void 0
       };
       plugins.set(id, instance);
       console.log("[Plugin] Registered:", id);
@@ -1881,7 +2057,7 @@
         plugins.delete(id);
         pluginResources.delete(id);
         dataUpdateListeners.delete(id);
-        cardRenderPluginIds.delete(id);
+        clearCardRender(id);
         if (PermissionsManager && PermissionsManager.revokePermissions) {
           PermissionsManager.revokePermissions(id);
         }
@@ -1946,7 +2122,7 @@
       plugins.delete(id);
       pluginResources.delete(id);
       dataUpdateListeners.delete(id);
-      cardRenderPluginIds.delete(id);
+      clearCardRender(id);
     },
     // Restore the brand button to its pre-override content (the logo <img>).
     // Safe to call unconditionally; a no-op when the plugin never overrode it.
@@ -2059,7 +2235,7 @@
       this._restoreBrandOverride(instance);
       this._removeCSS(id);
       this._cleanupResources(id);
-      cardRenderPluginIds.delete(id);
+      clearCardRender(id);
       instance.enabled = false;
       this._persistEnabledState(id, false);
       console.log("[Plugin] Disabled:", id);
@@ -2178,7 +2354,12 @@
       if (PermissionsManager) {
         const instance = plugins.get(id);
         const pluginName = instance && instance.definition.manifest && instance.definition.manifest.name || id;
-        return await PermissionsManager.requestPermissions(id, pluginName, permissions);
+        return await PermissionsManager.requestPermissions(
+          id,
+          pluginName,
+          permissions,
+          instance ? instance.fingerprint : void 0
+        );
       }
       if (window.showPermissionDialog) {
         return await window.showPermissionDialog(id, permissions);
@@ -2216,8 +2397,14 @@
     renderBatch: async function(id, cardsSnapshot, opts) {
       const instance = plugins.get(id);
       if (!instance || !instance.enabled || !instance.workerHandle) return null;
+      const canOverride = hasPermission(id, "ui-override");
+      const mayReplace = canOverride && cardComponentPluginIds.has(id) && !!instance.cardComponent && ComponentRegistry.get("Card") === instance.cardComponent;
+      const decorators = cardDecorators.get(id);
+      const mayDecorate = canOverride && !!(decorators && decorators.size > 0);
+      if (!mayReplace && !mayDecorate) return null;
+      let results;
       try {
-        return await instance.workerHandle.callWithDeadline(
+        results = await instance.workerHandle.callWithDeadline(
           ["ui", "renderBatch"],
           [cardsSnapshot, opts || {}],
           CARD_RENDER_DEADLINE_MS
@@ -2225,6 +2412,12 @@
       } catch (err) {
         return null;
       }
+      if (!Array.isArray(results)) return null;
+      return results.map((r) => ({
+        cardId: r && r.cardId,
+        vnode: mayReplace && r && r.vnode || null,
+        patch: mayDecorate && r && r.patch || null
+      }));
     },
     /** Backstop hang detector: terminates and suspends a worker whose oldest pending RPC call is stuck. */
     _startHangWatcher: function() {
@@ -2238,7 +2431,7 @@
             instance.enabled = false;
             this._removeCSS(id);
             this._cleanupResources(id);
-            cardRenderPluginIds.delete(id);
+            clearCardRender(id);
             this._persistEnabledState(id, false);
             if (window.showToast) {
               window.showToast('Plugin "' + id + '" stopped responding and was suspended.', "error");
@@ -2290,16 +2483,20 @@
       }
       const jsSource = typeof pkg.js === "string" && pkg.js.trim() ? pkg.js : typeof pkg.javascript === "string" && pkg.javascript.trim() ? pkg.javascript : null;
       const teardownSource = typeof pkg.teardownJs === "string" && pkg.teardownJs.trim() ? pkg.teardownJs : typeof pkg.teardown === "string" && pkg.teardown.trim() ? pkg.teardown : null;
-      if (!pkg.setup && jsSource) _checkSyntax(jsSource);
-      if (typeof pkg.teardown !== "function" && teardownSource) _checkSyntax(teardownSource);
-      let id = pkg.manifest.id || pkg.manifest.name.toLowerCase().replace(/\s+/g, "-");
+      if (typeof pkg.setup === "function" || typeof pkg.teardown === "function") {
+        console.warn("[Plugin] install() ignores setup/teardown functions; use js/teardownJs source strings (sandboxed) or CardSpoke.registerPlugin() for host code.");
+      }
+      if (jsSource) _checkSyntax(jsSource);
+      if (teardownSource) _checkSyntax(teardownSource);
+      let id = pkg.manifest.id || String(pkg.manifest.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      if (!id) {
+        throw new Error("Invalid plugin package: could not derive a plugin id from manifest.name; set manifest.id");
+      }
       if (plugins.has(id)) {
         await this.unregister(id);
       }
       const definition = {
         manifest: pkg.manifest,
-        setup: pkg.setup,
-        teardown: typeof pkg.teardown === "function" ? pkg.teardown : void 0,
         css: pkg.css,
         js: jsSource,
         teardownJs: teardownSource
@@ -2499,6 +2696,14 @@
       return panel;
     }
   };
+  Object.defineProperty(PluginManager, "registerHostPlugin", {
+    value: function(id, definition) {
+      return PluginManager._registerInternal(id, definition, true);
+    },
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
   console.log("[Plugin] API system initialized");
   function resetForTesting() {
     plugins.forEach((instance) => {
@@ -2514,6 +2719,8 @@
     dataUpdateListeners.clear();
     globalEventBus.clear();
     cardRenderPluginIds.clear();
+    cardComponentPluginIds.clear();
+    cardDecorators.clear();
     if (hangWatcherTimer) {
       clearInterval(hangWatcherTimer);
       hangWatcherTimer = null;
@@ -2534,7 +2741,7 @@
      * @returns {Promise<string>} The plugin id once enabled
      */
     registerPlugin: async function(id, definition) {
-      PluginManager.register(id, definition);
+      PluginManager.registerHostPlugin(id, definition);
       await PluginManager.enable(id);
       return id;
     },

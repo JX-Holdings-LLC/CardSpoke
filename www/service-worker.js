@@ -60,10 +60,18 @@ self.addEventListener('fetch', event => {
   if (request.mode !== 'navigate' && !shellUrls.includes(url.href)) return;
 
   if (request.mode === 'navigate') {
+    // Only a navigation to the app itself (the scope root or index.html) may
+    // refresh the cached shell. Any other same-origin page (a dev harness,
+    // a 200 error page, an unrelated document) must never be stored as
+    // ./index.html, or every later offline launch would serve it instead.
+    const scopePath = new URL('./', self.location.href).pathname;
+    const isAppShellNavigation =
+      url.pathname === scopePath || url.pathname === scopePath + 'index.html';
     event.respondWith(
       fetch(request)
         .then(response => {
-          if (response && response.status === 200) {
+          if (isAppShellNavigation && response && response.status === 200 &&
+              (!response.type || response.type === 'basic') && !response.redirected) {
             const copy = response.clone();
             caches.open(CACHE_VERSION).then(cache => cache.put('./index.html', copy));
           }

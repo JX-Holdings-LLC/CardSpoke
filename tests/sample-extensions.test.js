@@ -129,7 +129,12 @@ test('permissions used by sample code are declared in the manifest', () => {
     { pattern: /ctx\.api\.data\.(createCard|updateCard|deleteCard|addTag|removeTag|setTags)/, permission: 'data-modify' },
     { pattern: /ctx\.api\.storage\./, permission: 'storage' },
     { pattern: /ctx\.api\.network\./, permission: 'network' },
-    { pattern: /ctx\.api\.filesystem\./, permission: 'filesystem' }
+    { pattern: /ctx\.api\.filesystem\./, permission: 'filesystem' },
+    // Host-enforced hook gates (plugin-api.js createWorkerMiddlewareHandlers)
+    { pattern: /operations:\s*\[[^\]]*['"]card\.render['"]/, permission: 'ui-override' },
+    { pattern: /operations:\s*\[[^\]]*['"](card\.create|card\.update|card\.delete|\*)['"]/, permission: 'data-modify' },
+    { pattern: /ctx\.utils\.(createCard|updateCard|addTag|removeTag|setTags)\b/, permission: 'data-modify' },
+    { pattern: /ctx\.utils\.(setTheme|setTypography|setHighContrast)\b/, permission: 'ui-override' }
   ];
   [...features, ...apps].forEach(({ filename, pkg }) => {
     needs.forEach(({ pattern, permission }) => {
