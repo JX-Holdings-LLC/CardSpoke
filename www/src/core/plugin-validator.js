@@ -27,6 +27,11 @@ var VALID_LAYERS = ['theme', 'feature', 'app'];
   // Documented plugin id format: lowercase letters, digits and hyphens,
   // no leading/trailing hyphen.
   var PLUGIN_ID_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+  // Characters an id may contain at all. Ids outside the documented format
+  // but within this set (uppercase, underscores) were accepted by earlier
+  // releases, so they stay loadable with a warning instead of silently
+  // disappearing from existing datasets after an upgrade.
+  var PLUGIN_ID_SAFE_CHARS = /^[A-Za-z0-9_-]+$/;
 
   // Dangerous CSS patterns that could be used for attacks
   var DANGEROUS_CSS_PATTERNS = [
@@ -62,12 +67,15 @@ var VALID_LAYERS = ['theme', 'feature', 'app'];
 
       if (!plugin.id || typeof plugin.id !== 'string') {
         errors.push('Plugin must have a string id');
-      } else if (!PLUGIN_ID_PATTERN.test(plugin.id)) {
+      } else if (!PLUGIN_ID_SAFE_CHARS.test(plugin.id)) {
         // An error, not a warning: the id is interpolated into CSS selectors
         // (style[data-plugin-id="..."]), storage namespaces and middleware
-        // names, so quotes, brackets or path-like characters must never
-        // reach those sinks.
-        errors.push('Plugin id must use lowercase letters, numbers, and hyphens only ' +
+        // names, so quotes, brackets, spaces or path-like characters must
+        // never reach those sinks.
+        errors.push('Plugin id may only contain letters, numbers, hyphens and underscores: ' +
+          JSON.stringify(plugin.id));
+      } else if (!PLUGIN_ID_PATTERN.test(plugin.id)) {
+        warnings.push('Plugin id should use lowercase letters, numbers, and hyphens only ' +
           '(no leading/trailing hyphen): ' + JSON.stringify(plugin.id));
       }
 

@@ -224,6 +224,7 @@
   var MAX_CSS_LENGTH = 1e5;
   var MAX_JS_LENGTH = 5e5;
   var PLUGIN_ID_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+  var PLUGIN_ID_SAFE_CHARS = /^[A-Za-z0-9_-]+$/;
   var DANGEROUS_CSS_PATTERNS = [
     { pattern: /@import/gi, name: "@import (external resource loading)" },
     { pattern: /javascript:/gi, name: "javascript: protocol" },
@@ -249,8 +250,10 @@
       }
       if (!plugin.id || typeof plugin.id !== "string") {
         errors.push("Plugin must have a string id");
+      } else if (!PLUGIN_ID_SAFE_CHARS.test(plugin.id)) {
+        errors.push("Plugin id may only contain letters, numbers, hyphens and underscores: " + JSON.stringify(plugin.id));
       } else if (!PLUGIN_ID_PATTERN.test(plugin.id)) {
-        errors.push("Plugin id must use lowercase letters, numbers, and hyphens only (no leading/trailing hyphen): " + JSON.stringify(plugin.id));
+        warnings.push("Plugin id should use lowercase letters, numbers, and hyphens only (no leading/trailing hyphen): " + JSON.stringify(plugin.id));
       }
       var manifestResult = this.validateManifest(plugin.manifest);
       errors = errors.concat(manifestResult.errors);
@@ -549,8 +552,15 @@
         return true;
       }
       const existing = grantedPermissions.get(pluginId);
-      const changed = !!(hasFp && existing && existing.perms.size > 0 && (existing.legacy || existing.fingerprint && existing.fingerprint !== fingerprint));
-      const granted = await this._showConsentDialog(pluginId, pluginName, permissions, { changed });
+      const hadGrant = !!(hasFp && existing && existing.perms.size > 0);
+      const changed = hadGrant && !existing.legacy && !!existing.fingerprint && existing.fingerprint !== fingerprint;
+      const reconfirm = hadGrant && existing.legacy;
+      const granted = await this._showConsentDialog(
+        pluginId,
+        pluginName,
+        permissions,
+        { changed, reconfirm }
+      );
       if (granted) {
         this.grantPermissions(pluginId, permissions, hasFp ? fingerprint : void 0);
       }
@@ -564,9 +574,10 @@
      */
     _showConsentDialog: async function(pluginId, pluginName, permissions, opts) {
       const changed = !!(opts && opts.changed);
+      const reconfirm = !!(opts && opts.reconfirm);
       return this._showDecisionDialog({
         titleText: "Permission Request",
-        introText: '"' + pluginName + '" requests the permissions below. ' + (changed ? "Its code or requested permissions changed since you last allowed it, so it needs your approval again. " : "") + "Worker isolation reduces risk but does not make untrusted code safe:",
+        introText: '"' + pluginName + '" requests the permissions below. ' + (changed ? "Its code or requested permissions changed since you last allowed it, so it needs your approval again. " : "") + (reconfirm ? "CardSpoke now ties permissions to the exact plugin code, so please confirm them once more. " : "") + "Worker isolation reduces risk but does not make untrusted code safe:",
         bulletItems: permissions.map(function(perm) {
           return perm + ": " + (PERMISSION_DESCRIPTIONS[perm] || "Unknown permission");
         }),

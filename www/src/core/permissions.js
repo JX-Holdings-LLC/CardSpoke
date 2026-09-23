@@ -255,11 +255,14 @@ const grantedPermissions = new Map();
       }
 
       const existing = grantedPermissions.get(pluginId);
-      const changed = !!(hasFp && existing && existing.perms.size > 0 &&
-        (existing.legacy || (existing.fingerprint && existing.fingerprint !== fingerprint)));
+      const hadGrant = !!(hasFp && existing && existing.perms.size > 0);
+      const changed = hadGrant && !existing.legacy &&
+        !!existing.fingerprint && existing.fingerprint !== fingerprint;
+      const reconfirm = hadGrant && existing.legacy;
 
       // Show consent dialog
-      const granted = await this._showConsentDialog(pluginId, pluginName, permissions, { changed: changed });
+      const granted = await this._showConsentDialog(pluginId, pluginName, permissions,
+        { changed: changed, reconfirm: reconfirm });
       if (granted) {
         this.grantPermissions(pluginId, permissions, hasFp ? fingerprint : undefined);
       }
@@ -275,10 +278,12 @@ const grantedPermissions = new Map();
      */
     _showConsentDialog: async function(pluginId, pluginName, permissions, opts) {
       const changed = !!(opts && opts.changed);
+      const reconfirm = !!(opts && opts.reconfirm);
       return this._showDecisionDialog({
         titleText: 'Permission Request',
         introText: '"' + pluginName + '" requests the permissions below. ' +
           (changed ? 'Its code or requested permissions changed since you last allowed it, so it needs your approval again. ' : '') +
+          (reconfirm ? 'CardSpoke now ties permissions to the exact plugin code, so please confirm them once more. ' : '') +
           'Worker isolation reduces risk but does not make untrusted code safe:',
         bulletItems: permissions.map(function(perm) {
           return perm + ': ' + (PERMISSION_DESCRIPTIONS[perm] || 'Unknown permission');

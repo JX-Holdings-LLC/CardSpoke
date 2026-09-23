@@ -164,6 +164,7 @@ test('legacy grants (no fingerprint) stay readable but require consent once', as
   P2._showConsentDialog = async (id, name, perms, opts) => { calls.push(opts); return true; };
   assert.ok(await P2.requestPermissions('old', 'Old', ['plugin-code', 'ui-override'], fp));
   assert.is(calls.length, 1, 'prompted once');
+  assert.ok(calls[0].reconfirm && !calls[0].changed, 'legacy re-consent is not described as a code change');
   assert.ok(await P2.requestPermissions('old', 'Old', ['plugin-code', 'ui-override'], fp));
   assert.is(calls.length, 1, 'not prompted again once re-bound');
   assert.is(JSON.parse(localStorage.getItem('cardspoke_plugin_permission_bindings')).old, fp);
@@ -412,11 +413,17 @@ test('dynamic-plugin-loader example installs JSON packages, never import()s code
 
 // ── 5. Plugin id validation ───────────────────────────────────────────────
 
-test('plugin ids outside the documented pattern are validation errors', () => {
-  const bad = ['a"b', "x'] , body {", 'Upper', '-lead', 'trail-', 'a_b', 'a b', 'a/b', '../x', ''];
+test('plugin ids with unsafe characters are validation errors', () => {
+  const bad = ['a"b', "x'] , body {", 'a b', 'a/b', '../x', 'a.b', ''];
   bad.forEach(id => {
     const r = PluginValidator.validate({ id, manifest: { name: 'n', version: '1.0.0', layer: 'feature' } });
     assert.is(r.valid, false, JSON.stringify(id) + ' must be rejected');
+  });
+  // Legacy ids accepted by earlier releases keep loading, with a warning.
+  ['Upper', '-lead', 'trail-', 'a_b'].forEach(id => {
+    const r = PluginValidator.validate({ id, manifest: { name: 'n', version: '1.0.0', layer: 'feature' } });
+    assert.is(r.valid, true, JSON.stringify(id) + ' must stay loadable');
+    assert.ok(r.warnings.some(w => /should use lowercase/.test(w)), JSON.stringify(id) + ' must warn');
   });
   ['a', 'good-id', 'a1-b2', 'card-color-tags'].forEach(id => {
     const r = PluginValidator.validate({ id, manifest: { name: 'n', version: '1.0.0', layer: 'feature' } });
