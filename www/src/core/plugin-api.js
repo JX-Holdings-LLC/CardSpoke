@@ -43,6 +43,49 @@ let nextDomHandleId = 1;
   // batch/RPC path is skipped entirely) for the common case of no such
   // plugins installed.
   const cardRenderPluginIds = new Set();
+  // The two halves of that membership, tracked separately so renderBatch can
+  // honour only what the host actually accepted: a replacement vnode only
+  // from the plugin that owns the `Card` slot, a decorator patch only from
+  // a plugin with an accepted card.render registration.
+  const cardComponentPluginIds = new Set();
+  const cardDecorators = new Map(); // pluginId -> Set<decorator name>
+
+  function syncCardRenderMembership(pluginId) {
+    const decorators = cardDecorators.get(pluginId);
+    if (cardComponentPluginIds.has(pluginId) || (decorators && decorators.size > 0)) {
+      cardRenderPluginIds.add(pluginId);
+    } else {
+      cardRenderPluginIds.delete(pluginId);
+    }
+  }
+
+  function setCardComponentOwner(pluginId, owns) {
+    if (owns) cardComponentPluginIds.add(pluginId);
+    else cardComponentPluginIds.delete(pluginId);
+    syncCardRenderMembership(pluginId);
+  }
+
+  function addCardDecorator(pluginId, name) {
+    let names = cardDecorators.get(pluginId);
+    if (!names) { names = new Set(); cardDecorators.set(pluginId, names); }
+    names.add(name);
+    syncCardRenderMembership(pluginId);
+  }
+
+  function removeCardDecorator(pluginId, name) {
+    const names = cardDecorators.get(pluginId);
+    if (names) {
+      names.delete(name);
+      if (names.size === 0) cardDecorators.delete(pluginId);
+    }
+    syncCardRenderMembership(pluginId);
+  }
+
+  function clearCardRender(pluginId) {
+    cardComponentPluginIds.delete(pluginId);
+    cardDecorators.delete(pluginId);
+    cardRenderPluginIds.delete(pluginId);
+  }
 
   // Stable internal references to core functions (Phase 1.3)
   // Captured at initialization time to prevent plugins from
@@ -71,10 +114,14 @@ let nextDomHandleId = 1;
     if (!InternalAPI.ui.showToast && window.showToast) InternalAPI.ui.showToast = window.showToast;
   }
 
-  // Helper function to check permissions
+  // Helper function to check permissions. The grant must be bound to the
+  // registered build of this plugin (its fingerprint): a grant made for
+  // different code under the same id never satisfies a runtime check.
   function hasPermission(pluginId, permission) {
     if (Permissions) {
-      return Permissions.hasPermission(pluginId, permission);
+      const instance = plugins.get(pluginId);
+      const fingerprint = instance ? instance.fingerprint : undefined;
+      return Permissions.hasPermission(pluginId, permission, fingerprint);
     }
     // Fallback - auto-grant if permissions system not available
     return true;
@@ -446,14 +493,14 @@ let nextDomHandleId = 1;
         if (ComponentRegistry) {
           const won = ComponentRegistry.register(name, component, component.priority || 0);
           if (won) {
-            if (name === 'Card') cardRenderPluginIds.add(pluginId);
+            if (name === 'Card') setCardComponentOwner(pluginId, true);
             trackResource(pluginId, { type: 'component', name: name, component: component });
           }
         }
       },
       unregisterComponent: function(name) {
         if (ComponentRegistry) ComponentRegistry.unregister(name);
-        if (name === 'Card') cardRenderPluginIds.delete(pluginId);
+        if (name === 'Card') setCardComponentOwner(pluginId, false);
       },
       showToast: function(message, type, duration) {
         var fn = InternalAPI.ui.showToast || window.showToast;
@@ -624,7 +671,10 @@ let nextDomHandleId = 1;
         const won = ComponentRegistry.register(name, component, priority || 0);
         if (won) {
           ownedComponents.set(name, component);
-          if (name === 'Card') cardRenderPluginIds.add(pluginId);
+          if (name === 'Card') {
+            if (instance) instance.cardComponent = component;
+            setCardComponentOwner(pluginId, true);
+          }
           trackResource(pluginId, { type: 'component', name: name, component: component });
         }
         return won;
@@ -634,7 +684,7 @@ let nextDomHandleId = 1;
         if (!owned) return;
         if (ComponentRegistry) ComponentRegistry.unregister(name, owned);
         ownedComponents.delete(name);
-        if (name === 'Card') cardRenderPluginIds.delete(pluginId);
+        if (name === 'Card') setCardComponentOwner(pluginId, false);
       },
       showToast: function(message, type, duration) {
         var fn = InternalAPI.ui.showToast || window.showToast;
@@ -643,14 +693,34 @@ let nextDomHandleId = 1;
     };
   }
 
+  // Middleware operations that intercept (and can rewrite or cancel) card
+  // writes. A sandboxed plugin may only hook these with `data-modify`.
+  // '*' matches every operation, so it counts as a write hook too.
+  const CARD_WRITE_OPERATIONS = ['card.create', 'card.update', 'card.delete'];
+
   function createWorkerMiddlewareHandlers(pluginId) {
     return {
       register: function(name, priority, operations) {
-        const ops = operations || ['*'];
+        if (typeof name !== 'string' || !name) {
+          throw new Error('Middleware must have a name');
+        }
+        const ops = (Array.isArray(operations) && operations.length) ? operations.map(String) : ['*'];
         if (ops.indexOf('card.render') !== -1) {
-          cardRenderPluginIds.add(pluginId);
+          // card.render decorators (and the vnode/patch they return from
+          // renderBatch) change what every card tile shows — the same power
+          // as owning the Card component, so the same permission.
+          if (!hasPermission(pluginId, 'ui-override')) {
+            throw new Error('Plugin does not have ui-override permission (required for card.render middleware)');
+          }
+          addCardDecorator(pluginId, name);
           trackResource(pluginId, { type: 'card-decorator', name: name });
           return true;
+        }
+
+        const hooksWrites = ops.some(op => op === '*' || CARD_WRITE_OPERATIONS.indexOf(op) !== -1);
+        if (hooksWrites && !hasPermission(pluginId, 'data-modify')) {
+          throw new Error('Plugin does not have data-modify permission (required for middleware on ' +
+            ops.join(', ') + ')');
         }
 
         const namespacedName = pluginId + ':' + name;
@@ -664,7 +734,10 @@ let nextDomHandleId = 1;
           const outcome = await instance.workerHandle.callWithDeadline(
             ['middleware', 'invoke'], [name, mwCtx.operation, mwCtx.args, nextProxy], MIDDLEWARE_TIMEOUT_MS
           );
-          if (outcome) {
+          // Without data-modify a hook is observe-only (e.g. card.save for a
+          // "Saved" indicator): it may not rewrite args, cancel the
+          // operation, or stop later middleware.
+          if (outcome && hasPermission(pluginId, 'data-modify')) {
             if (outcome.args !== undefined) mwCtx.args = outcome.args;
             if (outcome.prevented) mwCtx.preventDefault();
             if (outcome.stopped) mwCtx.stopPropagation();
@@ -675,7 +748,7 @@ let nextDomHandleId = 1;
         return true;
       },
       unregister: function(name) {
-        cardRenderPluginIds.delete(pluginId);
+        removeCardDecorator(pluginId, name);
         Middleware.unregister(pluginId + ':' + name);
       }
     };
@@ -701,12 +774,49 @@ let nextDomHandleId = 1;
     };
   }
 
-  function createUtilsHandlers() {
+  // CardSpoke.utils members a sandboxed plugin may call over RPC, and the
+  // permission each needs (null = read-only / harmless, no permission).
+  // Anything not listed here is NOT exposed to workers: a new utils helper
+  // must be classified before plugins can reach it.
+  const UTILS_PERMISSIONS = Object.freeze({
+    // Reads
+    getTags: null,
+    getAllTags: null,
+    getCard: null,
+    searchCards: null,
+    getDatasetMeta: null,
+    getAccessibilitySettings: null,
+    getTheme: null,
+    getTypography: null,
+    isHighContrast: null,
+    prefersReducedMotion: null,
+    getThemeVariables: null,
+    showToast: null, // same as the ungated ctx.api.ui.showToast
+    // Card/tag writes — same gate as ctx.api.data.*
+    createCard: 'data-modify',
+    updateCard: 'data-modify',
+    addTag: 'data-modify',
+    removeTag: 'data-modify',
+    setTags: 'data-modify',
+    // Global UI/appearance changes
+    setTheme: 'ui-override',
+    setTypography: 'ui-override',
+    setHighContrast: 'ui-override'
+  });
+
+  function createUtilsHandlers(pluginId) {
     const utils = (window.CardSpoke && window.CardSpoke.utils) || {};
     const handlers = Object.create(null);
     Object.keys(utils).forEach(prop => {
       if (typeof utils[prop] !== 'function') return;
-      handlers[prop] = async function() { return await utils[prop].apply(utils, arguments); };
+      if (!Object.prototype.hasOwnProperty.call(UTILS_PERMISSIONS, prop)) return;
+      const required = UTILS_PERMISSIONS[prop];
+      handlers[prop] = async function() {
+        if (required && !hasPermission(pluginId, required)) {
+          throw new Error('Plugin does not have ' + required + ' permission (required for utils.' + prop + ')');
+        }
+        return await utils[prop].apply(utils, arguments);
+      };
     });
     return handlers;
   }
@@ -730,7 +840,7 @@ let nextDomHandleId = 1;
       network: createWorkerNetworkHandlers(pluginId),
       ui: createWorkerUIHandlers(pluginId),
       middleware: createWorkerMiddlewareHandlers(pluginId),
-      utils: createUtilsHandlers(),
+      utils: createUtilsHandlers(pluginId),
       logger: createLoggerHandlers()
     };
   }
@@ -771,14 +881,42 @@ let nextDomHandleId = 1;
   const HANG_BACKSTOP_MS = 10000;
   let hangWatcherTimer = null;
 
+  function hasSourceStrings(definition) {
+    return !!((typeof definition.js === 'string' && definition.js) ||
+      (typeof definition.teardownJs === 'string' && definition.teardownJs));
+  }
+
+  function hasHostFunctions(definition) {
+    return typeof definition.setup === 'function' || typeof definition.teardown === 'function';
+  }
+
   const PluginManager = {
+    /**
+     * Register a plugin definition. Definitions carrying `js`/`teardownJs`
+     * source strings run sandboxed in a worker. A definition whose only code
+     * is real `setup`/`teardown` FUNCTIONS would run unsandboxed on the main
+     * thread, so it is rejected here — host code must opt in explicitly via
+     * the host-only registerHostPlugin() (what CardSpoke.registerPlugin uses).
+     */
     register: function(id, definition) {
+      return this._registerInternal(id, definition, false);
+    },
+
+    _registerInternal: function(id, definition, allowHostCode) {
       if (!id || !definition) {
         throw new Error('Plugin ID and definition are required');
       }
 
       if (!definition.manifest) {
         throw new Error('Plugin manifest is required');
+      }
+
+      if (!allowHostCode && hasHostFunctions(definition) && !hasSourceStrings(definition)) {
+        throw new Error(
+          'Plugin "' + id + '" supplies setup/teardown functions, which would run unsandboxed on ' +
+          'the main thread. Provide js/teardownJs source strings (sandboxed), or register trusted ' +
+          'host code explicitly with CardSpoke.registerPlugin().'
+        );
       }
 
       if (plugins.has(id)) {
@@ -830,7 +968,13 @@ let nextDomHandleId = 1;
         context: context,
         enabled: false,
         workerHandle: null,
-        resources: resources
+        resources: resources,
+        // Permission grants are bound to this (code + requested permissions)
+        // fingerprint, so a same-id plugin with different code needs fresh
+        // consent (see permissions.js).
+        fingerprint: (Permissions && typeof Permissions.computeFingerprint === 'function')
+          ? Permissions.computeFingerprint(definition)
+          : undefined
       };
 
       plugins.set(id, instance);
@@ -848,7 +992,7 @@ let nextDomHandleId = 1;
         plugins.delete(id);
         pluginResources.delete(id);
         dataUpdateListeners.delete(id);
-        cardRenderPluginIds.delete(id);
+        clearCardRender(id);
 
         // Revoke any permissions the user granted this plugin so a future
         // reinstall must ask again.
@@ -929,7 +1073,7 @@ let nextDomHandleId = 1;
       plugins.delete(id);
       pluginResources.delete(id);
       dataUpdateListeners.delete(id);
-      cardRenderPluginIds.delete(id);
+      clearCardRender(id);
     },
 
     // Restore the brand button to its pre-override content (the logo <img>).
@@ -968,10 +1112,7 @@ let nextDomHandleId = 1;
       // JS has no ambient access outside these permission-gated calls, so a
       // granted permission is an enforced capability grant, not a polite
       // request (CS-002, resolved).
-      const requiredPermissions = [...(instance.definition.manifest.permissions || [])];
-      // A same-origin worker is useful isolation, but dynamic imports and new
-      // browser APIs mean it is not a complete hostile-code security boundary.
-      if (instance.definition.js || instance.definition.teardownJs) requiredPermissions.push('plugin-code');
+      const requiredPermissions = this._requiredPermissions(instance);
       if (requiredPermissions.length) {
         const granted = await this._checkPermissions(id, requiredPermissions);
         if (!granted) {
@@ -1095,7 +1236,7 @@ let nextDomHandleId = 1;
 
       // Cleanup resources
       this._cleanupResources(id);
-      cardRenderPluginIds.delete(id);
+      clearCardRender(id);
 
       instance.enabled = false;
       this._persistEnabledState(id, false);
@@ -1118,8 +1259,18 @@ let nextDomHandleId = 1;
       }
     },
 
+    // Find a plugin's <style> element. The id is escaped for the quoted
+    // attribute value so no id (legacy ids may contain quotes) can inject
+    // into the selector.
+    _findStyle: function(id) {
+      const value = (typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function')
+        ? CSS.escape(id)
+        : String(id).replace(/[\\"]/g, '\\$&').replace(/[\n\r\f]/g, ' ');
+      return document.querySelector('style[data-plugin-id="' + value + '"]');
+    },
+
     _applyCSS: function(id, css) {
-      const existing = document.querySelector('style[data-plugin-id="' + id + '"]');
+      const existing = this._findStyle(id);
       if (existing) {
         existing.textContent = css;
       } else {
@@ -1131,7 +1282,7 @@ let nextDomHandleId = 1;
     },
 
     _removeCSS: function(id) {
-      const style = document.querySelector('style[data-plugin-id="' + id + '"]');
+      const style = this._findStyle(id);
       if (style && style.parentNode) {
         style.parentNode.removeChild(style);
       }
@@ -1219,7 +1370,8 @@ let nextDomHandleId = 1;
       if (Permissions) {
         const instance = plugins.get(id);
         const pluginName = (instance && instance.definition.manifest && instance.definition.manifest.name) || id;
-        return await Permissions.requestPermissions(id, pluginName, permissions);
+        return await Permissions.requestPermissions(id, pluginName, permissions,
+          instance ? instance.fingerprint : undefined);
       }
 
       if (window.showPermissionDialog) {
@@ -1268,13 +1420,29 @@ let nextDomHandleId = 1;
     renderBatch: async function(id, cardsSnapshot, opts) {
       const instance = plugins.get(id);
       if (!instance || !instance.enabled || !instance.workerHandle) return null;
+      // Only honour what the host actually accepted for this plugin: the
+      // worker is untrusted and may return a vnode/patch for a Card
+      // component or card.render decorator the host refused to register.
+      const canOverride = hasPermission(id, 'ui-override');
+      const mayReplace = canOverride && cardComponentPluginIds.has(id) &&
+        !!instance.cardComponent && ComponentRegistry.get('Card') === instance.cardComponent;
+      const decorators = cardDecorators.get(id);
+      const mayDecorate = canOverride && !!(decorators && decorators.size > 0);
+      if (!mayReplace && !mayDecorate) return null;
+      let results;
       try {
-        return await instance.workerHandle.callWithDeadline(
+        results = await instance.workerHandle.callWithDeadline(
           ['ui', 'renderBatch'], [cardsSnapshot, opts || {}], CARD_RENDER_DEADLINE_MS
         );
       } catch (err) {
         return null;
       }
+      if (!Array.isArray(results)) return null;
+      return results.map(r => ({
+        cardId: r && r.cardId,
+        vnode: (mayReplace && r && r.vnode) || null,
+        patch: (mayDecorate && r && r.patch) || null
+      }));
     },
 
     /** Backstop hang detector: terminates and suspends a worker whose oldest pending RPC call is stuck. */
@@ -1289,7 +1457,7 @@ let nextDomHandleId = 1;
             instance.enabled = false;
             this._removeCSS(id);
             this._cleanupResources(id);
-            cardRenderPluginIds.delete(id);
+            clearCardRender(id);
             this._persistEnabledState(id, false);
             if (window.showToast) {
               window.showToast('Plugin "' + id + '" stopped responding and was suspended.', 'error');
@@ -1358,14 +1526,37 @@ let nextDomHandleId = 1;
         (typeof pkg.teardownJs === 'string' && pkg.teardownJs.trim()) ? pkg.teardownJs :
         (typeof pkg.teardown === 'string' && pkg.teardown.trim()) ? pkg.teardown : null;
 
-      // Syntax-check (never execute) source strings unless the caller
-      // supplied real functions. A syntax error here throws before anything
-      // is registered.
-      if (!pkg.setup && jsSource) _checkSyntax(jsSource);
-      if (typeof pkg.teardown !== 'function' && teardownSource) _checkSyntax(teardownSource);
+      // install() only ever builds a sandboxed definition from the package's
+      // manifest/css/js/teardownJs. Real setup/teardown FUNCTIONS would run
+      // unsandboxed on the main thread (and could not be persisted anyway),
+      // so they are dropped here; trusted session-only host code must use
+      // CardSpoke.registerPlugin() instead.
+      if (typeof pkg.setup === 'function' || typeof pkg.teardown === 'function') {
+        console.warn('[Plugin] install() ignores setup/teardown functions; ' +
+          'use js/teardownJs source strings (sandboxed) or CardSpoke.registerPlugin() for host code.');
+      }
+
+      // Syntax-check (never execute) source strings. A syntax error here
+      // throws before anything is registered.
+      if (jsSource) _checkSyntax(jsSource);
+      if (teardownSource) _checkSyntax(teardownSource);
 
       // Generate base ID
-      let id = pkg.manifest.id || pkg.manifest.name.toLowerCase().replace(/\s+/g, '-');
+      // An explicit id must already match the documented format (the
+      // validator rejects anything else); a name-derived id is slugified to
+      // that format.
+      let id = pkg.manifest.id || String(pkg.manifest.name).toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      if (!id) {
+        throw new Error('Invalid plugin package: could not derive a plugin id from manifest.name; set manifest.id');
+      }
+      // New installs get a strict id rule (letters, digits, '.', '_', '-').
+      // Stored plugins from earlier releases are validated more leniently so
+      // they keep loading (see plugin-validator.js).
+      if (!/^[A-Za-z0-9._-]+$/.test(id) || id.length > 200) {
+        throw new Error('Invalid plugin package: manifest.id may only contain letters, numbers, ' +
+          '".", "_" and "-": ' + JSON.stringify(id));
+      }
 
       // Task 2.4: If a plugin with this ID already exists, this install is an
       // update: fully unregister (disable + cleanup + store removal) first.
@@ -1375,8 +1566,6 @@ let nextDomHandleId = 1;
 
       const definition = {
         manifest: pkg.manifest,
-        setup: pkg.setup,
-        teardown: (typeof pkg.teardown === 'function') ? pkg.teardown : undefined,
         css: pkg.css,
         js: jsSource,
         teardownJs: teardownSource
@@ -1507,8 +1696,28 @@ let nextDomHandleId = 1;
     // cannot block the sequential boot sync and leave the app on a blank
     // screen. For a sandboxed plugin this also forcibly terminates the
     // worker on timeout — a capability main-thread execution never had.
+    _requiredPermissions: function(instance) {
+      const required = [...(instance.definition.manifest.permissions || [])];
+      // A same-origin worker is useful isolation, but dynamic imports and new
+      // browser APIs mean it is not a complete hostile-code security boundary.
+      if (instance.definition.js || instance.definition.teardownJs) required.push('plugin-code');
+      return required;
+    },
+
     _enableWithTimeout: async function(id, timeoutMs) {
       const limit = typeof timeoutMs === 'number' ? timeoutMs : ENABLE_TIMEOUT_MS;
+      // Ask for consent BEFORE the clock starts: a user reading a permission
+      // dialog (e.g. the one-time re-confirmation after upgrading) must not
+      // race the hang timeout, which would otherwise dismiss their answer and
+      // kill the freshly started worker. enable() re-checks and finds the
+      // grant, so the user is not prompted twice.
+      const pending = plugins.get(id);
+      if (pending && !pending.enabled) {
+        const required = this._requiredPermissions(pending);
+        if (required.length && !(await this._checkPermissions(id, required))) {
+          throw new Error('Permissions not granted for plugin: ' + id);
+        }
+      }
       let timer = null;
       const timeout = new Promise((_resolve, reject) => {
         timer = setTimeout(
@@ -1625,6 +1834,19 @@ let nextDomHandleId = 1;
     }
   };
 
+  // Host-only registration path for trusted, session-only plugins whose code
+  // is real setup/teardown functions (run unsandboxed on the main thread).
+  // Non-enumerable so it does not show up when the Plugin surface is
+  // enumerated/serialized; CardSpoke.registerPlugin() is the public wrapper.
+  Object.defineProperty(PluginManager, 'registerHostPlugin', {
+    value: function(id, definition) {
+      return PluginManager._registerInternal(id, definition, true);
+    },
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+
   console.log('[Plugin] API system initialized');
 
 export { PluginManager as Plugin };
@@ -1654,6 +1876,8 @@ export function resetForTesting() {
   dataUpdateListeners.clear();
   globalEventBus.clear();
   cardRenderPluginIds.clear();
+  cardComponentPluginIds.clear();
+  cardDecorators.clear();
   if (hangWatcherTimer) { clearInterval(hangWatcherTimer); hangWatcherTimer = null; }
   // Drop captured host references so each test re-captures from its own
   // window/document mock instead of a stale one from a previous file.

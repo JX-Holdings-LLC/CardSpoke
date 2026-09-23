@@ -36,6 +36,21 @@ export function migrateCard(card) {
   let changed = false;
   if (!Array.isArray(card.children)) { card.children = []; changed = true; }
   if (!Array.isArray(card.tags)) { card.tags = []; changed = true; }
+  // Tags are canonically lowercase strings without a leading '#'. Imported
+  // or legacy data can carry mixed case, '#'-prefixed, duplicate, empty or
+  // non-string tags that the Tag Manager / kernel tag ops cannot match (or
+  // that throw). Normalize them in place; order of first occurrence is kept.
+  const normalizedTags = [];
+  for (const t of card.tags) {
+    if (t == null || typeof t === 'object' || typeof t === 'function') continue;
+    const tag = String(t).trim().replace(/^#/, '').trim().toLowerCase();
+    if (tag && !normalizedTags.includes(tag)) normalizedTags.push(tag);
+  }
+  if (normalizedTags.length !== card.tags.length ||
+      normalizedTags.some((tag, i) => tag !== card.tags[i])) {
+    card.tags = normalizedTags;
+    changed = true;
+  }
   if (card.modsData == null || typeof card.modsData !== 'object') {
     card.modsData = {};
     changed = true;

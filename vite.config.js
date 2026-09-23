@@ -488,7 +488,9 @@ export default defineConfig({
           'index.html', 'styles.css', 'manifest.webmanifest',
           'service-worker.js', 'capacitor.js', 'offline-status.js',
           'app-loader.js', 'CardSpoke.svg', 'capabilities.json',
-          'diagnostic.html', 'test.html',
+          // diagnostic.html / test.html are dev-only harnesses (they read
+          // localStorage and fetch+eval the bundle) and are deliberately NOT
+          // part of the built site — see DEV_ONLY_PAGES below.
           // Plugin sandbox worker entry point — built separately by
           // scripts/build-plugin-worker.mjs (see npm run build), not by the
           // vite build above, so it must be copied into dist/ here too.
@@ -501,6 +503,12 @@ export default defineConfig({
           if (fs.existsSync(from)) {
             fs.copyFileSync(from, resolve(distDir, file));
           }
+        }
+        // emptyOutDir is false, so remove copies left by older builds.
+        const DEV_ONLY_PAGES = ['diagnostic.html', 'test.html'];
+        for (const file of DEV_ONLY_PAGES) {
+          const stale = resolve(distDir, file);
+          if (fs.existsSync(stale)) fs.unlinkSync(stale);
         }
       }
     }

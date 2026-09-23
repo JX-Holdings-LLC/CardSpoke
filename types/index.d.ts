@@ -17,7 +17,7 @@
 
 /**
  * CardSpoke Core Type Definitions
- * @version 0.21.0
+ * @version 0.21.1
  * @module @cardspoke/core
  */
 
@@ -440,12 +440,17 @@ export interface PluginValidatorClass {
 // --- Permissions Types ---
 
 export interface PermissionsClass {
-  hasPermission(pluginId: string, permission: PermissionType): boolean;
-  hasAllPermissions(pluginId: string, permissions: PermissionType[]): boolean;
-  grantPermissions(pluginId: string, permissions: PermissionType[]): void;
+  /** `fingerprint` (from computeFingerprint) binds the check to one plugin build. */
+  hasPermission(pluginId: string, permission: PermissionType, fingerprint?: string): boolean;
+  hasAllPermissions(pluginId: string, permissions: PermissionType[], fingerprint?: string): boolean;
+  grantPermissions(pluginId: string, permissions: PermissionType[], fingerprint?: string): void;
   revokePermissions(pluginId: string, permissions?: PermissionType[]): void;
   getPermissions(pluginId: string): PermissionType[];
-  requestPermissions(pluginId: string, pluginName: string, permissions: PermissionType[]): Promise<boolean>;
+  /** The fingerprint a grant is bound to, or null for none/legacy/unbound. */
+  getFingerprint(pluginId: string): string | null;
+  /** Change-detection hash of a plugin's js + teardownJs + sorted manifest.permissions. */
+  computeFingerprint(definition: { manifest?: { permissions?: string[] }; js?: string | null; teardownJs?: string | null }): string;
+  requestPermissions(pluginId: string, pluginName: string, permissions: PermissionType[], fingerprint?: string): Promise<boolean>;
   clearAll(): void;
 }
 
@@ -485,7 +490,10 @@ declare global {
 export interface PluginClass {
   /** Validate, register, persist, and auto-enable (SAFE/LOW) a package. Returns the id. */
   install(pkg: ModPackage): Promise<string>;
+  /** Rejects definitions whose only code is setup/teardown functions (use registerHostPlugin). */
   register(id: string, plugin: PluginDefinition): void;
+  /** Host-only (non-enumerable): register trusted session-only function-form code. */
+  registerHostPlugin(id: string, plugin: PluginDefinition): void;
   unregister(id: string): Promise<void>;
   get(id: string): PluginInstance | undefined;
   list(): PluginInstance[];

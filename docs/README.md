@@ -1,6 +1,6 @@
 # CardSpoke Documentation
 
-CardSpoke is a local-first, card-based knowledge app. This documentation describes the public 0.20.0 preview, maintained by [Jeffrey Guntly](https://github.com/jxburros) and [JX Holdings, LLC](https://jxholdings.com).
+CardSpoke is a local-first, card-based knowledge app. This documentation describes the public 0.21.1 preview, maintained by [Jeffrey Guntly](https://github.com/jxburros) and [JX Holdings, LLC](https://jxholdings.com).
 
 ## Choose a starting point
 

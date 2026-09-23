@@ -91,7 +91,6 @@ The plugin runtime includes consent prompts, risk labels, safe mode, resource cl
 
 **Trust model:** JavaScript packages run in dedicated workers with permission-checked API calls and restricted UI descriptions. Workers reduce risk but are not a complete hostile-code sandbox. The app asks for `plugin-code` trust consent before running any package JavaScript; plugins can read unlocked cards and dynamic imports are not covered by the host network permission. Only allow authors you trust. See [Security & Safety](./docs/policies/SECURITY_AND_SAFETY.md).
 
-
 ## Getting Started
 
 1. Install dependencies. Node 20.19+ or 22.12+ is recommended.
@@ -123,7 +122,8 @@ The plugin runtime includes consent prompts, risk labels, safe mode, resource cl
    second terminal) to see the change; only `index.html`/`styles.css` edits are
    picked up live.
 
-5. Preview the built app.
+5. Preview the built app (`npm run build` first; `vite preview` serves the
+   production site from `dist/`).
 
    ```bash
    npm run preview
@@ -136,13 +136,35 @@ The plugin runtime includes consent prompts, risk labels, safe mode, resource cl
    npm run qa:browser   # end-to-end browser QA in headless Chromium
    ```
 
+   `qa:browser` needs a Chromium for Playwright. If you don't have one, install
+   it once with `npx playwright install --with-deps chromium`, or point
+   `CHROMIUM_PATH` at an existing Chromium/Chrome binary.
+
 ## Desktop and Mobile Packaging
 
-CardSpoke uses Capacitor for native packaging workflows. The public product focus is:
+The public product focus is:
 
 1. Web app first
 2. Desktop packaging next
 3. Mobile packaging after that
+
+### Desktop (Windows, macOS, Linux)
+
+The desktop app is a locked-down Electron shell in [`desktop/`](./desktop/)
+with installers for Windows (NSIS `.exe`), macOS (`.dmg`/`.zip`) and Linux
+(`AppImage`/`.deb`):
+
+```bash
+npm run desktop:install   # one-time: installs Electron + electron-builder
+npm run desktop:start     # build the web bundle and launch the desktop app
+npm run desktop:dist      # build installers for the current OS into desktop/release/
+npm run desktop:test      # desktop shell unit tests
+```
+
+See the [Desktop guide](./docs/guides/DESKTOP.md) for installer details, the
+security model, code signing and the release workflow.
+
+### Mobile (Capacitor)
 
 Capacitor commands remain available for development. The native projects are
 generated, so add the platform once per fresh checkout before syncing:
@@ -167,6 +189,7 @@ Mobile builds should be treated as experimental until platform-specific security
 - `www/` - Web assets consumed by the app and Capacitor shells.
 - `www/src/` - Source slices compiled by Vite into `www/app.js`.
 - `www/src/core/` - Plugin runtime modules used by the main CardSpoke app.
+- `desktop/` - Electron desktop shell and installer configuration.
 - `tests/` - Automated uvu tests.
 - `docs/` - User, developer, API, policy, and release documentation.
 - `sample-plugins/` - Example plugin packages.
@@ -180,6 +203,7 @@ Start with the [Documentation home](./docs/README.md) for a role-based map and t
 - [Developer Guide](./docs/guides/DEVELOPER_GUIDE.md)
 - [Code & Plugin System Handbook](./docs/guides/CODE_AND_PLUGIN_SYSTEM_HANDBOOK.md)
 - [Test Guide](./docs/guides/TEST_GUIDE.md)
+- [Desktop App Guide](./docs/guides/DESKTOP.md)
 - [Capacitor Guide](./docs/guides/README.CAPACITOR.md)
 - [Deviation Guide](./docs/guides/DEVIATION_GUIDE.md)
 - [Feature Catalog](./docs/guides/FEATURES.md)
@@ -231,7 +255,7 @@ Run `npm install` first, then retry. If the error persists, delete `node_modules
 
 ### `file://` page is blank
 
-Open the browser console. A missing `www/app.js` means the build has not been run yet. A browser CORS error means the browser is blocking local file access; serve the `www/` folder with `npm run preview` instead.
+Open the browser console. A missing `www/app.js` means the build has not been run yet. A browser CORS error means the browser is blocking local file access; run `npm run build` and serve the app with `npm run preview` instead.
 
 ### Tests fail with "Cannot find module"
 

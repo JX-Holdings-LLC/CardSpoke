@@ -227,7 +227,7 @@ test('enable() passes config to plugin context', async () => {
 
   window.CardSpoke.Permissions.grantPermissions('config-test', ['plugin-code', ]);
 
-  PluginManager.register('config-test', {
+  PluginManager.registerHostPlugin('config-test', {
     manifest: {
       name: 'Config Test',
       version: '1.0.0',

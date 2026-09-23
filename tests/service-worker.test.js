@@ -193,6 +193,38 @@ test('offline navigation falls back to the cached index.html', async () => {
   assert.is(response.body, 'cached-shell');
 });
 
+test('online navigation to the app root or index.html refreshes the cached shell', async () => {
+  for (const path of ['/', '/index.html', '/?safemode']) {
+    const url = ORIGIN + path;
+    const w = bootWorker({ network: { [url]: 'fresh-shell:' + path } });
+    const ev = fetchEvent({ method: 'GET', mode: 'navigate', url });
+    w.listeners.fetch(ev);
+    const response = await ev.response;
+    assert.is(response.body, 'fresh-shell:' + path);
+    await flushMicrotasks();
+    const store = w.stores.get(CURRENT_CACHE);
+    assert.ok(store && store.get('./index.html'), path + ' should refresh ./index.html');
+    assert.is(store.get('./index.html').body, 'fresh-shell:' + path);
+  }
+});
+
+test('navigation to any other same-origin page is never cached as index.html', async () => {
+  for (const path of ['/diagnostic.html', '/test.html', '/some/other/page', '/404']) {
+    const url = ORIGIN + path;
+    const w = bootWorker({
+      cacheStores: { [CURRENT_CACHE]: { './index.html': { status: 200, body: 'real-shell' } } },
+      network: { [url]: 'not-the-app:' + path }
+    });
+    const ev = fetchEvent({ method: 'GET', mode: 'navigate', url });
+    w.listeners.fetch(ev);
+    const response = await ev.response;
+    assert.is(response.body, 'not-the-app:' + path, 'the page itself is still served from the network');
+    await flushMicrotasks();
+    assert.is(w.stores.get(CURRENT_CACHE).get('./index.html').body, 'real-shell',
+      path + ' must not overwrite the cached app shell');
+  }
+});
+
 test('same-origin non-shell requests are not intercepted or cached', () => {
   const w = bootWorker();
   for (const path of ['/private.json', '/app.js?private=data']) {

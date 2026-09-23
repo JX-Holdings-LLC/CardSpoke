@@ -7,7 +7,7 @@
     "author": "CardSpoke Community",
     "description": "Adds an estimated reading time to card tiles with longer bodies. Demonstrates the 'card.render' decorator contract.",
     "layer": "feature",
-    "permissions": [],
+    "permissions": ["ui-override"],
     "compatibility": ">=0.21.0"
   },
   "css": ".plugin-reading-time { display: inline-block; margin-top: 4px; font-size: 11px; color: var(--text-ghost); }\n",

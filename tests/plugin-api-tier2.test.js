@@ -132,7 +132,7 @@ test('Plugin data API uses stable internal references', async () => {
   // Register and enable a plugin without permissions to skip dialog
   const origCreateCard = window.createCard;
   
-  PluginManager.register('api-test-plugin', {
+  PluginManager.registerHostPlugin('api-test-plugin', {
     manifest: {
       name: 'API Test',
       version: '1.0.0',

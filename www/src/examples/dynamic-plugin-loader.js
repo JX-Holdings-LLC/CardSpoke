@@ -15,118 +15,94 @@
  */
 
 
-// Dynamic Plugin Loader
-// Example of loading plugins as ES modules with Vite/ESBuild
+// Remote Plugin Package Loader (example)
+//
+// Fetches plugin *packages* (plain JSON: { id, manifest, css?, js?,
+// teardownJs? }) and installs them with CardSpoke.Plugin.install(). Package
+// `js`/`teardownJs` are source strings, so the plugin runs inside its own
+// sandboxed Worker and is gated by user-granted permissions.
+//
+// This example deliberately does NOT import() plugin code as ES modules:
+// module code (and any setup/teardown functions it exports) would run
+// unsandboxed on the main thread with full access to the app. install()
+// drops function-form setup/teardown for the same reason; trusted,
+// session-only host code has to opt in explicitly via
+// CardSpoke.registerPlugin(). See docs/architecture/PLUGIN_INVARIANTS.md.
+//
+// This module is not part of the app bundle and attaches nothing to
+// window.CardSpoke (which is frozen); import its functions directly.
 
-/**
- * Load a plugin from a URL as an ES module
- * @param {string} url - URL to the plugin module
- * @returns {Promise<Object>} Loaded plugin
- */
-export async function loadPluginFromURL(url) {
-  try {
-    const module = await import(/* @vite-ignore */ url);
-    return module.default || module;
-  } catch (err) {
-    console.error('[PluginLoader] Failed to load plugin from URL:', url, err);
-    throw err;
-  }
-}
-
-/**
- * Load a plugin from local file (development)
- * @param {string} path - Path to the plugin file
- * @returns {Promise<Object>} Loaded plugin
- */
-export async function loadPluginFromFile(path) {
-  try {
-    const module = await import(/* @vite-ignore */ path);
-    return module.default || module;
-  } catch (err) {
-    console.error('[PluginLoader] Failed to load plugin from file:', path, err);
-    throw err;
-  }
-}
-
-/**
- * Install and enable a dynamically loaded plugin
- * @param {string} pluginId - Plugin ID
- * @param {Object} pluginDefinition - Plugin definition from ES module
- */
-export async function installDynamicPlugin(pluginId, pluginDefinition) {
-  if (!window.CardSpoke || !window.CardSpoke.Plugin) {
+function getPluginRuntime() {
+  if (typeof window === 'undefined' || !window.CardSpoke || !window.CardSpoke.Plugin) {
     throw new Error('Plugin system not available');
   }
-
-  // Convert module export to plugin format if needed
-  const plugin = {
-    manifest: pluginDefinition.manifest || {
-      name: pluginId,
-      version: '1.0.0',
-      author: 'Unknown',
-      layer: 'feature'
-    },
-    setup: pluginDefinition.setup || pluginDefinition.default?.setup,
-    teardown: pluginDefinition.teardown || pluginDefinition.default?.teardown,
-    css: pluginDefinition.css || pluginDefinition.default?.css
-  };
-
-  // Register with plugin system
-  window.CardSpoke.Plugin.register(pluginId, plugin);
-  
-  // Enable the plugin
-  await window.CardSpoke.Plugin.enable(pluginId);
-  
-  console.log('[PluginLoader] Installed and enabled:', pluginId);
+  return window.CardSpoke.Plugin;
 }
 
 /**
- * Load plugins from a manifest file
- * @param {string} manifestUrl - URL to plugins manifest JSON
+ * Fetch a plugin package JSON from a URL.
+ * @param {string} url - URL of a plugin package (.json)
+ * @returns {Promise<Object>} The parsed package
+ */
+export async function loadPluginPackageFromURL(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to fetch plugin package ' + url + ': HTTP ' + response.status);
+  }
+  const pkg = await response.json();
+  if (!pkg || typeof pkg !== 'object' || !pkg.manifest) {
+    throw new Error('Not a plugin package (missing manifest): ' + url);
+  }
+  return pkg;
+}
+
+/**
+ * Install a plugin package. Only data crosses into the runtime: manifest,
+ * css and js/teardownJs source strings. Any function-valued fields are
+ * stripped here as well as by install() itself.
+ * @param {Object} pkg - Plugin package
+ * @returns {Promise<string>} The installed plugin id
+ */
+export async function installPluginPackage(pkg) {
+  const Plugin = getPluginRuntime();
+  const clean = {
+    id: pkg.id,
+    manifest: pkg.manifest,
+    css: typeof pkg.css === 'string' ? pkg.css : undefined,
+    js: typeof pkg.js === 'string' ? pkg.js : undefined,
+    teardownJs: typeof pkg.teardownJs === 'string' ? pkg.teardownJs : undefined,
+    config: pkg.config,
+    overrides: pkg.overrides
+  };
+  const id = await Plugin.install(clean);
+  console.log('[PluginLoader] Installed:', id);
+  return id;
+}
+
+/**
+ * Load and install every package listed in a gallery manifest, e.g.
+ * sample-plugins/manifest.json:
+ * { "plugins": [ { "id": "my-plugin", "url": "https://.../my-plugin.json" } ] }
+ * @param {string} manifestUrl - URL of the gallery manifest
+ * @returns {Promise<Array<{id: string, success: boolean, error?: string}>>}
  */
 export async function loadPluginsFromManifest(manifestUrl) {
-  try {
-    const response = await fetch(manifestUrl);
-    const manifest = await response.json();
-    
-    const results = [];
-    for (const plugin of manifest.plugins || []) {
-      try {
-        const pluginDef = await loadPluginFromURL(plugin.url);
-        await installDynamicPlugin(plugin.id, pluginDef);
-        results.push({ id: plugin.id, success: true });
-      } catch (err) {
-        console.error('[PluginLoader] Failed to load plugin:', plugin.id, err);
-        results.push({ id: plugin.id, success: false, error: err.message });
-      }
-    }
-    
-    return results;
-  } catch (err) {
-    console.error('[PluginLoader] Failed to load manifest:', manifestUrl, err);
-    throw err;
+  const response = await fetch(manifestUrl);
+  if (!response.ok) {
+    throw new Error('Failed to fetch plugin manifest ' + manifestUrl + ': HTTP ' + response.status);
   }
-}
+  const manifest = await response.json();
 
-/**
- * Example manifest format:
- * {
- *   "plugins": [
- *     {
- *       "id": "my-plugin",
- *       "url": "https://example.com/plugins/my-plugin.js"
- *     }
- *   ]
- * }
- */
-
-// Export for use in app
-if (typeof window !== 'undefined') {
-  if (!window.CardSpoke) window.CardSpoke = {};
-  window.CardSpoke.PluginLoader = {
-    loadFromURL: loadPluginFromURL,
-    loadFromFile: loadPluginFromFile,
-    install: installDynamicPlugin,
-    loadManifest: loadPluginsFromManifest
-  };
+  const results = [];
+  for (const entry of (manifest && manifest.plugins) || []) {
+    try {
+      const pkg = await loadPluginPackageFromURL(entry.url);
+      const id = await installPluginPackage(pkg);
+      results.push({ id: id, success: true });
+    } catch (err) {
+      console.error('[PluginLoader] Failed to load plugin:', entry.id, err);
+      results.push({ id: entry.id, success: false, error: err.message });
+    }
+  }
+  return results;
 }

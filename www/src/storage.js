@@ -19,7 +19,8 @@ import {
   store, setStore, createDefaultStore,
   navState, setNavState,
   navHistory, setNavHistory,
-  instanceKey
+  instanceKey,
+  undoStack, redoStack, trashBin
 } from './state.js';
 import { migrateStore as coreMigrateStore } from '@core/migrations.js';
 import {
@@ -96,6 +97,9 @@ import {
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
               this.db = request.result;
+              // Let a deleteDatabase (Clear All Data) proceed instead of
+              // being blocked by this long-lived connection.
+              this.db.onversionchange = () => { try { this.db.close(); } catch (_e) { /* closed */ } };
               resolve();
             };
       
@@ -756,7 +760,11 @@ import {
             const db = req.result;
             if (!db.objectStoreNames.contains('handles')) db.createObjectStore('handles');
           };
-          req.onsuccess = () => resolve(req.result);
+          req.onsuccess = () => {
+            const db = req.result;
+            db.onversionchange = () => { try { db.close(); } catch (_e) { /* closed */ } };
+            resolve(db);
+          };
         });
       }
 
@@ -1032,6 +1040,14 @@ import {
        */
       async function persistStoreNow(key) {
         stripLegacyPinMetadata();
+        // Stamp every persisted payload with a strictly increasing revision
+        // time. The same payload goes to LocalStorage and to the secondary
+        // backends, so on boot a stale local file (e.g. its write failed
+        // after LocalStorage succeeded) can be recognised and must not
+        // replace the newer LocalStorage copy.
+        if (!store.metadata || typeof store.metadata !== 'object') store.metadata = {};
+        const previousPersistedAt = Number(store.metadata.persistedAt) || 0;
+        store.metadata.persistedAt = Math.max(Date.now(), previousPersistedAt + 1);
         const payload = JSON.stringify(store);
         const activePin = activeSessionPin;
         const revision = saveRevision;
@@ -1186,6 +1202,36 @@ import {
         }
       }
 
+      /** IndexedDB databases the app owns (dataset mirror, file handles). */
+      const APP_INDEXEDDB_DATABASES = ['CardSpokeDB', 'CardSpokeFileHandles'];
+
+      /**
+       * Delete every IndexedDB database the app owns. Closes the cached
+       * mirror connection first so the delete is not blocked by it. Never
+       * rejects: a blocked/failed delete is logged and reported as false.
+       * @returns {Promise<boolean[]>} Per-database success flags.
+       */
+      async function deleteAppIndexedDbDatabases() {
+        if (typeof indexedDB === 'undefined' || !indexedDB || typeof indexedDB.deleteDatabase !== 'function') return [];
+        if (indexedDbMirrorDriver && indexedDbMirrorDriver.db && typeof indexedDbMirrorDriver.db.close === 'function') {
+          try { indexedDbMirrorDriver.db.close(); } catch (_err) { /* already closed */ }
+        }
+        indexedDbMirrorDriver = null;
+        return Promise.all(APP_INDEXEDDB_DATABASES.map(name => new Promise(resolve => {
+          try {
+            const req = indexedDB.deleteDatabase(name);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => { console.warn('[Storage] Could not delete IndexedDB', name, req.error); resolve(false); };
+            // Another tab holds a connection: the delete completes once it
+            // closes; don't hang the reset waiting for it.
+            req.onblocked = () => { console.warn('[Storage] IndexedDB delete blocked by an open connection:', name); resolve(false); };
+          } catch (err) {
+            console.warn('[Storage] IndexedDB delete failed:', name, err);
+            resolve(false);
+          }
+        })));
+      }
+
       async function clearAllData() {
         if (!await showConfirmDialog('WARNING: This will DELETE ALL instances and data from localStorage.\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?', {
           title: 'Delete All Data',
@@ -1213,8 +1259,17 @@ import {
             allKeys.push(key);
           }
 
+          // Stop any queued write from recreating a dataset after the wipe,
+          // and keep further saves off until the reload.
+          cancelPendingSave();
+          storageWriteLock = true;
+
           // Clear everything
           localStorage.clear();
+
+          // Datasets are also mirrored to IndexedDB, and chosen-file
+          // handles live in their own database: "all data" includes both.
+          await deleteAppIndexedDbDatabases();
 
           showToast(`Cleared ${allKeys.length} items from localStorage`, 'success');
 
@@ -1415,27 +1470,124 @@ import {
         if (typeof trapFocus === 'function') trapFocus(modal);
       }
 
-      async function load() {
-        const key = instanceKey || 'nested_cards_store';
-        let raw = localStorage.getItem(key);
-
-        // A fresh load re-decides the lock state for the (possibly new)
-        // active dataset; clear any blocker left from a previous dataset.
+      /**
+       * Reset every piece of in-memory state that is scoped to the active
+       * dataset. Called on EVERY dataset switch/create path (load() and the
+       * Create Dataset flow) so one dataset's session never applies to
+       * another:
+       *   - undo/redo history and the trash bin (could inject a foreign —
+       *     possibly PIN-protected — card object or throw mid-undo);
+       *   - navigation position/history (card ids of another dataset);
+       *   - the write lock and lock/recovery blockers of the previous dataset.
+       * The session PIN is NOT touched here; each caller decides it.
+       */
+      function resetSessionState() {
         storageWriteLock = false;
-
-        // Undo/redo history and the trash bin are in-memory and scoped to the
-        // active dataset. A load (boot or dataset switch) must not let one
-        // dataset's undo entries or trashed cards apply to another — doing so
-        // could inject a foreign card object or throw mid-undo.
         if (Array.isArray(undoStack)) undoStack.length = 0;
         if (Array.isArray(redoStack)) redoStack.length = 0;
         if (Array.isArray(trashBin)) trashBin.length = 0;
-        if (typeof document !== 'undefined') {
+        setNavState({
+          mode: (navState && navState.mode) || 'cardspoke',
+          page: 'list',
+          cardId: null,
+          parentId: null,
+          searchQuery: ''
+        });
+        setNavHistory([]);
+        if (typeof document !== 'undefined' && document && typeof document.getElementById === 'function') {
           const staleLock = document.getElementById('datasetLockScreen');
           if (staleLock) staleLock.remove();
           const staleRecovery = document.getElementById('corruptRecoveryScreen');
           if (staleRecovery) staleRecovery.remove();
         }
+      }
+
+      /**
+       * Remove the secondary copies of a dataset that live outside its
+       * LocalStorage key: the IndexedDB mirror and a chosen-file handle
+       * record. Best-effort — the primary key is already gone.
+       * @param {string} key - Dataset key
+       */
+      async function removeDatasetMirrors(key) {
+        if (!key || typeof indexedDB === 'undefined') return;
+        try {
+          const driver = await getIndexedDbMirrorDriver();
+          await driver.remove(key);
+        } catch (err) {
+          console.warn('[Dataset] Could not remove IndexedDB mirror for', key, err);
+        }
+        try {
+          const db = await openFileHandleDb();
+          await new Promise((resolve) => {
+            const tx = db.transaction(['handles'], 'readwrite');
+            tx.objectStore('handles').delete(`cardspoke_file_handle_${key}`);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+            tx.onabort = () => resolve();
+          });
+          db.close();
+        } catch (err) {
+          console.warn('[Dataset] Could not remove file handle for', key, err);
+        }
+      }
+
+      /**
+       * Decide whether a local-file payload may replace the store loaded from
+       * LocalStorage. Newer-or-equal persistedAt wins. A payload without a
+       * revision is older than one with a revision; when neither has one
+       * (data written before revisions existed) the file keeps winning, as
+       * it always did.
+       * @param {Object} filePayload - Parsed (decrypted) file store
+       * @param {Object} localPayload - Store loaded from LocalStorage
+       * @returns {boolean}
+       */
+      function isLocalFilePayloadCurrent(filePayload, localPayload) {
+        const rev = p => {
+          const value = p && p.metadata && Number(p.metadata.persistedAt);
+          return Number.isFinite(value) && value > 0 ? value : null;
+        };
+        const fileRev = rev(filePayload);
+        const localRev = rev(localPayload);
+        if (localRev === null) return true;
+        if (fileRev === null) return false;
+        return fileRev >= localRev;
+      }
+
+      /**
+       * Plugins arriving from a local file must not switch on code the
+       * LocalStorage copy did not already run: a plugin stays enabled only if
+       * the LocalStorage store has it enabled with the identical definition.
+       * Anything new or changed is restored suspended (enabled: false).
+       * @param {Object} filePlugins
+       * @param {Object} localPlugins
+       * @returns {Object}
+       */
+      function gateLocalFilePlugins(filePlugins, localPlugins) {
+        const result = {};
+        if (!filePlugins || typeof filePlugins !== 'object') return result;
+        const local = localPlugins && typeof localPlugins === 'object' ? localPlugins : {};
+        Object.entries(filePlugins).forEach(([id, entry]) => {
+          if (!entry || typeof entry !== 'object') return;
+          const known = Object.prototype.hasOwnProperty.call(local, id) ? local[id] : null;
+          let sameDefinition = false;
+          try {
+            sameDefinition = !!known && JSON.stringify(known.definition) === JSON.stringify(entry.definition);
+          } catch (_err) {
+            sameDefinition = false;
+          }
+          result[id] = { ...entry, enabled: !!entry.enabled && !!known && !!known.enabled && sameDefinition };
+        });
+        return result;
+      }
+
+      async function load() {
+        const key = instanceKey || 'nested_cards_store';
+        let raw = localStorage.getItem(key);
+
+        // A fresh load re-decides the lock state for the (possibly new)
+        // active dataset and must not inherit the previous dataset's undo
+        // history, trash, navigation or blockers (see resetSessionState).
+        resetSessionState();
 
         if (!raw) {
           // A fresh/empty dataset must not inherit a prior dataset's session
@@ -1523,10 +1675,16 @@ import {
                   }
                 }
                 if (!parsedFile || typeof parsedFile !== 'object') return;
+                // The file only wins when it is at least as new as the
+                // LocalStorage copy (see persistStoreNow's persistedAt).
+                if (!isLocalFilePayloadCurrent(parsedFile, store)) {
+                  console.warn('[Local File] File copy is older than LocalStorage; keeping the LocalStorage data');
+                  return;
+                }
                 setStore({
                   rootOrder: parsedFile.rootOrder || [],
                   cards: parsedFile.cards || {},
-                  plugins: parsedFile.plugins || {},
+                  plugins: gateLocalFilePlugins(parsedFile.plugins, store.plugins),
                   bookmarks: parsedFile.bookmarks || [],
                   recentCards: parsedFile.recentCards || [],
                   viewMode: parsedFile.viewMode || 'normal',

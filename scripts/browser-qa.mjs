@@ -30,6 +30,8 @@
  *   8. dialog accessibility contract + Escape behavior          (CS-008/NEW-1)
  *   9. rich-text XSS payload stays inert
  *  10. 360px mobile layout has no horizontal overflow
+ *  11. header/menu/upload-modal a11y: theme label, Option+T, focus return,
+ *      tab semantics, keyboard + drag-and-drop upload, scroll unlock
  *
  * Requirements (CS-102 — reproducible from a clean checkout):
  *   npm ci                                   (playwright is a pinned devDependency)
@@ -43,7 +45,7 @@ import { createServer } from 'http';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { resolve, dirname, extname, join, normalize } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { chromium } from 'playwright-core';
+import { chromium } from 'playwright';
 import { encryptStorePayload, isEncryptedEnvelope, decryptStorePayload } from '../www/src/core/dataset-crypto.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -479,7 +481,6 @@ await scenario('plugin-dataset-round-trip (NEW-4/reconcile)', async () => {
   // header marker; a second empty dataset has no plugins. Trust is pre-granted
   // so enabling never prompts.
   await page.evaluate(() => {
-    localStorage.setItem('cardspoke_plugin_permissions', JSON.stringify({ 'ds-marker': ['plugin-code', 'ui-override'] }));
     const pluginEntry = {
       definition: {
         manifest: { id: 'ds-marker', name: 'DS Marker', version: '1.0.0', author: 'QA', layer: 'feature', permissions: ['ui-override'] },
@@ -489,6 +490,12 @@ await scenario('plugin-dataset-round-trip (NEW-4/reconcile)', async () => {
       },
       enabled: true
     };
+    // Grants are bound to the plugin's code+permissions fingerprint; an
+    // unbound (legacy) grant would prompt again.
+    localStorage.setItem('cardspoke_plugin_permissions', JSON.stringify({ 'ds-marker': ['plugin-code', 'ui-override'] }));
+    localStorage.setItem('cardspoke_plugin_permission_bindings', JSON.stringify({
+      'ds-marker': window.CardSpoke.Permissions.computeFingerprint(pluginEntry.definition)
+    }));
     // Default dataset store + a sibling empty dataset.
     const def = JSON.parse(localStorage.getItem('nested_cards_store') || '{}');
     def.cards = def.cards || {}; def.rootOrder = def.rootOrder || [];
@@ -712,6 +719,151 @@ await scenario('dialog-a11y-contract (CS-008/NEW-1)', async () => {
   await context.close();
 });
 
+// 8b ─ Header, menu and upload modal accessibility ─────────────────────────
+await scenario('header-menu-upload-a11y', async () => {
+  const errors = [];
+  const { context, page } = await freshPage(errors);
+  await page.goto(BASE);
+  await page.waitForSelector('#main');
+
+  // Theme toggle: the label names the action, the icon is decorative (#371).
+  const themeBefore = await page.evaluate(() => {
+    const b = document.getElementById('themeToggle');
+    return { label: b.getAttribute('aria-label'), title: b.getAttribute('title'),
+      svgHidden: b.querySelector('svg')?.getAttribute('aria-hidden'),
+      dark: document.documentElement.classList.contains('dark') };
+  });
+  check('theme toggle label names the next mode (light)',
+    !themeBefore.dark && themeBefore.label === 'Switch to dark mode', JSON.stringify(themeBefore));
+  check('theme toggle title carries the Alt+T hint', /\(Alt\+T\)$/.test(themeBefore.title || ''), themeBefore.title);
+  check('theme toggle SVG is aria-hidden', themeBefore.svgHidden === 'true');
+  await page.click('#themeToggle', { force: true });
+  const themeAfter = await page.evaluate(() => {
+    const b = document.getElementById('themeToggle');
+    return { label: b.getAttribute('aria-label'), svgHidden: b.querySelector('svg')?.getAttribute('aria-hidden'),
+      dark: document.documentElement.classList.contains('dark') };
+  });
+  check('theme toggle label flips after switching to dark',
+    themeAfter.dark && themeAfter.label === 'Switch to light mode', JSON.stringify(themeAfter));
+  check('injected sun SVG is aria-hidden', themeAfter.svgHidden === 'true');
+
+  // macOS Option+T reports e.key '†'; the shortcut must still fire via e.code.
+  await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown',
+    { key: '†', code: 'KeyT', altKey: true, bubbles: true, cancelable: true })));
+  const darkAfterOption = await page.evaluate(() => document.documentElement.classList.contains('dark'));
+  check('Option+T (key "†", code KeyT) toggles the theme', darkAfterOption === false);
+
+  // Menu: aria-expanded tracks state, Escape returns focus to the opener.
+  check('menu button starts collapsed', await page.getAttribute('#menuBtn', 'aria-expanded') === 'false');
+  check('menu button controls the menu overlay', await page.getAttribute('#menuBtn', 'aria-controls') === 'menuOverlay');
+  await openMenu(page);
+  check('menu button aria-expanded=true while open', await page.getAttribute('#menuBtn', 'aria-expanded') === 'true');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#menuOverlay.show'), null, { timeout: 4000 });
+  const menuClosed = await page.evaluate(() => ({
+    expanded: document.getElementById('menuBtn').getAttribute('aria-expanded'),
+    focusOnBtn: document.activeElement === document.getElementById('menuBtn')
+  }));
+  check('menu button aria-expanded=false after close', menuClosed.expanded === 'false');
+  check('closing the menu returns focus to #menuBtn', menuClosed.focusOnBtn);
+
+  // Upload modal: focus moves in, tabs expose selection state.
+  await openMenu(page);
+  await page.click('#menuUpload');
+  await page.waitForSelector('#uploadModal.show');
+  const opened = await page.evaluate(() => {
+    const modal = document.querySelector('#uploadModal .modal');
+    const tabs = [...document.querySelectorAll('#uploadModal [role=tab]')];
+    const panels = [...document.querySelectorAll('#uploadModal [role=tabpanel]')];
+    return {
+      focusInside: modal.contains(document.activeElement),
+      scrollLocked: document.body.classList.contains('scroll-locked'),
+      panelLabelsResolve: panels.every(p => {
+        const lbl = document.getElementById(p.getAttribute('aria-labelledby'));
+        return lbl && lbl.getAttribute('role') === 'tab' && lbl.getAttribute('aria-controls') === p.id;
+      }),
+      selected: tabs.filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.dataset.tab),
+      locationLabels: !!document.querySelector('label[for="importLocationSelectJSON"]') &&
+        !!document.querySelector('label[for="importLocationSelectTXT"]'),
+      modeLegend: document.querySelector('#tab-txt fieldset > legend')?.textContent.trim()
+    };
+  });
+  check('upload modal moves focus inside the dialog', opened.focusInside);
+  check('upload modal locks body scroll while open', opened.scrollLocked);
+  check('tab panels are labelled by their tab buttons', opened.panelLabelsResolve);
+  check('exactly one tab is aria-selected', opened.selected.length === 1, opened.selected.join(','));
+  check('import location selects have associated labels', opened.locationLabels);
+  check('import mode radios are grouped by fieldset/legend', opened.modeLegend === 'Import Mode', opened.modeLegend);
+
+  await page.focus('#tab-btn-json');
+  await page.keyboard.press('ArrowRight');
+  const afterArrow = await page.evaluate(() => ({
+    txtSelected: document.getElementById('tab-btn-txt').getAttribute('aria-selected'),
+    jsonSelected: document.getElementById('tab-btn-json').getAttribute('aria-selected'),
+    txtPanelVisible: document.getElementById('tab-txt').classList.contains('active'),
+    focusOnTxt: document.activeElement?.id === 'tab-btn-txt'
+  }));
+  check('ArrowRight switches to the TXT tab and updates aria-selected',
+    afterArrow.txtSelected === 'true' && afterArrow.jsonSelected === 'false' && afterArrow.txtPanelVisible && afterArrow.focusOnTxt,
+    JSON.stringify(afterArrow));
+
+  // The drop zone is keyboard operable: Enter and Space open the file
+  // picker. Headless Chromium's native chooser interception is racy for
+  // keyboard-initiated pickers, so record the input.click() the handler makes
+  // (stubbed so no native dialog is left open) and feed the file directly.
+  await page.evaluate(() => {
+    const input = document.getElementById('fileInputTXT');
+    window.__qaPickerOpens = 0;
+    input.click = () => { window.__qaPickerOpens++; };
+  });
+  await page.focus('#fileUploadAreaTXT');
+  await page.keyboard.press('Enter');
+  check('Enter on the upload area opens the file picker',
+    await page.evaluate(() => window.__qaPickerOpens) === 1);
+  await page.keyboard.press('Space');
+  check('Space on the upload area opens the file picker',
+    await page.evaluate(() => window.__qaPickerOpens) === 2);
+  await page.evaluate(() => { delete document.getElementById('fileInputTXT').click; });
+  await page.setInputFiles('#fileInputTXT', { name: 'qa-outline.txt', mimeType: 'text/plain', buffer: Buffer.from('QA Picked Outline\n  QA Picked Child\n') });
+  await page.waitForFunction(() => !document.querySelector('#uploadModal.show'), null, { timeout: 8000 });
+  const afterPick = await page.evaluate(() => ({
+    imported: Object.values(window.store.cards).some(c => c.title === 'QA Picked Child'),
+    scrollLocked: document.body.classList.contains('scroll-locked'),
+    inputCleared: document.getElementById('fileInputTXT').value === '',
+    focusOnMenuBtn: document.activeElement === document.getElementById('menuBtn')
+  }));
+  check('picked TXT file is imported', afterPick.imported);
+  check('body scroll is unlocked after a successful upload', !afterPick.scrollLocked);
+  check('file input is reset so the same file can be re-picked', afterPick.inputCleared);
+  check('closing the upload modal restores focus to the opener', afterPick.focusOnMenuBtn);
+
+  // Real drag-and-drop feeds the same import path.
+  await openMenu(page);
+  await page.click('#menuUpload');
+  await page.waitForSelector('#uploadModal.show #fileUploadAreaTXT', { state: 'visible' });
+  const dragState = await page.evaluate(() => {
+    const area = document.getElementById('fileUploadAreaTXT');
+    const dt = new DataTransfer();
+    dt.items.add(new File(['QA Dropped Outline\n'], 'qa-drop.txt', { type: 'text/plain' }));
+    area.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    const highlighted = area.classList.contains('drag-over');
+    area.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    return { highlighted, clearedOnDrop: !area.classList.contains('drag-over') };
+  });
+  check('upload area shows a drag-over state', dragState.highlighted);
+  check('drag-over state clears on drop', dragState.clearedOnDrop);
+  await page.waitForFunction(() => !document.querySelector('#uploadModal.show'), null, { timeout: 8000 });
+  const afterDrop = await page.evaluate(() => ({
+    imported: Object.values(window.store.cards).some(c => c.title === 'QA Dropped Outline'),
+    scrollLocked: document.body.classList.contains('scroll-locked')
+  }));
+  check('dropped TXT file is imported', afterDrop.imported);
+  check('body scroll is unlocked after a dropped upload', !afterDrop.scrollLocked);
+
+  check('no console/page errors', errors.length === 0, errors.join(' | '));
+  await context.close();
+});
+
 // 9 ─ XSS payload stays inert ──────────────────────────────────────────────
 await scenario('xss-inert', async () => {
   const errors = [];
@@ -910,6 +1062,29 @@ await scenario('thousand-card-search', async () => {
   check('search returns target card', await page.locator('#searchResultGrid').innerText().then(text => text.includes('Research topic 999')), 'Search time ' + (Date.now()-searchStart) + ' ms');
   writeFileSync(join(ART_DIR, 'scale-timing.json'), JSON.stringify({ loadAndSearchTotalMs: Date.now()-start, searchMs: Date.now()-searchStart, cards: 1000 }));
   await context.close();
+});
+
+await scenario('boot-error-message', async () => {
+  // A missing bundle must produce a readable message, not a blank page or a
+  // second error from a doomed ESM fallback.
+  const { context, page } = await freshPage([]);
+  await page.route('**/app.js', route => route.fulfill({ status: 404, body: 'missing' }));
+  await page.goto(BASE);
+  const alert = await page.waitForSelector('.boot-error[role=alert]', { timeout: 8000 });
+  check('missing app.js shows a boot-error alert', /could not start/.test(await alert.textContent()));
+  await context.close();
+
+  // A bundle that throws before the store exists shows the same message.
+  const second = await freshPage([]);
+  await second.page.route('**/app.js', route => route.fulfill({
+    status: 200, contentType: 'text/javascript', body: 'throw new Error("boom at boot");'
+  }));
+  await second.page.goto(BASE);
+  const alert2 = await second.page.waitForSelector('.boot-error[role=alert]', { timeout: 8000 });
+  check('bundle that throws at boot shows the error detail', /boom at boot/.test(await alert2.textContent()));
+  check('no ESM fallback script is injected',
+    await second.page.evaluate(() => !document.querySelector('script[src*="src/main.js"]')));
+  await second.context.close();
 });
 
 await browser.close();

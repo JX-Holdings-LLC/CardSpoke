@@ -24,6 +24,18 @@ var VALID_LAYERS = ['theme', 'feature', 'app'];
   var VALID_PERMISSIONS = ['ui-override', 'storage', 'network', 'filesystem', 'core-override', 'data-modify'];
   var MAX_CSS_LENGTH = 100000;   // 100KB max CSS
   var MAX_JS_LENGTH = 500000;    // 500KB max JS
+  // Documented plugin id format: lowercase letters, digits and hyphens,
+  // no leading/trailing hyphen.
+  var PLUGIN_ID_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+  // Ids that are never acceptable, even for plugins already stored by an
+  // earlier release: control characters, or absurd lengths. Everything else
+  // outside the documented format (e.g. name-derived legacy ids such as
+  // "focus-mode-(beta)" or dotted ids) stays loadable with a warning, so
+  // existing plugins don't silently disappear after an upgrade. The id sinks
+  // (CSS style lookup, storage namespaces) do not interpolate ids into
+  // selectors or code, and install() applies a strict rule to new ids.
+  var PLUGIN_ID_FORBIDDEN = /[\u0000-\u001f\u007f]/;
+  var PLUGIN_ID_MAX_LENGTH = 200;
 
   // Dangerous CSS patterns that could be used for attacks
   var DANGEROUS_CSS_PATTERNS = [
@@ -59,8 +71,12 @@ var VALID_LAYERS = ['theme', 'feature', 'app'];
 
       if (!plugin.id || typeof plugin.id !== 'string') {
         errors.push('Plugin must have a string id');
-      } else if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(plugin.id)) {
-        warnings.push('Plugin id should use lowercase letters, numbers, and hyphens only');
+      } else if (PLUGIN_ID_FORBIDDEN.test(plugin.id) || plugin.id.length > PLUGIN_ID_MAX_LENGTH) {
+        errors.push('Plugin id must not contain control characters or exceed ' +
+          PLUGIN_ID_MAX_LENGTH + ' characters: ' + JSON.stringify(plugin.id));
+      } else if (!PLUGIN_ID_PATTERN.test(plugin.id)) {
+        warnings.push('Plugin id should use lowercase letters, numbers, and hyphens only ' +
+          '(no leading/trailing hyphen): ' + JSON.stringify(plugin.id));
       }
 
       // 2. Validate manifest

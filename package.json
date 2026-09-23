@@ -17,7 +17,11 @@
     "sync:android": "npm run build && npx cap sync android",
     "sync:ios": "npm run build && npx cap sync ios",
     "open:android": "npx cap open android",
-    "open:ios": "npx cap open ios"
+    "open:ios": "npx cap open ios",
+    "desktop:install": "npm ci --prefix desktop",
+    "desktop:start": "npm run start --prefix desktop",
+    "desktop:dist": "npm run dist --prefix desktop",
+    "desktop:test": "npm test --prefix desktop"
   },
   "keywords": [
     "knowledge-base",

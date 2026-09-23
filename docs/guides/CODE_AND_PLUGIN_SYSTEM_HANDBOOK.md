@@ -335,7 +335,7 @@ The modern plugin system uses `setup` and `teardown` functions instead of indivi
 ### Plugin Context (`ctx`) includes
 
 - `modId` - The plugin's unique identifier
-- `appVersion` - Current app version (0.20.0)
+- `appVersion` - Current app version (0.21.1)
 - `schemaVersion` - Current schema version (4)
 - `config` - Live `manifest.config` object (present when the manifest declares `config`)
 - `api` - API object with `ui`, `data`, `storage`, `events`, `middleware`, `network`, and `filesystem` namespaces

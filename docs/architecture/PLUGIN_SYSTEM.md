@@ -266,7 +266,7 @@ Every sandboxed plugin gets its own worker-local context:
 ```text
 ctx
 ├─ modId            plugin id (string)
-├─ appVersion       e.g. '0.21.0'
+├─ appVersion       e.g. '0.21.1'
 ├─ schemaVersion    e.g. 4
 ├─ config           manifest.config (live; settings panel writes propagate on next enable)
 ├─ h                ctx.h(tag, props, children) — build a vnode, see above
@@ -370,6 +370,10 @@ exactly as if it ran locally.
 `(mwCtx, next)` shape above at all.
 
 ### The `card.render` decorator contract
+
+Registering a `card.render` decorator requires the `ui-override` permission.
+The host accepts it only after that check passes. A replacement vnode is
+honoured only for the plugin that owns the host-registered `Card` component.
 
 `card.render` fires once per card tile, in a hot render-batch loop (up to 60
 tiles per batch, on every scroll/search/navigation) — too frequent for a
@@ -513,11 +517,12 @@ those are tracked and reversible without a reload.
    }); // registers AND enables
    ```
 
-4. **ES-module dev loader** — `www/src/examples/dynamic-plugin-loader.js`
-   shows `import()`-based loading of module plugins from URLs/files. These
-   register with real `setup`/`teardown` functions, so — like all
-   function-form registrations — they run unsandboxed, on the main thread;
-   only download/import code you already trust through this path.
+4. **Remote package loader example** — `www/src/examples/dynamic-plugin-loader.js`
+   fetches plugin package JSON (from a URL or a gallery manifest) and
+   installs it with `Plugin.install()`, so the code runs sandboxed in a
+   worker. It does not `import()` plugin modules: `install()` drops
+   function-form `setup`/`teardown`, and `Plugin.register()` rejects them
+   (only `registerPlugin` above accepts host code).
 
 ## The `window.CardSpoke` surface
 

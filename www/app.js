@@ -223,6 +223,9 @@
   var VALID_PERMISSIONS = ["ui-override", "storage", "network", "filesystem", "core-override", "data-modify"];
   var MAX_CSS_LENGTH = 1e5;
   var MAX_JS_LENGTH = 5e5;
+  var PLUGIN_ID_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+  var PLUGIN_ID_FORBIDDEN = /[\u0000-\u001f\u007f]/;
+  var PLUGIN_ID_MAX_LENGTH = 200;
   var DANGEROUS_CSS_PATTERNS = [
     { pattern: /@import/gi, name: "@import (external resource loading)" },
     { pattern: /javascript:/gi, name: "javascript: protocol" },
@@ -248,8 +251,10 @@
       }
       if (!plugin.id || typeof plugin.id !== "string") {
         errors.push("Plugin must have a string id");
-      } else if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(plugin.id)) {
-        warnings.push("Plugin id should use lowercase letters, numbers, and hyphens only");
+      } else if (PLUGIN_ID_FORBIDDEN.test(plugin.id) || plugin.id.length > PLUGIN_ID_MAX_LENGTH) {
+        errors.push("Plugin id must not contain control characters or exceed " + PLUGIN_ID_MAX_LENGTH + " characters: " + JSON.stringify(plugin.id));
+      } else if (!PLUGIN_ID_PATTERN.test(plugin.id)) {
+        warnings.push("Plugin id should use lowercase letters, numbers, and hyphens only (no leading/trailing hyphen): " + JSON.stringify(plugin.id));
       }
       var manifestResult = this.validateManifest(plugin.manifest);
       errors = errors.concat(manifestResult.errors);
@@ -375,15 +380,42 @@
   };
   console.log("[PluginValidator] Validation system initialized");
   const STORAGE_KEY = "cardspoke_plugin_permissions";
+  const BINDINGS_KEY = "cardspoke_plugin_permission_bindings";
   const grantedPermissions = /* @__PURE__ */ new Map();
+  function computeFingerprint(definition) {
+    const def = definition || {};
+    const manifest = def.manifest || {};
+    const perms = Array.isArray(manifest.permissions) ? manifest.permissions.map(String).slice().sort() : [];
+    const js = typeof def.js === "string" ? def.js : "";
+    const teardownJs = typeof def.teardownJs === "string" ? def.teardownJs : "";
+    const input = "js:" + js.length + ":" + js + "|teardown:" + teardownJs.length + ":" + teardownJs + "|perms:" + JSON.stringify(perms);
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+    return "fnv1a-" + hash.toString(16).padStart(8, "0") + "-" + input.length.toString(36);
+  }
   function loadPermissions() {
     if (typeof localStorage === "undefined") return;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        let bindings = {};
+        try {
+          bindings = JSON.parse(localStorage.getItem(BINDINGS_KEY) || "{}") || {};
+        } catch (_bindErr) {
+          bindings = {};
+        }
         Object.keys(parsed).forEach((pluginId) => {
-          grantedPermissions.set(pluginId, new Set(parsed[pluginId]));
+          if (!Array.isArray(parsed[pluginId])) return;
+          const fp = typeof bindings[pluginId] === "string" ? bindings[pluginId] : null;
+          grantedPermissions.set(pluginId, {
+            perms: new Set(parsed[pluginId]),
+            fingerprint: fp,
+            legacy: !fp
+          });
         });
       }
     } catch (err) {
@@ -394,13 +426,22 @@
     try {
       if (typeof localStorage === "undefined") return;
       const data = {};
-      grantedPermissions.forEach((perms, pluginId) => {
-        data[pluginId] = Array.from(perms);
+      const bindings = {};
+      grantedPermissions.forEach((entry, pluginId) => {
+        data[pluginId] = Array.from(entry.perms);
+        if (entry.fingerprint) bindings[pluginId] = entry.fingerprint;
       });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(BINDINGS_KEY, JSON.stringify(bindings));
     } catch (err) {
       console.error("[Permissions] Failed to save permissions:", err);
     }
+  }
+  function entryMatches(entry, fingerprint) {
+    if (!entry) return false;
+    if (fingerprint === void 0 || fingerprint === null) return true;
+    if (entry.legacy) return false;
+    return entry.fingerprint === null || entry.fingerprint === fingerprint;
   }
   const PERMISSION_DESCRIPTIONS = {
     "plugin-code": "Run JavaScript from this author. Workers isolate the interface but are not a complete security sandbox. Plugins can read unlocked cards and may load code over the network. Only allow code you trust.",
@@ -415,36 +456,47 @@
     /**
      * Check if a plugin has a specific permission
      */
-    hasPermission: function(pluginId, permission) {
-      const perms = grantedPermissions.get(pluginId);
-      return perms && perms.has(permission);
+    hasPermission: function(pluginId, permission, fingerprint) {
+      const entry = grantedPermissions.get(pluginId);
+      return !!(entry && entryMatches(entry, fingerprint) && entry.perms.has(permission));
     },
     /**
-     * Check if a plugin has all required permissions
+     * Check if a plugin has all required permissions. When `fingerprint` is
+     * given, the grant must also be bound to that exact plugin build (or be
+     * an unbound grant made programmatically this session).
      */
-    hasAllPermissions: function(pluginId, permissions) {
+    hasAllPermissions: function(pluginId, permissions, fingerprint) {
       if (!permissions || permissions.length === 0) {
         return true;
       }
-      const perms = grantedPermissions.get(pluginId);
-      if (!perms) {
+      const entry = grantedPermissions.get(pluginId);
+      if (!entry || !entryMatches(entry, fingerprint)) {
         return false;
       }
-      return permissions.every((p) => perms.has(p));
+      return permissions.every((p) => entry.perms.has(p));
     },
     /**
-     * Grant permissions to a plugin
+     * Grant permissions to a plugin. Passing a `fingerprint` binds the grant
+     * to that plugin build; if the existing grant was for a different build
+     * (or is a legacy, unbound grant) its old permissions are discarded
+     * rather than merged, so stale consent never widens a new build.
      */
-    grantPermissions: function(pluginId, permissions) {
+    grantPermissions: function(pluginId, permissions, fingerprint) {
       if (!permissions || permissions.length === 0) {
         return;
       }
-      let perms = grantedPermissions.get(pluginId);
-      if (!perms) {
-        perms = /* @__PURE__ */ new Set();
-        grantedPermissions.set(pluginId, perms);
+      let entry = grantedPermissions.get(pluginId);
+      const hasFp = typeof fingerprint === "string" && fingerprint.length > 0;
+      if (entry && hasFp && (entry.legacy || entry.fingerprint && entry.fingerprint !== fingerprint)) {
+        entry = null;
       }
-      permissions.forEach((p) => perms.add(p));
+      if (!entry) {
+        entry = { perms: /* @__PURE__ */ new Set(), fingerprint: null, legacy: false };
+        grantedPermissions.set(pluginId, entry);
+      }
+      if (hasFp) entry.fingerprint = fingerprint;
+      entry.legacy = false;
+      permissions.forEach((p) => entry.perms.add(p));
       savePermissions();
       console.log("[Permissions] Granted to", pluginId, ":", permissions);
     },
@@ -452,15 +504,15 @@
      * Revoke permissions from a plugin
      */
     revokePermissions: function(pluginId, permissions) {
-      const perms = grantedPermissions.get(pluginId);
-      if (!perms) {
+      const entry = grantedPermissions.get(pluginId);
+      if (!entry) {
         return;
       }
       if (!permissions) {
         grantedPermissions.delete(pluginId);
       } else {
-        permissions.forEach((p) => perms.delete(p));
-        if (perms.size === 0) {
+        permissions.forEach((p) => entry.perms.delete(p));
+        if (entry.perms.size === 0) {
           grantedPermissions.delete(pluginId);
         }
       }
@@ -471,22 +523,47 @@
      * Get all permissions for a plugin
      */
     getPermissions: function(pluginId) {
-      const perms = grantedPermissions.get(pluginId);
-      return perms ? Array.from(perms) : [];
+      const entry = grantedPermissions.get(pluginId);
+      return entry ? Array.from(entry.perms) : [];
     },
+    /** The fingerprint a plugin's grant is bound to, or null (unbound/legacy/none). */
+    getFingerprint: function(pluginId) {
+      const entry = grantedPermissions.get(pluginId);
+      return entry ? entry.fingerprint : null;
+    },
+    /** See computeFingerprint() above. */
+    computeFingerprint,
     /**
-     * Request permissions with user consent
+     * Request permissions with user consent. `fingerprint` (optional) is the
+     * current plugin build's computeFingerprint(); a grant bound to another
+     * build, or a legacy grant with no binding, does not count and the user
+     * is asked again.
      */
-    requestPermissions: async function(pluginId, pluginName, permissions) {
+    requestPermissions: async function(pluginId, pluginName, permissions, fingerprint) {
       if (!permissions || permissions.length === 0) {
         return true;
       }
-      if (this.hasAllPermissions(pluginId, permissions)) {
+      const hasFp = typeof fingerprint === "string" && fingerprint.length > 0;
+      if (this.hasAllPermissions(pluginId, permissions, hasFp ? fingerprint : void 0)) {
+        const entry = grantedPermissions.get(pluginId);
+        if (hasFp && entry && !entry.fingerprint) {
+          entry.fingerprint = fingerprint;
+          savePermissions();
+        }
         return true;
       }
-      const granted = await this._showConsentDialog(pluginId, pluginName, permissions);
+      const existing = grantedPermissions.get(pluginId);
+      const hadGrant = !!(hasFp && existing && existing.perms.size > 0);
+      const changed = hadGrant && !existing.legacy && !!existing.fingerprint && existing.fingerprint !== fingerprint;
+      const reconfirm = hadGrant && existing.legacy;
+      const granted = await this._showConsentDialog(
+        pluginId,
+        pluginName,
+        permissions,
+        { changed, reconfirm }
+      );
       if (granted) {
-        this.grantPermissions(pluginId, permissions);
+        this.grantPermissions(pluginId, permissions, hasFp ? fingerprint : void 0);
       }
       return granted;
     },
@@ -496,10 +573,12 @@
      * its own (CS-002, resolved) — granting one of these permissions is a
      * real, enforced capability grant, not a description of intent.
      */
-    _showConsentDialog: async function(pluginId, pluginName, permissions) {
+    _showConsentDialog: async function(pluginId, pluginName, permissions, opts) {
+      const changed = !!(opts && opts.changed);
+      const reconfirm = !!(opts && opts.reconfirm);
       return this._showDecisionDialog({
         titleText: "Permission Request",
-        introText: '"' + pluginName + '" requests the permissions below. Worker isolation reduces risk but does not make untrusted code safe:',
+        introText: '"' + pluginName + '" requests the permissions below. ' + (changed ? "Its code or requested permissions changed since you last allowed it, so it needs your approval again. " : "") + (reconfirm ? "CardSpoke now ties permissions to the exact plugin code, so please confirm them once more. " : "") + "Worker isolation reduces risk but does not make untrusted code safe:",
         bulletItems: permissions.map(function(perm) {
           return perm + ": " + (PERMISSION_DESCRIPTIONS[perm] || "Unknown permission");
         }),
@@ -1179,6 +1258,43 @@
   let nextDomHandleId = 1;
   const globalEventBus = /* @__PURE__ */ new Map();
   const cardRenderPluginIds = /* @__PURE__ */ new Set();
+  const cardComponentPluginIds = /* @__PURE__ */ new Set();
+  const cardDecorators = /* @__PURE__ */ new Map();
+  function syncCardRenderMembership(pluginId) {
+    const decorators = cardDecorators.get(pluginId);
+    if (cardComponentPluginIds.has(pluginId) || decorators && decorators.size > 0) {
+      cardRenderPluginIds.add(pluginId);
+    } else {
+      cardRenderPluginIds.delete(pluginId);
+    }
+  }
+  function setCardComponentOwner(pluginId, owns) {
+    if (owns) cardComponentPluginIds.add(pluginId);
+    else cardComponentPluginIds.delete(pluginId);
+    syncCardRenderMembership(pluginId);
+  }
+  function addCardDecorator(pluginId, name) {
+    let names = cardDecorators.get(pluginId);
+    if (!names) {
+      names = /* @__PURE__ */ new Set();
+      cardDecorators.set(pluginId, names);
+    }
+    names.add(name);
+    syncCardRenderMembership(pluginId);
+  }
+  function removeCardDecorator(pluginId, name) {
+    const names = cardDecorators.get(pluginId);
+    if (names) {
+      names.delete(name);
+      if (names.size === 0) cardDecorators.delete(pluginId);
+    }
+    syncCardRenderMembership(pluginId);
+  }
+  function clearCardRender(pluginId) {
+    cardComponentPluginIds.delete(pluginId);
+    cardDecorators.delete(pluginId);
+    cardRenderPluginIds.delete(pluginId);
+  }
   const InternalAPI = {
     data: {},
     ui: {},
@@ -1198,7 +1314,9 @@
   }
   function hasPermission(pluginId, permission) {
     if (PermissionsManager) {
-      return PermissionsManager.hasPermission(pluginId, permission);
+      const instance = plugins.get(pluginId);
+      const fingerprint = instance ? instance.fingerprint : void 0;
+      return PermissionsManager.hasPermission(pluginId, permission, fingerprint);
     }
     return true;
   }
@@ -1515,14 +1633,14 @@
         if (ComponentRegistry) {
           const won = ComponentRegistry.register(name, component, component.priority || 0);
           if (won) {
-            if (name === "Card") cardRenderPluginIds.add(pluginId);
+            if (name === "Card") setCardComponentOwner(pluginId, true);
             trackResource(pluginId, { type: "component", name, component });
           }
         }
       },
       unregisterComponent: function(name) {
         if (ComponentRegistry) ComponentRegistry.unregister(name);
-        if (name === "Card") cardRenderPluginIds.delete(pluginId);
+        if (name === "Card") setCardComponentOwner(pluginId, false);
       },
       showToast: function(message, type, duration) {
         var fn = InternalAPI.ui.showToast || window.showToast;
@@ -1689,7 +1807,10 @@
         const won = ComponentRegistry.register(name, component, priority || 0);
         if (won) {
           ownedComponents.set(name, component);
-          if (name === "Card") cardRenderPluginIds.add(pluginId);
+          if (name === "Card") {
+            if (instance) instance.cardComponent = component;
+            setCardComponentOwner(pluginId, true);
+          }
           trackResource(pluginId, { type: "component", name, component });
         }
         return won;
@@ -1699,7 +1820,7 @@
         if (!owned) return;
         if (ComponentRegistry) ComponentRegistry.unregister(name, owned);
         ownedComponents.delete(name);
-        if (name === "Card") cardRenderPluginIds.delete(pluginId);
+        if (name === "Card") setCardComponentOwner(pluginId, false);
       },
       showToast: function(message, type, duration) {
         var fn = InternalAPI.ui.showToast || window.showToast;
@@ -1707,14 +1828,25 @@
       }
     };
   }
+  const CARD_WRITE_OPERATIONS = ["card.create", "card.update", "card.delete"];
   function createWorkerMiddlewareHandlers(pluginId) {
     return {
       register: function(name, priority, operations) {
-        const ops = operations || ["*"];
+        if (typeof name !== "string" || !name) {
+          throw new Error("Middleware must have a name");
+        }
+        const ops = Array.isArray(operations) && operations.length ? operations.map(String) : ["*"];
         if (ops.indexOf("card.render") !== -1) {
-          cardRenderPluginIds.add(pluginId);
+          if (!hasPermission(pluginId, "ui-override")) {
+            throw new Error("Plugin does not have ui-override permission (required for card.render middleware)");
+          }
+          addCardDecorator(pluginId, name);
           trackResource(pluginId, { type: "card-decorator", name });
           return true;
+        }
+        const hooksWrites = ops.some((op) => op === "*" || CARD_WRITE_OPERATIONS.indexOf(op) !== -1);
+        if (hooksWrites && !hasPermission(pluginId, "data-modify")) {
+          throw new Error("Plugin does not have data-modify permission (required for middleware on " + ops.join(", ") + ")");
         }
         const namespacedName = pluginId + ":" + name;
         const wrapper = async function(mwCtx, realNext) {
@@ -1732,7 +1864,7 @@
             [name, mwCtx.operation, mwCtx.args, nextProxy],
             MIDDLEWARE_TIMEOUT_MS
           );
-          if (outcome) {
+          if (outcome && hasPermission(pluginId, "data-modify")) {
             if (outcome.args !== void 0) mwCtx.args = outcome.args;
             if (outcome.prevented) mwCtx.preventDefault();
             if (outcome.stopped) mwCtx.stopPropagation();
@@ -1743,7 +1875,7 @@
         return true;
       },
       unregister: function(name) {
-        cardRenderPluginIds.delete(pluginId);
+        removeCardDecorator(pluginId, name);
         MiddlewareManager.unregister(pluginId + ":" + name);
       }
     };
@@ -1767,12 +1899,43 @@
       }
     };
   }
-  function createUtilsHandlers() {
+  const UTILS_PERMISSIONS = Object.freeze({
+    // Reads
+    getTags: null,
+    getAllTags: null,
+    getCard: null,
+    searchCards: null,
+    getDatasetMeta: null,
+    getAccessibilitySettings: null,
+    getTheme: null,
+    getTypography: null,
+    isHighContrast: null,
+    prefersReducedMotion: null,
+    getThemeVariables: null,
+    showToast: null,
+    // same as the ungated ctx.api.ui.showToast
+    // Card/tag writes — same gate as ctx.api.data.*
+    createCard: "data-modify",
+    updateCard: "data-modify",
+    addTag: "data-modify",
+    removeTag: "data-modify",
+    setTags: "data-modify",
+    // Global UI/appearance changes
+    setTheme: "ui-override",
+    setTypography: "ui-override",
+    setHighContrast: "ui-override"
+  });
+  function createUtilsHandlers(pluginId) {
     const utils2 = window.CardSpoke && window.CardSpoke.utils || {};
     const handlers = /* @__PURE__ */ Object.create(null);
     Object.keys(utils2).forEach((prop) => {
       if (typeof utils2[prop] !== "function") return;
+      if (!Object.prototype.hasOwnProperty.call(UTILS_PERMISSIONS, prop)) return;
+      const required = UTILS_PERMISSIONS[prop];
       handlers[prop] = async function() {
+        if (required && !hasPermission(pluginId, required)) {
+          throw new Error("Plugin does not have " + required + " permission (required for utils." + prop + ")");
+        }
         return await utils2[prop].apply(utils2, arguments);
       };
     });
@@ -1803,7 +1966,7 @@
       network: createWorkerNetworkHandlers(pluginId),
       ui: createWorkerUIHandlers(pluginId),
       middleware: createWorkerMiddlewareHandlers(pluginId),
-      utils: createUtilsHandlers(),
+      utils: createUtilsHandlers(pluginId),
       logger: createLoggerHandlers()
     };
   }
@@ -1828,13 +1991,34 @@
   const CARD_RENDER_DEADLINE_MS = 80;
   const HANG_BACKSTOP_MS = 1e4;
   let hangWatcherTimer = null;
+  function hasSourceStrings(definition) {
+    return !!(typeof definition.js === "string" && definition.js || typeof definition.teardownJs === "string" && definition.teardownJs);
+  }
+  function hasHostFunctions(definition) {
+    return typeof definition.setup === "function" || typeof definition.teardown === "function";
+  }
   const PluginManager = {
+    /**
+     * Register a plugin definition. Definitions carrying `js`/`teardownJs`
+     * source strings run sandboxed in a worker. A definition whose only code
+     * is real `setup`/`teardown` FUNCTIONS would run unsandboxed on the main
+     * thread, so it is rejected here — host code must opt in explicitly via
+     * the host-only registerHostPlugin() (what CardSpoke.registerPlugin uses).
+     */
     register: function(id, definition) {
+      return this._registerInternal(id, definition, false);
+    },
+    _registerInternal: function(id, definition, allowHostCode) {
       if (!id || !definition) {
         throw new Error("Plugin ID and definition are required");
       }
       if (!definition.manifest) {
         throw new Error("Plugin manifest is required");
+      }
+      if (!allowHostCode && hasHostFunctions(definition) && !hasSourceStrings(definition)) {
+        throw new Error(
+          'Plugin "' + id + '" supplies setup/teardown functions, which would run unsandboxed on the main thread. Provide js/teardownJs source strings (sandboxed), or register trusted host code explicitly with CardSpoke.registerPlugin().'
+        );
       }
       if (plugins.has(id)) {
         throw new Error(
@@ -1866,7 +2050,11 @@
         context,
         enabled: false,
         workerHandle: null,
-        resources
+        resources,
+        // Permission grants are bound to this (code + requested permissions)
+        // fingerprint, so a same-id plugin with different code needs fresh
+        // consent (see permissions.js).
+        fingerprint: PermissionsManager && typeof PermissionsManager.computeFingerprint === "function" ? PermissionsManager.computeFingerprint(definition) : void 0
       };
       plugins.set(id, instance);
       console.log("[Plugin] Registered:", id);
@@ -1881,7 +2069,7 @@
         plugins.delete(id);
         pluginResources.delete(id);
         dataUpdateListeners.delete(id);
-        cardRenderPluginIds.delete(id);
+        clearCardRender(id);
         if (PermissionsManager && PermissionsManager.revokePermissions) {
           PermissionsManager.revokePermissions(id);
         }
@@ -1946,7 +2134,7 @@
       plugins.delete(id);
       pluginResources.delete(id);
       dataUpdateListeners.delete(id);
-      cardRenderPluginIds.delete(id);
+      clearCardRender(id);
     },
     // Restore the brand button to its pre-override content (the logo <img>).
     // Safe to call unconditionally; a no-op when the plugin never overrode it.
@@ -1969,8 +2157,7 @@
       if (instance.context && instance.definition.manifest.config) {
         instance.context.config = instance.definition.manifest.config;
       }
-      const requiredPermissions = [...instance.definition.manifest.permissions || []];
-      if (instance.definition.js || instance.definition.teardownJs) requiredPermissions.push("plugin-code");
+      const requiredPermissions = this._requiredPermissions(instance);
       if (requiredPermissions.length) {
         const granted = await this._checkPermissions(id, requiredPermissions);
         if (!granted) {
@@ -2059,7 +2246,7 @@
       this._restoreBrandOverride(instance);
       this._removeCSS(id);
       this._cleanupResources(id);
-      cardRenderPluginIds.delete(id);
+      clearCardRender(id);
       instance.enabled = false;
       this._persistEnabledState(id, false);
       console.log("[Plugin] Disabled:", id);
@@ -2078,8 +2265,15 @@
         }
       }
     },
+    // Find a plugin's <style> element. The id is escaped for the quoted
+    // attribute value so no id (legacy ids may contain quotes) can inject
+    // into the selector.
+    _findStyle: function(id) {
+      const value = typeof CSS !== "undefined" && CSS && typeof CSS.escape === "function" ? CSS.escape(id) : String(id).replace(/[\\"]/g, "\\$&").replace(/[\n\r\f]/g, " ");
+      return document.querySelector('style[data-plugin-id="' + value + '"]');
+    },
     _applyCSS: function(id, css) {
-      const existing = document.querySelector('style[data-plugin-id="' + id + '"]');
+      const existing = this._findStyle(id);
       if (existing) {
         existing.textContent = css;
       } else {
@@ -2090,7 +2284,7 @@
       }
     },
     _removeCSS: function(id) {
-      const style = document.querySelector('style[data-plugin-id="' + id + '"]');
+      const style = this._findStyle(id);
       if (style && style.parentNode) {
         style.parentNode.removeChild(style);
       }
@@ -2178,7 +2372,12 @@
       if (PermissionsManager) {
         const instance = plugins.get(id);
         const pluginName = instance && instance.definition.manifest && instance.definition.manifest.name || id;
-        return await PermissionsManager.requestPermissions(id, pluginName, permissions);
+        return await PermissionsManager.requestPermissions(
+          id,
+          pluginName,
+          permissions,
+          instance ? instance.fingerprint : void 0
+        );
       }
       if (window.showPermissionDialog) {
         return await window.showPermissionDialog(id, permissions);
@@ -2216,8 +2415,14 @@
     renderBatch: async function(id, cardsSnapshot, opts) {
       const instance = plugins.get(id);
       if (!instance || !instance.enabled || !instance.workerHandle) return null;
+      const canOverride = hasPermission(id, "ui-override");
+      const mayReplace = canOverride && cardComponentPluginIds.has(id) && !!instance.cardComponent && ComponentRegistry.get("Card") === instance.cardComponent;
+      const decorators = cardDecorators.get(id);
+      const mayDecorate = canOverride && !!(decorators && decorators.size > 0);
+      if (!mayReplace && !mayDecorate) return null;
+      let results;
       try {
-        return await instance.workerHandle.callWithDeadline(
+        results = await instance.workerHandle.callWithDeadline(
           ["ui", "renderBatch"],
           [cardsSnapshot, opts || {}],
           CARD_RENDER_DEADLINE_MS
@@ -2225,6 +2430,12 @@
       } catch (err) {
         return null;
       }
+      if (!Array.isArray(results)) return null;
+      return results.map((r) => ({
+        cardId: r && r.cardId,
+        vnode: mayReplace && r && r.vnode || null,
+        patch: mayDecorate && r && r.patch || null
+      }));
     },
     /** Backstop hang detector: terminates and suspends a worker whose oldest pending RPC call is stuck. */
     _startHangWatcher: function() {
@@ -2238,7 +2449,7 @@
             instance.enabled = false;
             this._removeCSS(id);
             this._cleanupResources(id);
-            cardRenderPluginIds.delete(id);
+            clearCardRender(id);
             this._persistEnabledState(id, false);
             if (window.showToast) {
               window.showToast('Plugin "' + id + '" stopped responding and was suspended.', "error");
@@ -2290,16 +2501,23 @@
       }
       const jsSource = typeof pkg.js === "string" && pkg.js.trim() ? pkg.js : typeof pkg.javascript === "string" && pkg.javascript.trim() ? pkg.javascript : null;
       const teardownSource = typeof pkg.teardownJs === "string" && pkg.teardownJs.trim() ? pkg.teardownJs : typeof pkg.teardown === "string" && pkg.teardown.trim() ? pkg.teardown : null;
-      if (!pkg.setup && jsSource) _checkSyntax(jsSource);
-      if (typeof pkg.teardown !== "function" && teardownSource) _checkSyntax(teardownSource);
-      let id = pkg.manifest.id || pkg.manifest.name.toLowerCase().replace(/\s+/g, "-");
+      if (typeof pkg.setup === "function" || typeof pkg.teardown === "function") {
+        console.warn("[Plugin] install() ignores setup/teardown functions; use js/teardownJs source strings (sandboxed) or CardSpoke.registerPlugin() for host code.");
+      }
+      if (jsSource) _checkSyntax(jsSource);
+      if (teardownSource) _checkSyntax(teardownSource);
+      let id = pkg.manifest.id || String(pkg.manifest.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      if (!id) {
+        throw new Error("Invalid plugin package: could not derive a plugin id from manifest.name; set manifest.id");
+      }
+      if (!/^[A-Za-z0-9._-]+$/.test(id) || id.length > 200) {
+        throw new Error('Invalid plugin package: manifest.id may only contain letters, numbers, ".", "_" and "-": ' + JSON.stringify(id));
+      }
       if (plugins.has(id)) {
         await this.unregister(id);
       }
       const definition = {
         manifest: pkg.manifest,
-        setup: pkg.setup,
-        teardown: typeof pkg.teardown === "function" ? pkg.teardown : void 0,
         css: pkg.css,
         js: jsSource,
         teardownJs: teardownSource
@@ -2395,8 +2613,20 @@
     // cannot block the sequential boot sync and leave the app on a blank
     // screen. For a sandboxed plugin this also forcibly terminates the
     // worker on timeout — a capability main-thread execution never had.
+    _requiredPermissions: function(instance) {
+      const required = [...instance.definition.manifest.permissions || []];
+      if (instance.definition.js || instance.definition.teardownJs) required.push("plugin-code");
+      return required;
+    },
     _enableWithTimeout: async function(id, timeoutMs) {
       const limit = typeof timeoutMs === "number" ? timeoutMs : ENABLE_TIMEOUT_MS;
+      const pending = plugins.get(id);
+      if (pending && !pending.enabled) {
+        const required = this._requiredPermissions(pending);
+        if (required.length && !await this._checkPermissions(id, required)) {
+          throw new Error("Permissions not granted for plugin: " + id);
+        }
+      }
       let timer = null;
       const timeout = new Promise((_resolve, reject) => {
         timer = setTimeout(
@@ -2499,6 +2729,14 @@
       return panel;
     }
   };
+  Object.defineProperty(PluginManager, "registerHostPlugin", {
+    value: function(id, definition) {
+      return PluginManager._registerInternal(id, definition, true);
+    },
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
   console.log("[Plugin] API system initialized");
   function resetForTesting() {
     plugins.forEach((instance) => {
@@ -2514,6 +2752,8 @@
     dataUpdateListeners.clear();
     globalEventBus.clear();
     cardRenderPluginIds.clear();
+    cardComponentPluginIds.clear();
+    cardDecorators.clear();
     if (hangWatcherTimer) {
       clearInterval(hangWatcherTimer);
       hangWatcherTimer = null;
@@ -2534,7 +2774,7 @@
      * @returns {Promise<string>} The plugin id once enabled
      */
     registerPlugin: async function(id, definition) {
-      PluginManager.register(id, definition);
+      PluginManager.registerHostPlugin(id, definition);
       await PluginManager.enable(id);
       return id;
     },
@@ -2584,6 +2824,16 @@
     }
     if (!Array.isArray(card.tags)) {
       card.tags = [];
+      changed = true;
+    }
+    const normalizedTags = [];
+    for (const t of card.tags) {
+      if (t == null || typeof t === "object" || typeof t === "function") continue;
+      const tag = String(t).trim().replace(/^#/, "").trim().toLowerCase();
+      if (tag && !normalizedTags.includes(tag)) normalizedTags.push(tag);
+    }
+    if (normalizedTags.length !== card.tags.length || normalizedTags.some((tag, i) => tag !== card.tags[i])) {
+      card.tags = normalizedTags;
       changed = true;
     }
     if (card.modsData == null || typeof card.modsData !== "object") {
@@ -2796,6 +3046,25 @@
     const normalized = normalizeCardName(cardName);
     return links.some((link) => normalizeCardName(link.cardName) === normalized);
   }
+  function replaceCardLinks(text, oldName, newName) {
+    if (!text || typeof text !== "string" || !oldName || !newName) return { text, count: 0 };
+    const replacementName = String(newName).trim();
+    if (!replacementName || /[[\]]/.test(replacementName)) return { text, count: 0 };
+    const target = normalizeCardName(String(oldName));
+    if (!target) return { text, count: 0 };
+    let count = 0;
+    const out = text.replace(/\[\[([^\]]+)\]\]/g, (match, inner) => {
+      if (normalizeCardName(inner) !== target) return match;
+      count++;
+      return "[[" + replacementName + "]]";
+    });
+    return { text: out, count };
+  }
+  function normalizeTag(tag) {
+    if (tag == null || typeof tag === "object" || typeof tag === "function") return "";
+    return String(tag).trim().replace(/^#/, "").trim().toLowerCase();
+  }
+  const PROTECTED_UPDATE_FIELDS = /* @__PURE__ */ new Set(["id", "parentId", "children", "createdAt", "__proto__", "constructor", "prototype"]);
   function extractTags(body) {
     if (!body) return [];
     const matches = body.match(/#\w+/g);
@@ -2886,7 +3155,9 @@
       return { id, card: cloneCard(card) };
     }
     /**
-     * Update fields on an existing card.
+     * Update content fields on an existing card. Structural fields (id,
+     * parentId, children, createdAt) are ignored — moves go through reparent()
+     * so parent.children / rootOrder can never disagree with card.parentId.
      * @param {string} id
      * @param {Object} updates - Fields to merge onto the card.
      * @returns {{ previousState: Object|null, card: Object|null }} Cloned before/after.
@@ -2896,7 +3167,13 @@
       if (!card) return { previousState: null, card: null };
       const previousState = cloneCard(card);
       const updateTimestamp = Date.now();
-      Object.assign(card, updates, { updatedAt: updateTimestamp });
+      const safeUpdates = {};
+      if (updates && typeof updates === "object") {
+        for (const key of Object.keys(updates)) {
+          if (!PROTECTED_UPDATE_FIELDS.has(key)) safeUpdates[key] = updates[key];
+        }
+      }
+      Object.assign(card, safeUpdates, { updatedAt: updateTimestamp });
       return { previousState, card: cloneCard(card) };
     }
     /**
@@ -2924,9 +3201,8 @@
           if (parent) {
             parent.children = parent.children.filter((c) => c !== cardId);
           }
-        } else {
-          this.rootOrder = this.rootOrder.filter((c) => c !== cardId);
         }
+        this.rootOrder = this.rootOrder.filter((c) => c !== cardId);
         delete this.cards[cardId];
       };
       remove(id);
@@ -3032,9 +3308,8 @@
         if (oldParent) {
           oldParent.children = oldParent.children.filter((c) => c !== id);
         }
-      } else {
-        this.rootOrder = this.rootOrder.filter((c) => c !== id);
       }
+      this.rootOrder = this.rootOrder.filter((c) => c !== id);
       card.parentId = newParentId || null;
       if (newParentId) {
         const newParent = this.cards[newParentId];
@@ -3133,10 +3408,10 @@
     addTag(cardId, tag) {
       const card = this.cards[cardId];
       if (!card) return false;
-      const normalized = tag.replace(/^#/, "").toLowerCase().trim();
+      const normalized = normalizeTag(tag);
       if (!normalized) return false;
-      if (!card.tags) card.tags = [];
-      if (card.tags.some((t) => t.toLowerCase() === normalized)) return false;
+      if (!Array.isArray(card.tags)) card.tags = [];
+      if (card.tags.some((t) => normalizeTag(t) === normalized)) return false;
       card.tags.push(normalized);
       card.updatedAt = Date.now();
       return true;
@@ -3149,10 +3424,11 @@
      */
     removeTag(cardId, tag) {
       const card = this.cards[cardId];
-      if (!card || !card.tags) return false;
-      const normalized = tag.replace(/^#/, "").toLowerCase().trim();
+      if (!card || !Array.isArray(card.tags)) return false;
+      const normalized = normalizeTag(tag);
+      if (!normalized) return false;
       const before = card.tags.length;
-      card.tags = card.tags.filter((t) => t.toLowerCase() !== normalized);
+      card.tags = card.tags.filter((t) => normalizeTag(t) !== normalized);
       if (card.tags.length === before) return false;
       card.updatedAt = Date.now();
       return true;
@@ -3166,7 +3442,7 @@
     setTags(cardId, tags) {
       const card = this.cards[cardId];
       if (!card) return false;
-      const normalized = tags.map((t) => t.replace(/^#/, "").toLowerCase().trim()).filter(Boolean);
+      const normalized = (Array.isArray(tags) ? tags : []).map(normalizeTag).filter(Boolean);
       card.tags = [...new Set(normalized)];
       card.updatedAt = Date.now();
       return true;
@@ -3231,6 +3507,25 @@
         link,
         cardId: this.findCardByName(link.cardName)
       }));
+    }
+    /**
+     * Rewrite [[oldName]] links to [[newName]] in every card body. Pure data
+     * operation: returns cloned before/after snapshots so the Shell can record
+     * undo entries and fire hooks.
+     * @param {string} oldName
+     * @param {string} newName
+     * @returns {Array<{id: string, previousState: Object, card: Object, count: number}>}
+     */
+    rewriteCardLinks(oldName, newName) {
+      const changes = [];
+      for (const [id, card] of Object.entries(this.cards)) {
+        if (!card || typeof card.body !== "string" || !card.body.includes("[[")) continue;
+        const { text, count } = replaceCardLinks(card.body, oldName, newName);
+        if (!count) continue;
+        const result = this.updateCard(id, { body: text });
+        changes.push({ id, previousState: result.previousState, card: result.card, count });
+      }
+      return changes;
     }
     /**
      * Get all cards that link to a given card via [[Title]] references.
@@ -3965,6 +4260,12 @@
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           this.db = request.result;
+          this.db.onversionchange = () => {
+            try {
+              this.db.close();
+            } catch (_e) {
+            }
+          };
           resolve();
         };
         request.onupgradeneeded = (event) => {
@@ -4494,7 +4795,16 @@
         const db = req.result;
         if (!db.objectStoreNames.contains("handles")) db.createObjectStore("handles");
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onversionchange = () => {
+          try {
+            db.close();
+          } catch (_e) {
+          }
+        };
+        resolve(db);
+      };
     });
   }
   async function saveDatasetFileHandle(handleKey, handle) {
@@ -4696,6 +5006,9 @@
   }
   async function persistStoreNow(key) {
     stripLegacyPinMetadata();
+    if (!store.metadata || typeof store.metadata !== "object") store.metadata = {};
+    const previousPersistedAt = Number(store.metadata.persistedAt) || 0;
+    store.metadata.persistedAt = Math.max(Date.now(), previousPersistedAt + 1);
     const payload = JSON.stringify(store);
     const activePin = activeSessionPin;
     const revision = saveRevision;
@@ -4824,6 +5137,34 @@
         indicator.title = "";
     }
   }
+  const APP_INDEXEDDB_DATABASES = ["CardSpokeDB", "CardSpokeFileHandles"];
+  async function deleteAppIndexedDbDatabases() {
+    if (typeof indexedDB === "undefined" || !indexedDB || typeof indexedDB.deleteDatabase !== "function") return [];
+    if (indexedDbMirrorDriver && indexedDbMirrorDriver.db && typeof indexedDbMirrorDriver.db.close === "function") {
+      try {
+        indexedDbMirrorDriver.db.close();
+      } catch (_err) {
+      }
+    }
+    indexedDbMirrorDriver = null;
+    return Promise.all(APP_INDEXEDDB_DATABASES.map((name) => new Promise((resolve) => {
+      try {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => {
+          console.warn("[Storage] Could not delete IndexedDB", name, req.error);
+          resolve(false);
+        };
+        req.onblocked = () => {
+          console.warn("[Storage] IndexedDB delete blocked by an open connection:", name);
+          resolve(false);
+        };
+      } catch (err) {
+        console.warn("[Storage] IndexedDB delete failed:", name, err);
+        resolve(false);
+      }
+    })));
+  }
   async function clearAllData() {
     if (!await showConfirmDialog("WARNING: This will DELETE ALL instances and data from localStorage.\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?", {
       title: "Delete All Data",
@@ -4847,7 +5188,10 @@
         const key = localStorage.key(i);
         allKeys.push(key);
       }
+      cancelPendingSave();
+      storageWriteLock = true;
       localStorage.clear();
+      await deleteAppIndexedDbDatabases();
       showToast(`Cleared ${allKeys.length} items from localStorage`, "success");
       setTimeout(() => {
         location.reload();
@@ -5017,19 +5361,80 @@
     document.body.appendChild(overlay);
     if (typeof trapFocus === "function") trapFocus(modal);
   }
-  async function load() {
-    const key = instanceKey || "nested_cards_store";
-    let raw = localStorage.getItem(key);
+  function resetSessionState() {
     storageWriteLock = false;
     if (Array.isArray(undoStack)) undoStack.length = 0;
     if (Array.isArray(redoStack)) redoStack.length = 0;
     if (Array.isArray(trashBin)) trashBin.length = 0;
-    if (typeof document !== "undefined") {
+    setNavState({
+      mode: navState && navState.mode || "cardspoke",
+      page: "list",
+      cardId: null,
+      parentId: null,
+      searchQuery: ""
+    });
+    setNavHistory([]);
+    if (typeof document !== "undefined" && document && typeof document.getElementById === "function") {
       const staleLock = document.getElementById("datasetLockScreen");
       if (staleLock) staleLock.remove();
       const staleRecovery = document.getElementById("corruptRecoveryScreen");
       if (staleRecovery) staleRecovery.remove();
     }
+  }
+  async function removeDatasetMirrors(key) {
+    if (!key || typeof indexedDB === "undefined") return;
+    try {
+      const driver = await getIndexedDbMirrorDriver();
+      await driver.remove(key);
+    } catch (err) {
+      console.warn("[Dataset] Could not remove IndexedDB mirror for", key, err);
+    }
+    try {
+      const db = await openFileHandleDb();
+      await new Promise((resolve) => {
+        const tx = db.transaction(["handles"], "readwrite");
+        tx.objectStore("handles").delete(`cardspoke_file_handle_${key}`);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+      });
+      db.close();
+    } catch (err) {
+      console.warn("[Dataset] Could not remove file handle for", key, err);
+    }
+  }
+  function isLocalFilePayloadCurrent(filePayload, localPayload) {
+    const rev = (p) => {
+      const value = p && p.metadata && Number(p.metadata.persistedAt);
+      return Number.isFinite(value) && value > 0 ? value : null;
+    };
+    const fileRev = rev(filePayload);
+    const localRev = rev(localPayload);
+    if (localRev === null) return true;
+    if (fileRev === null) return false;
+    return fileRev >= localRev;
+  }
+  function gateLocalFilePlugins(filePlugins, localPlugins) {
+    const result = {};
+    if (!filePlugins || typeof filePlugins !== "object") return result;
+    const local = localPlugins && typeof localPlugins === "object" ? localPlugins : {};
+    Object.entries(filePlugins).forEach(([id, entry]) => {
+      if (!entry || typeof entry !== "object") return;
+      const known = Object.prototype.hasOwnProperty.call(local, id) ? local[id] : null;
+      let sameDefinition = false;
+      try {
+        sameDefinition = !!known && JSON.stringify(known.definition) === JSON.stringify(entry.definition);
+      } catch (_err) {
+        sameDefinition = false;
+      }
+      result[id] = { ...entry, enabled: !!entry.enabled && !!known && !!known.enabled && sameDefinition };
+    });
+    return result;
+  }
+  async function load() {
+    const key = instanceKey || "nested_cards_store";
+    let raw = localStorage.getItem(key);
+    resetSessionState();
     if (!raw) {
       activeSessionPin = null;
       setStore(createDefaultStore());
@@ -5095,10 +5500,14 @@
             }
           }
           if (!parsedFile || typeof parsedFile !== "object") return;
+          if (!isLocalFilePayloadCurrent(parsedFile, store)) {
+            console.warn("[Local File] File copy is older than LocalStorage; keeping the LocalStorage data");
+            return;
+          }
           setStore({
             rootOrder: parsedFile.rootOrder || [],
             cards: parsedFile.cards || {},
-            plugins: parsedFile.plugins || {},
+            plugins: gateLocalFilePlugins(parsedFile.plugins, store.plugins),
             bookmarks: parsedFile.bookmarks || [],
             recentCards: parsedFile.recentCards || [],
             viewMode: parsedFile.viewMode || "normal",
@@ -5309,31 +5718,76 @@
     _syncKernelToStore();
     pushUndo("createCard", { cardId: result.id, card: result.card });
     if (!skipSave) save();
-    if (!skipHooks && window.CardSpoke && window.CardSpoke.Middleware) {
-      window.CardSpoke.Middleware.run("card.create", [result.id, store.cards[result.id]]).catch((err) => console.error("[Middleware] card.create error:", err));
-    }
-    if (!skipHooks && window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.notifyDataUpdate) {
-      window.CardSpoke.Plugin.notifyDataUpdate({ type: "card.create", cardId: result.id, card: store.cards[result.id] });
-    }
+    if (!skipHooks) runCardHooks("card.create", result.id);
     return result.id;
   }
   function updateCard(id, updates, skipSave = false, skipHooks = false) {
     _syncStoreToKernel();
-    const result = _kernel.updateCard(id, updates);
-    if (!result.previousState) return;
+    const before = _kernel.getCard(id);
+    if (!before) return;
+    const newTitle = updates && typeof updates.title === "string" ? updates.title : null;
+    const renameLinks = newTitle !== null && !!before.title && normalizeCardName(newTitle) !== normalizeCardName(before.title) && !!normalizeCardName(newTitle) && _kernel.findCardsByName(before.title).length === 1;
+    const grouped = renameLinks && window.startUndoGroup && window.startUndoGroup("rename card");
+    let linkChanges = [];
+    try {
+      const result = _kernel.updateCard(id, updates);
+      if (!result.previousState) return;
+      pushUndo("updateCard", {
+        cardId: id,
+        previousState: result.previousState,
+        newState: result.card
+      });
+      if (renameLinks) {
+        linkChanges = _kernel.rewriteCardLinks(before.title, result.card.title);
+        linkChanges.forEach((change) => {
+          pushUndo("updateCard", {
+            cardId: change.id,
+            previousState: change.previousState,
+            newState: change.card
+          });
+        });
+      }
+      _syncKernelToStore();
+    } finally {
+      if (grouped && window.endUndoGroup) window.endUndoGroup();
+    }
+    if (!skipSave) save();
+    if (!skipHooks) {
+      runCardHooks("card.update", id);
+      linkChanges.forEach((change) => {
+        if (change.id !== id) runCardHooks("card.update", change.id);
+      });
+    }
+    if (linkChanges.length && typeof showToast === "function") {
+      const others = linkChanges.filter((c) => c.id !== id).length;
+      if (others > 0) showToast(`Updated links in ${others} card${others === 1 ? "" : "s"}`, "info");
+    }
+  }
+  function runCardHooks(operation, cardId) {
+    if (!store.cards[cardId]) return;
+    if (window.CardSpoke && window.CardSpoke.Middleware) {
+      window.CardSpoke.Middleware.run(operation, [cardId, store.cards[cardId]]).catch((err) => console.error("[Middleware] " + operation + " error:", err));
+    }
+    if (window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.notifyDataUpdate) {
+      window.CardSpoke.Plugin.notifyDataUpdate({ type: operation, cardId, card: store.cards[cardId] });
+    }
+  }
+  function moveCard(id, newParentId, skipSave = false) {
+    _syncStoreToKernel();
+    const card = _kernel.getCard(id);
+    if (!card) return false;
+    const target = newParentId || null;
+    if ((card.parentId || null) === target) return false;
+    const result = _kernel.reparent(id, target);
+    if (!result.success) return false;
     _syncKernelToStore();
-    pushUndo("updateCard", {
+    pushUndo("moveCard", {
       cardId: id,
-      previousState: result.previousState,
-      newState: result.card
+      originalParentId: result.previousParentId || null,
+      newParentId: target
     });
     if (!skipSave) save();
-    if (!skipHooks && window.CardSpoke && window.CardSpoke.Middleware) {
-      window.CardSpoke.Middleware.run("card.update", [id, store.cards[id]]).catch((err) => console.error("[Middleware] card.update error:", err));
-    }
-    if (!skipHooks && window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.notifyDataUpdate) {
-      window.CardSpoke.Plugin.notifyDataUpdate({ type: "card.update", cardId: id, card: store.cards[id] });
-    }
+    return true;
   }
   function deleteCard(id, opts = {}) {
     _syncStoreToKernel();
@@ -5570,7 +6024,27 @@
       metadata
     };
   }
-  function exportJSON(type = "instance") {
+  function getActiveExportPin() {
+    return typeof getSessionPin === "function" && getSessionPin() || null;
+  }
+  async function confirmUnencryptedExport(formatLabel) {
+    if (!getActiveExportPin()) return true;
+    if (typeof showConfirmDialog !== "function") return false;
+    return !!await showConfirmDialog(
+      `This dataset is PIN-protected, but ${formatLabel} exports are NOT encrypted.
+
+Anyone who gets the exported file can read these cards without the PIN.
+
+Export an unencrypted copy anyway?`,
+      {
+        title: "Unencrypted Export",
+        confirmLabel: "Export Unencrypted",
+        cancelLabel: "Cancel",
+        confirmClassName: "btn btn-danger"
+      }
+    );
+  }
+  async function exportJSON(type = "instance") {
     let data;
     if (type === "instance") {
       data = buildInstanceExport();
@@ -5583,6 +6057,28 @@
         timestamp: Date.now(),
         plugins: store.plugins
       };
+    }
+    const pin = type === "instance" ? getActiveExportPin() : null;
+    if (pin) {
+      const choice = typeof showChoiceDialog === "function" ? await showChoiceDialog(
+        "This dataset is PIN-protected.\n\nAn encrypted backup can only be imported with the dataset PIN. An unencrypted backup can be read by anyone who gets the file.",
+        {
+          title: "Export PIN-Protected Dataset",
+          dismissValue: "cancel",
+          actions: [
+            { label: "Cancel", value: "cancel", className: "btn" },
+            { label: "Export Unencrypted", value: "plaintext", className: "btn btn-danger" },
+            { label: "Export Encrypted", value: "encrypted", className: "btn btn-primary", autoFocus: true }
+          ]
+        }
+      ) : "encrypted";
+      if (choice === "encrypted") {
+        const envelope = await encryptStorePayload(JSON.stringify(data), pin);
+        const encBlob = new Blob([envelope], { type: "application/json" });
+        downloadWithFeedback(encBlob, `cardspoke-${type}-${Date.now()}.encrypted.json`, "Encrypted JSON");
+        return;
+      }
+      if (choice !== "plaintext") return;
     }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const filename = `cardspoke-${type}-${Date.now()}.json`;
@@ -5633,7 +6129,8 @@
     }
     setTimeout(() => URL.revokeObjectURL(url), 6e4);
   }
-  function exportTXT() {
+  async function exportTXT() {
+    if (!await confirmUnencryptedExport("TXT")) return;
     let text = "# CardSpoke Export\n\n";
     function writeCard(cardId, depth = 0) {
       const card = store.cards[cardId];
@@ -5653,7 +6150,8 @@
     const filename = `cardspoke-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.txt`;
     downloadWithFeedback(blob, filename, "TXT");
   }
-  function exportMarkdown() {
+  async function exportMarkdown() {
+    if (!await confirmUnencryptedExport("Markdown")) return;
     let markdown = "# CardSpoke Export\n\n";
     markdown += `*Exported: ${(/* @__PURE__ */ new Date()).toLocaleString()}*
 
@@ -5688,7 +6186,8 @@
     if (/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
     return '"' + text.replace(/"/g, '""') + '"';
   }
-  function exportCSV() {
+  async function exportCSV() {
+    if (!await confirmUnencryptedExport("CSV")) return;
     let csv = "ID,Title,Body,Parent ID,Tags,Children Count,Created,Updated\n";
     Object.values(store.cards).forEach((card) => {
       csv += [
@@ -5711,58 +6210,94 @@
     else if (type === "instance-txt") exportTXT();
     else if (type === "plugins-json") exportJSON("plugins");
   }
-  async function importJSON(data, mode = "root") {
-    const groupedUndo = window.startUndoGroup && window.startUndoGroup("importJSON");
-    try {
-      let pkg;
+  async function decryptImportEnvelope(envelope) {
+    const raw = JSON.stringify(envelope);
+    const sessionPin = getActiveExportPin();
+    if (sessionPin) {
       try {
-        pkg = typeof data === "string" ? JSON.parse(data) : data;
-      } catch (err) {
-        showToast("Invalid JSON: " + err.message, "error");
-        throw new Error("Failed to parse JSON: " + err.message);
+        return JSON.parse(await decryptStorePayload(raw, sessionPin));
+      } catch (_err) {
       }
-      if (!pkg || typeof pkg !== "object") {
-        showToast("Invalid import: data must be an object", "error");
-        throw new Error("Invalid import data structure");
+    }
+    if (typeof showPromptDialog !== "function") return null;
+    let attempt = 0;
+    for (; ; ) {
+      const pin = await showPromptDialog({
+        title: "Encrypted Backup",
+        message: attempt === 0 ? "This backup is encrypted. Enter the PIN of the dataset it was exported from." : "Incorrect PIN. Please try again.",
+        label: "PIN",
+        type: "password",
+        confirmLabel: "Decrypt",
+        cancelLabel: "Cancel"
+      });
+      if (pin === null || pin === void 0) return null;
+      attempt++;
+      if (!pin.trim()) continue;
+      try {
+        return JSON.parse(await decryptStorePayload(raw, pin));
+      } catch (_err) {
+        console.warn("[Import] Backup decryption attempt failed");
       }
-      if (pkg.cards && (typeof pkg.cards !== "object" || Array.isArray(pkg.cards))) {
-        showToast("Invalid import: cards must be an object", "error");
-        throw new Error("Invalid cards structure");
+    }
+  }
+  async function importJSON(data, mode = "root") {
+    let pkg;
+    try {
+      pkg = typeof data === "string" ? JSON.parse(data) : data;
+    } catch (err) {
+      showToast("Invalid JSON: " + err.message, "error");
+      throw new Error("Failed to parse JSON: " + err.message);
+    }
+    if (isEncryptedEnvelope(pkg)) {
+      const decrypted = await decryptImportEnvelope(pkg);
+      if (!decrypted) {
+        showToast("Import cancelled — the encrypted backup was not unlocked", "info");
+        return false;
       }
-      if (pkg.cards) {
-        for (const [cardId, card] of Object.entries(pkg.cards)) {
-          if (!card || typeof card !== "object" || Array.isArray(card)) {
-            showToast(`Invalid card structure for ID: ${cardId}`, "error");
-            throw new Error("Invalid card structure");
-          }
-          if (card.children && !Array.isArray(card.children)) {
-            showToast(`Invalid children array for card: ${cardId}`, "error");
-            throw new Error("Invalid card children structure");
-          }
+      pkg = decrypted;
+    }
+    if (!pkg || typeof pkg !== "object") {
+      showToast("Invalid import: data must be an object", "error");
+      throw new Error("Invalid import data structure");
+    }
+    if (pkg.cards && (typeof pkg.cards !== "object" || Array.isArray(pkg.cards))) {
+      showToast("Invalid import: cards must be an object", "error");
+      throw new Error("Invalid cards structure");
+    }
+    if (pkg.cards) {
+      for (const [cardId, card] of Object.entries(pkg.cards)) {
+        if (!card || typeof card !== "object" || Array.isArray(card)) {
+          showToast(`Invalid card structure for ID: ${cardId}`, "error");
+          throw new Error("Invalid card structure");
+        }
+        if (card.children && !Array.isArray(card.children)) {
+          showToast(`Invalid children array for card: ${cardId}`, "error");
+          throw new Error("Invalid card children structure");
         }
       }
-      if (pkg.rootIds && !Array.isArray(pkg.rootIds)) {
-        showToast("Invalid import: rootIds must be an array", "error");
-        throw new Error("Invalid rootIds structure");
-      }
-      if (typeof pkg.schemaVersion === "number" && pkg.schemaVersion > SCHEMA_VERSION) {
-        const proceed = await showConfirmDialog(
-          `This backup uses schema v${pkg.schemaVersion}, but this app version supports schema v${SCHEMA_VERSION}.
+    }
+    if (pkg.rootIds && !Array.isArray(pkg.rootIds)) {
+      showToast("Invalid import: rootIds must be an array", "error");
+      throw new Error("Invalid rootIds structure");
+    }
+    if (typeof pkg.schemaVersion === "number" && pkg.schemaVersion > SCHEMA_VERSION) {
+      const proceed = await showConfirmDialog(
+        `This backup uses schema v${pkg.schemaVersion}, but this app version supports schema v${SCHEMA_VERSION}.
 
 Importing may lose fields this version does not understand. Continue?`,
-          {
-            title: "Newer Backup Format",
-            confirmLabel: "Import Anyway",
-            cancelLabel: "Cancel"
-          }
-        );
-        if (!proceed) throw new Error("Import cancelled: incompatible schema version");
-      }
-      if (pkg.plugins && (pkg.exportType === "instance" || pkg.exportType === "plugins")) {
-        const modCount = Object.keys(pkg.plugins).length;
-        if (modCount > 0) {
-          const confirmImportMods = await showConfirmDialog(
-            `⚠️ SECURITY WARNING
+        {
+          title: "Newer Backup Format",
+          confirmLabel: "Import Anyway",
+          cancelLabel: "Cancel"
+        }
+      );
+      if (!proceed) throw new Error("Import cancelled: incompatible schema version");
+    }
+    if (pkg.plugins && (pkg.exportType === "instance" || pkg.exportType === "plugins")) {
+      const modCount = Object.keys(pkg.plugins).length;
+      if (modCount > 0) {
+        const confirmImportMods = await showConfirmDialog(
+          `⚠️ SECURITY WARNING
 
 This import includes ${modCount} plugin(s).
 
@@ -5770,145 +6305,165 @@ Plugins can execute code and access your data. Only import plugins from sources 
 
 Do you want to import the plugins?
 (Click Cancel to import only the cards without plugins)`,
-            {
-              title: "Plugin Import Warning",
-              confirmLabel: "Import Plugins",
-              cancelLabel: "Cards Only",
-              confirmClassName: "btn btn-danger"
-            }
-          );
-          if (!confirmImportMods) {
-            delete pkg.plugins;
+          {
+            title: "Plugin Import Warning",
+            confirmLabel: "Import Plugins",
+            cancelLabel: "Cards Only",
+            confirmClassName: "btn btn-danger"
           }
+        );
+        if (!confirmImportMods) {
+          delete pkg.plugins;
         }
       }
-      const importedIds = [];
-      const idMap = /* @__PURE__ */ Object.create(null);
-      const remappedCards = {};
-      Object.entries(pkg.cards || {}).forEach(([oldId, card]) => {
-        const newId = uid();
-        idMap[oldId] = newId;
-        remappedCards[newId] = { ...card, id: newId };
-        importedIds.push(newId);
-      });
-      Object.values(remappedCards).forEach((card) => {
-        card.children = (card.children || []).map((cid) => idMap[cid] || cid);
-        if (card.parentId && idMap[card.parentId]) {
-          card.parentId = idMap[card.parentId];
+    }
+    const importedIds = [];
+    const idMap = /* @__PURE__ */ Object.create(null);
+    const remappedCards = {};
+    Object.entries(pkg.cards || {}).forEach(([oldId, card]) => {
+      const newId = uid();
+      idMap[oldId] = newId;
+      remappedCards[newId] = { ...card, id: newId };
+      importedIds.push(newId);
+    });
+    Object.values(remappedCards).forEach((card) => {
+      card.children = (Array.isArray(card.children) ? card.children : []).map((cid) => idMap[cid]).filter(Boolean);
+      card.parentId = card.parentId && idMap[card.parentId] || null;
+    });
+    const declaredRootIds = Array.isArray(pkg.rootIds) ? pkg.rootIds : Array.isArray(pkg.rootOrder) ? pkg.rootOrder : [];
+    const remappedRootIds = declaredRootIds.map((id) => idMap[id]).filter(Boolean);
+    importedIds.forEach((id) => {
+      if (!remappedCards[id].parentId && !remappedRootIds.includes(id)) remappedRootIds.push(id);
+    });
+    Object.values(remappedCards).forEach((card) => {
+      store.cards[card.id] = card;
+    });
+    if (mode === "root") {
+      remappedRootIds.forEach((id) => {
+        if (store.cards[id]) {
+          store.cards[id].parentId = null;
+          if (!store.rootOrder.includes(id)) {
+            store.rootOrder.push(id);
+          }
         }
       });
-      const remappedRootIds = (pkg.rootIds || []).map((id) => idMap[id] || id);
-      Object.values(remappedCards).forEach((card) => {
-        store.cards[card.id] = card;
-      });
-      if (mode === "root") {
-        remappedRootIds.forEach((id) => {
-          if (store.cards[id]) {
-            store.cards[id].parentId = null;
-            if (!store.rootOrder.includes(id)) {
-              store.rootOrder.push(id);
+    } else {
+      const parentCard = store.cards[mode];
+      if (parentCard) {
+        remappedRootIds.forEach((cardId) => {
+          if (store.cards[cardId]) {
+            store.cards[cardId].parentId = mode;
+            if (!parentCard.children.includes(cardId)) {
+              parentCard.children.push(cardId);
             }
           }
         });
-      } else {
-        const parentCard = store.cards[mode];
-        if (parentCard) {
-          remappedRootIds.forEach((cardId) => {
-            if (store.cards[cardId]) {
-              store.cards[cardId].parentId = mode;
-              if (!parentCard.children.includes(cardId)) {
-                parentCard.children.push(cardId);
-              }
-            }
-          });
-        }
       }
-      if ((pkg.exportType === "instance" || pkg.exportType === "plugins") && pkg.plugins) {
-        Object.entries(pkg.plugins).forEach(([modId, plugin]) => {
-          if (store.plugins[modId] || !plugin || typeof plugin !== "object") return;
-          if (plugin.definition && plugin.definition.manifest) {
-            store.plugins[modId] = {
-              definition: plugin.definition,
-              enabled: !!plugin.enabled
-            };
-          } else if (plugin.js || plugin.css || plugin.meta || plugin.manifest) {
-            const meta = plugin.meta || plugin.manifest || {};
-            store.plugins[modId] = {
-              definition: {
-                manifest: {
-                  id: meta.id || modId,
-                  name: meta.name || modId,
-                  version: typeof meta.version === "string" && meta.version || "1.0.0",
-                  author: meta.author || meta.creator || "Unknown",
-                  layer: meta.layer || "feature",
-                  description: meta.description || "",
-                  permissions: Array.isArray(meta.permissions) ? meta.permissions : []
-                },
-                css: typeof plugin.css === "string" && plugin.css ? plugin.css : null,
-                js: typeof plugin.js === "string" && plugin.js ? plugin.js : null,
-                teardownJs: typeof plugin.teardownJs === "string" && plugin.teardownJs ? plugin.teardownJs : null
+    }
+    if ((pkg.exportType === "instance" || pkg.exportType === "plugins") && pkg.plugins) {
+      if (!store.plugins || typeof store.plugins !== "object") store.plugins = {};
+      Object.entries(pkg.plugins).forEach(([modId, plugin]) => {
+        if (store.plugins[modId] || !plugin || typeof plugin !== "object") return;
+        if (plugin.definition && plugin.definition.manifest) {
+          store.plugins[modId] = {
+            definition: plugin.definition,
+            enabled: false
+          };
+        } else if (plugin.js || plugin.css || plugin.meta || plugin.manifest) {
+          const meta = plugin.meta || plugin.manifest || {};
+          store.plugins[modId] = {
+            definition: {
+              manifest: {
+                id: meta.id || modId,
+                name: meta.name || modId,
+                version: typeof meta.version === "string" && meta.version || "1.0.0",
+                author: meta.author || meta.creator || "Unknown",
+                layer: meta.layer || "feature",
+                description: meta.description || "",
+                permissions: Array.isArray(meta.permissions) ? meta.permissions : []
               },
-              enabled: false
-            };
-          }
-        });
-        if (window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.syncFromStore) {
-          try {
-            await window.CardSpoke.Plugin.syncFromStore();
-          } catch (err) {
-            console.error("[Import] Plugin sync failed:", err);
-          }
-        }
-      }
-      if (pkg.exportType === "instance") {
-        if (Array.isArray(pkg.bookmarks)) {
-          if (!store.bookmarks) store.bookmarks = [];
-          pkg.bookmarks.forEach((oldId) => {
-            const newId = idMap[oldId];
-            if (newId && !store.bookmarks.includes(newId)) store.bookmarks.push(newId);
-          });
-        }
-        if (Array.isArray(pkg.recentCards)) {
-          if (!store.recentCards) store.recentCards = [];
-          const restoredRecents = pkg.recentCards.map((oldId) => idMap[oldId]).filter(Boolean);
-          store.recentCards = restoredRecents.concat(store.recentCards.filter((id) => !restoredRecents.includes(id))).slice(0, 10);
-        }
-        if (pkg.viewMode === "normal" || pkg.viewMode === "compact") {
-          store.viewMode = pkg.viewMode;
-        }
-        if (pkg.activeTheme === "light" || pkg.activeTheme === "dark") {
-          store.activeTheme = pkg.activeTheme;
-          if (typeof applyTheme === "function") applyTheme(pkg.activeTheme);
-        }
-        if (pkg.metadata && typeof pkg.metadata === "object") {
-          if (!store.metadata) store.metadata = {};
-          if (pkg.metadata.name && !store.metadata.name) {
-            store.metadata.name = pkg.metadata.name;
-          }
-        }
-      }
-      importedIds.forEach((cardId) => {
-        const storedCard = store.cards[cardId];
-        if (storedCard) {
-          try {
-            const migrated = migrateCard(storedCard);
-            migrated.warnings.forEach((w) => console.warn(`[Import] ${cardId}:`, w));
-          } catch (err) {
-            console.warn("[Import] Validation skipped for", cardId, err);
-          }
+              css: typeof plugin.css === "string" && plugin.css ? plugin.css : null,
+              js: typeof plugin.js === "string" && plugin.js ? plugin.js : null,
+              teardownJs: typeof plugin.teardownJs === "string" && plugin.teardownJs ? plugin.teardownJs : null
+            },
+            enabled: false
+          };
         }
       });
-      try {
-        if (typeof validateStoreConsistency === "function") validateStoreConsistency();
-      } catch (err) {
-        console.warn("[Import] Consistency repair skipped:", err);
+      if (window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.syncFromStore) {
+        try {
+          await window.CardSpoke.Plugin.syncFromStore();
+        } catch (err) {
+          console.error("[Import] Plugin sync failed:", err);
+        }
       }
-      save();
-      showToast(`Imported ${Object.keys(remappedCards).length} cards`);
-      render();
+    }
+    if (pkg.exportType === "instance") {
+      if (Array.isArray(pkg.bookmarks)) {
+        if (!store.bookmarks) store.bookmarks = [];
+        pkg.bookmarks.forEach((oldId) => {
+          const newId = idMap[oldId];
+          if (newId && !store.bookmarks.includes(newId)) store.bookmarks.push(newId);
+        });
+      }
+      if (Array.isArray(pkg.recentCards)) {
+        if (!store.recentCards) store.recentCards = [];
+        const restoredRecents = pkg.recentCards.map((oldId) => idMap[oldId]).filter(Boolean);
+        store.recentCards = restoredRecents.concat(store.recentCards.filter((id) => !restoredRecents.includes(id))).slice(0, 10);
+      }
+      if (pkg.viewMode === "normal" || pkg.viewMode === "compact") {
+        store.viewMode = pkg.viewMode;
+      }
+      if (pkg.activeTheme === "light" || pkg.activeTheme === "dark") {
+        store.activeTheme = pkg.activeTheme;
+        if (typeof applyTheme === "function") applyTheme(pkg.activeTheme);
+      }
+      if (pkg.metadata && typeof pkg.metadata === "object") {
+        if (!store.metadata) store.metadata = {};
+        if (pkg.metadata.name && !store.metadata.name) {
+          store.metadata.name = pkg.metadata.name;
+        }
+      }
+    }
+    importedIds.forEach((cardId) => {
+      const storedCard = store.cards[cardId];
+      if (storedCard) {
+        try {
+          const migrated = migrateCard(storedCard);
+          migrated.warnings.forEach((w) => console.warn(`[Import] ${cardId}:`, w));
+        } catch (err) {
+          console.warn("[Import] Validation skipped for", cardId, err);
+        }
+      }
+    });
+    try {
+      if (typeof validateStoreConsistency === "function") validateStoreConsistency();
+    } catch (err) {
+      console.warn("[Import] Consistency repair skipped:", err);
+    }
+    const importedSet = new Set(importedIds);
+    const undoOrder = [];
+    const visited = /* @__PURE__ */ new Set();
+    const visitImported = (id) => {
+      if (visited.has(id) || !importedSet.has(id) || !store.cards[id]) return;
+      visited.add(id);
+      undoOrder.push(id);
+      (store.cards[id].children || []).forEach(visitImported);
+    };
+    remappedRootIds.forEach(visitImported);
+    importedIds.forEach(visitImported);
+    const groupedUndo = undoOrder.length && window.startUndoGroup && window.startUndoGroup("import");
+    try {
+      undoOrder.forEach((id) => {
+        pushUndo("createCard", { cardId: id, card: kernelCloneCard(store.cards[id]) });
+      });
     } finally {
       if (groupedUndo && window.endUndoGroup) window.endUndoGroup();
     }
+    save();
+    showToast(`Imported ${Object.keys(remappedCards).length} cards`);
+    render();
+    return true;
   }
   function importTXT(text, mode = "outline", location2 = "root") {
     const createdIds = [];
@@ -6061,6 +6616,7 @@ This action cannot be undone!`, {
             })) {
               if (isCurrent) cancelPendingSave();
               localStorage.removeItem(key);
+              await removeDatasetMirrors(key);
               if (isCurrent && allKeys.length > 1) {
                 const otherKey = allKeys.find((k) => k !== key);
                 localStorage.setItem("activeInstance", otherKey);
@@ -6232,9 +6788,11 @@ This action cannot be undone!`, {
         await flushPendingSave();
         localStorage.setItem("activeInstance", newKey);
         setInstanceKey(newKey);
+        resetSessionState();
         setStore(newStore);
         setSessionPin(pin || null);
         save();
+        await reconcilePluginsAfterDatasetSwitch();
         if (typeof updateDatasetSelector === "function") updateDatasetSelector();
         render();
         overlay.remove();
@@ -7143,13 +7701,8 @@ This action cannot be undone!`, {
     }
     const txtAppendRadio = document.querySelector('input[name="txtImportMode"][value="append"]');
     if (txtAppendRadio) txtAppendRadio.checked = true;
-    uploadModal.tabs.forEach((t) => t.classList.remove("active"));
-    uploadModal.tabContents.forEach((content) => content.classList.remove("active"));
-    const tabEl = document.querySelector(`.modal-tab[data-tab="${tabName}"]`);
-    const contentEl = document.getElementById(`tab-${tabName}`);
-    if (tabEl) tabEl.classList.add("active");
-    if (contentEl) contentEl.classList.add("active");
-    uploadModal.overlay.classList.add("show");
+    activateUploadTab(tabName);
+    openUploadModal();
   }
   function updateImportLocationOptions() {
     const selectJSON = uploadModal.importLocationSelectJSON;
@@ -7819,44 +8372,42 @@ This action cannot be undone!`, {
         const parentVal = form.querySelector("#cardParent").value || null;
         const tagsVal = tagEditor.getTags && tagEditor.getTags() || [];
         if (editing) {
-          const oldParentId = card.parentId;
-          if (oldParentId !== parentVal) {
-            if (oldParentId) {
-              const oldParent = store.cards[oldParentId];
-              if (oldParent) oldParent.children = oldParent.children.filter((c) => c !== card.id);
-            } else {
-              store.rootOrder = store.rootOrder.filter((c) => c !== card.id);
+          const editGroup = window.startUndoGroup && window.startUndoGroup("edit card");
+          try {
+            if ((card.parentId || null) !== parentVal && !moveCard(card.id, parentVal, true)) {
+              showToast("Cannot move a card into itself or its own child", "error");
             }
-            if (parentVal) {
-              const newParent = store.cards[parentVal];
-              if (newParent && !newParent.children.includes(card.id)) newParent.children.push(card.id);
-            } else {
-              if (!store.rootOrder.includes(card.id)) store.rootOrder.push(card.id);
-            }
-            card.parentId = parentVal;
+            updateCard(card.id, { title: titleVal, body: bodyVal, tags: tagsVal, isRichText: richToggle.checked }, true, false);
+            (store.cards[card.id].children || []).forEach((cid) => {
+              const inp = childrenInpMap[cid];
+              if (inp && store.cards[cid] && inp.value.trim() !== store.cards[cid].title) updateCard(cid, { title: inp.value.trim() }, true, false);
+            });
+            const newKidRows = form.querySelectorAll("#addChildList .form-child-row input");
+            newKidRows.forEach((inp) => {
+              const t = inp.value.trim();
+              if (t) createCard(t, "", card.id, true, false);
+            });
+          } finally {
+            if (editGroup && window.endUndoGroup) window.endUndoGroup();
           }
-          updateCard(card.id, { title: titleVal, body: bodyVal, tags: tagsVal, isRichText: richToggle.checked }, true, true);
-          card.children.forEach((cid) => {
-            const inp = childrenInpMap[cid];
-            if (inp) updateCard(cid, { title: inp.value.trim() }, true, true);
-          });
-          const newKidRows = form.querySelectorAll("#addChildList .form-child-row input");
-          newKidRows.forEach((inp) => {
-            const t = inp.value.trim();
-            if (t) createCard(t, "", card.id, true, true);
-          });
           save();
           goTo("read", { cardId: card.id });
         } else {
-          const newId = createCard(titleVal, bodyVal, parentVal, true, true);
-          updateCard(newId, { tags: tagsVal, isRichText: richToggle.checked }, true, true);
-          const newKidRows = form.querySelectorAll("#addChildList .form-child-row input");
-          newKidRows.forEach((inp) => {
-            const t = inp.value.trim();
-            if (t) createCard(t, "", newId, true, true);
-          });
-          save();
-          goTo("read", { cardId: newId });
+          const createGroup = window.startUndoGroup && window.startUndoGroup("create card");
+          try {
+            const newId = createCard(titleVal, bodyVal, parentVal, true, true);
+            updateCard(newId, { tags: tagsVal, isRichText: richToggle.checked }, true, true);
+            runCardHooks("card.create", newId);
+            const newKidRows = form.querySelectorAll("#addChildList .form-child-row input");
+            newKidRows.forEach((inp) => {
+              const t = inp.value.trim();
+              if (t) createCard(t, "", newId, true, false);
+            });
+            save();
+            goTo("read", { cardId: newId });
+          } finally {
+            if (createGroup && window.endUndoGroup) window.endUndoGroup();
+          }
         }
       }
     });
@@ -8438,9 +8989,14 @@ ${prefix}`;
       localStorage.setItem("cardspoke_theme", theme);
     } catch {
     }
-    const moonIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
-    const sunIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
-    if (header.themeToggle) header.themeToggle.innerHTML = theme === "dark" ? sunIcon : moonIcon;
+    const moonIcon = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+    const sunIcon = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
+    if (header.themeToggle) {
+      header.themeToggle.innerHTML = theme === "dark" ? sunIcon : moonIcon;
+      const themeActionLabel = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+      header.themeToggle.setAttribute("aria-label", themeActionLabel);
+      header.themeToggle.setAttribute("title", themeActionLabel + " (Alt+T)");
+    }
   }
   function populateFooter() {
     try {
@@ -8528,15 +9084,22 @@ ${prefix}`;
     document.body.classList.remove("scroll-locked");
   }
   function closeMenuOverlay() {
+    const wasOpen = !!(menu.overlay && menu.overlay.classList.contains("show"));
     if (menu.overlay) menu.overlay.classList.remove("show");
-    unlockBodyScroll();
+    if (header.menuBtn) header.menuBtn.setAttribute("aria-expanded", "false");
     if (menuFocusTrapCleanup) {
       menuFocusTrapCleanup();
       menuFocusTrapCleanup = null;
     }
+    if (!wasOpen) return;
+    unlockBodyScroll();
+    if (header.menuBtn && typeof header.menuBtn.focus === "function" && document.contains(header.menuBtn)) {
+      header.menuBtn.focus();
+    }
   }
   if (header.menuBtn && menu.overlay) header.menuBtn.onclick = () => {
     menu.overlay.classList.add("show");
+    header.menuBtn.setAttribute("aria-expanded", "true");
     lockBodyScroll();
     if (menu.developerSection) {
       menu.developerSection.style.display = isDeveloperMode() ? "block" : "none";
@@ -8560,6 +9123,81 @@ ${prefix}`;
     closeMenuOverlay();
     goTo("edit", { cardId: null, parentId: null });
   };
+  function activateUploadTab(tabName, focusTab = false) {
+    const tabs = uploadModal.tabs ? Array.from(uploadModal.tabs) : [];
+    let target = tabs.find((t) => t.getAttribute("data-tab") === tabName);
+    if (!target) target = tabs.find((t) => t.getAttribute("data-tab") === "json") || tabs[0];
+    if (!target) return;
+    const activeName = target.getAttribute("data-tab");
+    tabs.forEach((t) => {
+      const selected = t === target;
+      t.classList.toggle("active", selected);
+      t.setAttribute("aria-selected", selected ? "true" : "false");
+      t.setAttribute("tabindex", selected ? "0" : "-1");
+    });
+    if (uploadModal.tabContents) uploadModal.tabContents.forEach((content) => {
+      content.classList.toggle("active", content.id === `tab-${activeName}`);
+    });
+    if (focusTab) target.focus();
+  }
+  let uploadModalReleaseFocus = null;
+  let uploadModalOpener = null;
+  function trapUploadModalFocus(modalEl) {
+    const selector = "button, [href], input, select, textarea, [tabindex]";
+    const focusables = () => Array.from(modalEl.querySelectorAll(selector)).filter((el) => !el.disabled && el.getAttribute("tabindex") !== "-1" && el.getClientRects().length > 0 && !(el.type === "radio" && !el.checked && modalEl.querySelector(`input[type="radio"][name="${el.name}"]:checked`)));
+    const onKeyDown = (e) => {
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !modalEl.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !modalEl.contains(document.activeElement))) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    modalEl.addEventListener("keydown", onKeyDown);
+    return () => modalEl.removeEventListener("keydown", onKeyDown);
+  }
+  function openUploadModal() {
+    if (!uploadModal.overlay) return;
+    const wasOpen = uploadModal.overlay.classList.contains("show");
+    if (!wasOpen) {
+      const active = document.activeElement;
+      uploadModalOpener = active && active !== document.body ? active : null;
+    }
+    uploadModal.overlay.classList.add("show");
+    lockBodyScroll();
+    if (uploadModalReleaseFocus) uploadModalReleaseFocus();
+    const dialog = uploadModal.overlay.querySelector(".modal");
+    uploadModalReleaseFocus = dialog ? trapUploadModalFocus(dialog) : null;
+    const activeTab = uploadModal.overlay.querySelector(".modal-tab.active") || uploadModal.overlay.querySelector(".modal-tab");
+    if (activeTab) activeTab.focus();
+  }
+  function closeUploadModal() {
+    if (!uploadModal.overlay) return;
+    const wasOpen = uploadModal.overlay.classList.contains("show");
+    uploadModal.overlay.classList.remove("show");
+    [uploadModal.fileUploadAreaJSON, uploadModal.fileUploadAreaTXT].forEach((area) => {
+      if (area) area.classList.remove("drag-over");
+    });
+    unlockBodyScroll();
+    if (uploadModalReleaseFocus) {
+      uploadModalReleaseFocus();
+      uploadModalReleaseFocus = null;
+    }
+    const opener = uploadModalOpener;
+    uploadModalOpener = null;
+    if (!wasOpen) return;
+    const active = document.activeElement;
+    const focusIsFree = !active || active === document.body || uploadModal.overlay.contains(active);
+    if (focusIsFree && opener && typeof opener.focus === "function" && document.contains(opener)) {
+      opener.focus();
+    }
+  }
   if (menu.upload) menu.upload.onclick = () => {
     closeMenuOverlay();
     updateImportLocationOptions();
@@ -8571,15 +9209,13 @@ ${prefix}`;
     }
     const txtOutlineRadio = document.querySelector('input[name="txtImportMode"][value="outline"]');
     if (txtOutlineRadio) txtOutlineRadio.checked = true;
-    const lastTab = localStorage.getItem("cardspoke_lastUploadTab") || "json";
-    uploadModal.tabs.forEach((t) => t.classList.remove("active"));
-    uploadModal.tabContents.forEach((content) => content.classList.remove("active"));
-    const tabToActivate = document.querySelector(`.modal-tab[data-tab="${lastTab}"]`) || document.querySelector('.modal-tab[data-tab="json"]');
-    const contentToActivate = document.getElementById(`tab-${lastTab}`) || document.getElementById("tab-json");
-    if (tabToActivate) tabToActivate.classList.add("active");
-    if (contentToActivate) contentToActivate.classList.add("active");
-    uploadModal.overlay.classList.add("show");
-    lockBodyScroll();
+    let lastTab = "json";
+    try {
+      lastTab = localStorage.getItem("cardspoke_lastUploadTab") || "json";
+    } catch {
+    }
+    activateUploadTab(lastTab);
+    openUploadModal();
   };
   if (menu.pluginManager) menu.pluginManager.onclick = () => {
     closeMenuOverlay();
@@ -8748,49 +9384,70 @@ ${prefix}`;
   if (uploadModal.tabs) uploadModal.tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       const tabName = tab.getAttribute("data-tab");
-      uploadModal.tabs.forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      uploadModal.tabContents.forEach((content) => content.classList.remove("active"));
-      const tabContent = document.getElementById(`tab-${tabName}`);
-      if (tabContent) tabContent.classList.add("active");
-      localStorage.setItem("cardspoke_lastUploadTab", tabName);
+      activateUploadTab(tabName);
+      try {
+        localStorage.setItem("cardspoke_lastUploadTab", tabName);
+      } catch {
+      }
+    });
+    tab.addEventListener("keydown", (e) => {
+      const tabs = Array.from(uploadModal.tabs);
+      const idx = tabs.indexOf(tab);
+      let next = null;
+      if (e.key === "ArrowRight") next = tabs[(idx + 1) % tabs.length];
+      else if (e.key === "ArrowLeft") next = tabs[(idx - 1 + tabs.length) % tabs.length];
+      else if (e.key === "Home") next = tabs[0];
+      else if (e.key === "End") next = tabs[tabs.length - 1];
+      if (!next) return;
+      e.preventDefault();
+      next.click();
+      next.focus();
     });
   });
   if (uploadModal.closeBtn) uploadModal.closeBtn.onclick = () => {
-    if (uploadModal.overlay) uploadModal.overlay.classList.remove("show");
-    unlockBodyScroll();
+    closeUploadModal();
   };
-  if (uploadModal.overlay) uploadModal.overlay.onclick = (e) => {
-    if (e.target === uploadModal.overlay) {
-      uploadModal.overlay.classList.remove("show");
-      unlockBodyScroll();
-    }
-  };
-  if (uploadModal.fileUploadAreaJSON) uploadModal.fileUploadAreaJSON.onclick = () => {
-    if (uploadModal.fileInputJSON) uploadModal.fileInputJSON.click();
-  };
-  if (uploadModal.fileInputJSON) uploadModal.fileInputJSON.addEventListener("change", (e) => {
-    const file = e.target.files[0];
+  if (uploadModal.overlay) {
+    uploadModal.overlay.onclick = (e) => {
+      if (e.target === uploadModal.overlay) {
+        closeUploadModal();
+      }
+    };
+    uploadModal.overlay.addEventListener("dragover", (e) => e.preventDefault());
+    uploadModal.overlay.addEventListener("drop", (e) => e.preventDefault());
+  }
+  function isUploadFileType(file, extension, mimeTypes) {
+    if (!file) return false;
+    const name = (file.name || "").toLowerCase();
+    if (name.endsWith("." + extension)) return true;
+    return mimeTypes.includes(file.type);
+  }
+  function handleJSONUploadFile(file) {
     if (!file) return;
+    if (!isUploadFileType(file, "json", ["application/json"])) {
+      showToast("Please choose a .json file", "error");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = async () => {
       try {
         const data = JSON.parse(reader.result);
         const mode = uploadModal.importLocationSelectJSON ? uploadModal.importLocationSelectJSON.value || "root" : "root";
         await importJSON(data, mode);
-        if (uploadModal.overlay) uploadModal.overlay.classList.remove("show");
+        closeUploadModal();
       } catch (err) {
         showToast("Failed to parse JSON: " + err.message, "error");
       }
     };
+    reader.onerror = () => showToast("Could not read file", "error");
     reader.readAsText(file);
-  });
-  if (uploadModal.fileUploadAreaTXT) uploadModal.fileUploadAreaTXT.onclick = () => {
-    if (uploadModal.fileInputTXT) uploadModal.fileInputTXT.click();
-  };
-  if (uploadModal.fileInputTXT) uploadModal.fileInputTXT.addEventListener("change", (e) => {
-    const file = e.target.files[0];
+  }
+  function handleTXTUploadFile(file) {
     if (!file) return;
+    if (!isUploadFileType(file, "txt", ["text/plain"])) {
+      showToast("Please choose a .txt file", "error");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const text = reader.result;
@@ -8798,10 +9455,57 @@ ${prefix}`;
       const mode = modeRadio ? modeRadio.value : "outline";
       const location2 = uploadModal.importLocationSelectTXT ? uploadModal.importLocationSelectTXT.value || "root" : "root";
       importTXT(text, mode, location2);
-      if (uploadModal.overlay) uploadModal.overlay.classList.remove("show");
+      closeUploadModal();
     };
+    reader.onerror = () => showToast("Could not read file", "error");
     reader.readAsText(file);
-  });
+  }
+  function bindUploadArea(area, input, handleFile) {
+    if (!area) return;
+    area.onclick = () => {
+      if (input) input.click();
+    };
+    const isSpace = (e) => e.key === " " || e.key === "Spacebar";
+    area.addEventListener("keydown", (e) => {
+      if (e.target !== area) return;
+      if (e.key === "Enter" && !e.repeat) {
+        if (input) input.click();
+      } else if (isSpace(e)) {
+        e.preventDefault();
+      }
+    });
+    area.addEventListener("keyup", (e) => {
+      if (e.target !== area) return;
+      if (isSpace(e) && input) input.click();
+    });
+    area.addEventListener("dragenter", (e) => {
+      e.preventDefault();
+      area.classList.add("drag-over");
+    });
+    area.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      area.classList.add("drag-over");
+    });
+    area.addEventListener("dragleave", (e) => {
+      if (e.relatedTarget && area.contains(e.relatedTarget)) return;
+      area.classList.remove("drag-over");
+    });
+    area.addEventListener("drop", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      area.classList.remove("drag-over");
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length) handleFile(files[0]);
+    });
+    if (input) input.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      handleFile(file);
+    });
+  }
+  bindUploadArea(uploadModal.fileUploadAreaJSON, uploadModal.fileInputJSON, handleJSONUploadFile);
+  bindUploadArea(uploadModal.fileUploadAreaTXT, uploadModal.fileInputTXT, handleTXTUploadFile);
   function pushUndo(action, data) {
     if (undoGroupState.active) {
       undoGroupState.actions.push({ action, data, timestamp: Date.now() });
@@ -8877,26 +9581,69 @@ ${prefix}`;
       return false;
     }
   }
+  function restoreCardIntoTree(cardData) {
+    if (!cardData || !cardData.id) return;
+    const id = cardData.id;
+    const restored = typeof cloneCard === "function" ? cloneCard(cardData) : cardData;
+    store.cards[id] = restored;
+    if (!Array.isArray(store.rootOrder)) store.rootOrder = [];
+    const parent = restored.parentId ? store.cards[restored.parentId] : null;
+    if (parent) {
+      if (!Array.isArray(parent.children)) parent.children = [];
+      if (!parent.children.includes(id)) parent.children.push(id);
+      store.rootOrder = store.rootOrder.filter((c) => c !== id);
+    } else if (!store.rootOrder.includes(id)) {
+      store.rootOrder.push(id);
+    }
+    (restored.children || []).forEach((childId) => {
+      const child = store.cards[childId];
+      if (child && child.parentId === id && store.rootOrder.includes(childId)) {
+        store.rootOrder = store.rootOrder.filter((c) => c !== childId);
+      }
+    });
+    const trashIndex = trashBin.findIndex((t) => t && t.card && t.card.id === id);
+    if (trashIndex > -1) trashBin.splice(trashIndex, 1);
+  }
+  const UNDO_STRUCTURAL_FIELDS = ["id", "parentId", "children", "createdAt"];
+  function applyCardContentState(cardId, state, otherState) {
+    const target = store.cards[cardId];
+    if (!target || !state) return;
+    Object.keys(state).forEach((key) => {
+      if (UNDO_STRUCTURAL_FIELDS.includes(key)) return;
+      target[key] = state[key] && typeof state[key] === "object" ? JSON.parse(JSON.stringify(state[key])) : state[key];
+    });
+    if (otherState) {
+      Object.keys(otherState).forEach((key) => {
+        if (!UNDO_STRUCTURAL_FIELDS.includes(key) && !(key in state)) delete target[key];
+      });
+    }
+  }
+  function purgeUndoEntriesForCards(cardIds) {
+    const ids = new Set((cardIds || []).filter(Boolean));
+    if (!ids.size) return;
+    const resurrects = (entry) => entry && entry.action === "deleteCard" && entry.data && entry.data.card && ids.has(entry.data.card.id);
+    [undoStack, redoStack].forEach((stack) => {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const entry = stack[i];
+        if (entry && entry.action === "undoGroup" && entry.data && Array.isArray(entry.data.actions)) {
+          entry.data.actions = entry.data.actions.filter((a) => !resurrects(a));
+          if (!entry.data.actions.length) stack.splice(i, 1);
+        } else if (resurrects(entry)) {
+          stack.splice(i, 1);
+        }
+      }
+    });
+    if (undoGroupState.active) {
+      undoGroupState.actions = undoGroupState.actions.filter((a) => !resurrects(a));
+    }
+  }
   function applyUndoAction(action) {
     switch (action.action) {
       case "deleteCard":
-        const cardData = action.data.card;
-        store.cards[cardData.id] = cardData;
-        const undelParent = cardData.parentId ? store.cards[cardData.parentId] : null;
-        if (undelParent) {
-          if (Array.isArray(undelParent.children) && !undelParent.children.includes(cardData.id)) {
-            undelParent.children.push(cardData.id);
-          }
-        } else {
-          if (!store.rootOrder.includes(cardData.id)) {
-            store.rootOrder.push(cardData.id);
-          }
-        }
-        const trashIndex = trashBin.findIndex((t) => t.card.id === cardData.id);
-        if (trashIndex > -1) trashBin.splice(trashIndex, 1);
+        restoreCardIntoTree(action.data.card);
         break;
       case "updateCard":
-        Object.assign(store.cards[action.data.cardId], action.data.previousState);
+        applyCardContentState(action.data.cardId, action.data.previousState, action.data.newState);
         break;
       case "createCard":
         const card = store.cards[action.data.cardId];
@@ -8986,10 +9733,10 @@ ${prefix}`;
         }
         break;
       case "updateCard":
-        Object.assign(store.cards[action.data.cardId], action.data.newState);
+        applyCardContentState(action.data.cardId, action.data.newState, action.data.previousState);
         break;
       case "createCard":
-        const newCard = action.data.card;
+        const newCard = typeof cloneCard === "function" ? cloneCard(action.data.card) : action.data.card;
         store.cards[newCard.id] = newCard;
         if (newCard.parentId) {
           const parent = store.cards[newCard.parentId];
@@ -9068,18 +9815,9 @@ ${prefix}`;
         const restoreBtn = h("button", {
           className: "btn btn-primary",
           onclick: () => {
-            store.cards[item.card.id] = item.card;
-            if (item.card.parentId) {
-              const parent = store.cards[item.card.parentId];
-              if (parent && !parent.children.includes(item.card.id)) {
-                parent.children.push(item.card.id);
-              }
-            } else {
-              if (!store.rootOrder.includes(item.card.id)) {
-                store.rootOrder.push(item.card.id);
-              }
-            }
-            trashBin.splice(index, 1);
+            restoreCardIntoTree(item.card);
+            const staleIndex = trashBin.indexOf(item);
+            if (staleIndex > -1) trashBin.splice(staleIndex, 1);
             save();
             overlay.remove();
             showTrashBin();
@@ -9097,7 +9835,9 @@ ${prefix}`;
               cancelLabel: "Cancel",
               confirmClassName: "btn btn-danger"
             })) {
-              trashBin.splice(index, 1);
+              const removeIndex = trashBin.indexOf(item);
+              if (removeIndex > -1) trashBin.splice(removeIndex, 1);
+              purgeUndoEntriesForCards([item.card.id]);
               overlay.remove();
               showTrashBin();
               showToast("Card permanently deleted");
@@ -9118,6 +9858,7 @@ ${prefix}`;
             cancelLabel: "Cancel",
             confirmClassName: "btn btn-danger"
           })) {
+            purgeUndoEntriesForCards(trashBin.map((t) => t && t.card && t.card.id));
             trashBin.length = 0;
             overlay.remove();
             showToast("Trash emptied");
@@ -9134,14 +9875,14 @@ ${prefix}`;
     };
   }
   function renameTag(oldTag, newTag) {
-    const normalizedOld = oldTag.replace(/^#/, "").toLowerCase().trim();
-    const normalizedNew = newTag.replace(/^#/, "").toLowerCase().trim();
+    const normalizedOld = normalizeTag(oldTag);
+    const normalizedNew = normalizeTag(newTag);
     if (!normalizedOld || !normalizedNew) return 0;
     if (normalizedOld === normalizedNew) return 0;
     let count = 0;
     Object.values(store.cards).forEach((card) => {
-      if (card.tags && card.tags.includes(normalizedOld)) {
-        card.tags = card.tags.map((t) => t === normalizedOld ? normalizedNew : t);
+      if (Array.isArray(card.tags) && card.tags.some((t) => normalizeTag(t) === normalizedOld)) {
+        card.tags = card.tags.map((t) => normalizeTag(t) === normalizedOld ? normalizedNew : t);
         card.tags = [...new Set(card.tags)];
         card.updatedAt = Date.now();
         count++;
@@ -9154,12 +9895,12 @@ ${prefix}`;
     return renameTag(tag1, tag2);
   }
   function deleteTagGlobal(tag) {
-    const normalizedTag = tag.replace(/^#/, "").toLowerCase().trim();
+    const normalizedTag = normalizeTag(tag);
     if (!normalizedTag) return 0;
     let count = 0;
     Object.values(store.cards).forEach((card) => {
-      if (card.tags && card.tags.includes(normalizedTag)) {
-        card.tags = card.tags.filter((t) => t !== normalizedTag);
+      if (Array.isArray(card.tags) && card.tags.some((t) => normalizeTag(t) === normalizedTag)) {
+        card.tags = card.tags.filter((t) => normalizeTag(t) !== normalizedTag);
         card.updatedAt = Date.now();
         count++;
       }
@@ -9170,8 +9911,8 @@ ${prefix}`;
   function getTagStats() {
     const tagCounts = {};
     Object.values(store.cards).forEach((card) => {
-      if (card.tags) {
-        card.tags.forEach((tag) => {
+      if (Array.isArray(card.tags)) {
+        new Set(card.tags.map(normalizeTag).filter(Boolean)).forEach((tag) => {
           tagCounts[tag] = (tagCounts[tag] || 0) + 1;
         });
       }
@@ -9266,7 +10007,7 @@ ${prefix}`;
               confirmLabel: "Merge",
               cancelLabel: "Cancel"
             });
-            if (targetTag && otherTags.includes(targetTag.trim().toLowerCase())) {
+            if (targetTag && otherTags.includes(normalizeTag(targetTag))) {
               const affected = mergeTags(tag, targetTag.trim());
               if (affected > 0) {
                 showToast('Merged "' + tag + '" into "' + targetTag.trim() + '" (' + affected + " card(s))");
@@ -9424,10 +10165,13 @@ ${prefix}`;
   function showPluginStore() {
     showPluginManager("install");
   }
-  function bulkExportCards(cardIds, format) {
+  async function bulkExportCards(cardIds, format) {
     format = format || "json";
     if (!cardIds || cardIds.length === 0) {
       showToast("No cards selected for export", "error");
+      return;
+    }
+    if (typeof confirmUnencryptedExport === "function" && !await confirmUnencryptedExport(format === "markdown" ? "Markdown" : format.toUpperCase())) {
       return;
     }
     const exportCards = {};
@@ -9737,8 +10481,12 @@ ${prefix}`;
       return;
     }
     if (uploadModal.overlay.classList.contains("show")) {
-      uploadModal.overlay.classList.remove("show");
-      if (typeof unlockBodyScroll === "function") unlockBodyScroll();
+      if (typeof closeUploadModal === "function") {
+        closeUploadModal();
+      } else {
+        uploadModal.overlay.classList.remove("show");
+        if (typeof unlockBodyScroll === "function") unlockBodyScroll();
+      }
       return;
     }
     const helpModal = document.getElementById("keyboardHelpModal");
@@ -10419,6 +11167,7 @@ ${prefix}`;
                 h("a", {
                   href: "https://github.com/jxburros/CardSpoke/wiki/Language-Packs",
                   target: "_blank",
+                  rel: "noopener noreferrer",
                   style: "color: var(--primary);"
                 }, "CardSpoke Language Packs")
               )
@@ -10431,9 +11180,9 @@ ${prefix}`;
               h(
                 "p",
                 { style: "font-size: var(--text-sm);" },
-                h("a", { href: "https://github.com/jxburros/CardSpoke", target: "_blank", style: "color: var(--primary);" }, "GitHub"),
+                h("a", { href: "https://github.com/jxburros/CardSpoke", target: "_blank", rel: "noopener noreferrer", style: "color: var(--primary);" }, "GitHub"),
                 " · ",
-                h("a", { href: "https://github.com/jxburros/CardSpoke/blob/main/README.md", target: "_blank", style: "color: var(--primary);" }, "Documentation")
+                h("a", { href: "https://github.com/jxburros/CardSpoke/blob/main/README.md", target: "_blank", rel: "noopener noreferrer", style: "color: var(--primary);" }, "Documentation")
               )
             )
           )
@@ -10535,7 +11284,11 @@ ${prefix}`;
       }
       return;
     }
-    let key = e.key.toLowerCase();
+    let key = (e.key || "").toLowerCase();
+    if (e.altKey && !/^[a-z]$/.test(key)) {
+      const codeMatch = /^Key([A-Z])$/.exec(e.code || "");
+      if (codeMatch) key = codeMatch[1].toLowerCase();
+    }
     if (e.ctrlKey || e.metaKey) key = "ctrl+" + key;
     if (e.altKey) key = "alt+" + key;
     const shortcut = shortcuts[key];

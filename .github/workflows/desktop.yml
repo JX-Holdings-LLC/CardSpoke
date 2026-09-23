@@ -1,0 +1,161 @@
+name: Desktop app
+
+# Builds the Electron desktop app and its installers:
+#   Windows  -> NSIS installer (.exe, x64 + arm64)
+#   macOS    -> .dmg and .zip (x64 + arm64)
+#   Linux    -> AppImage and .deb (x64)
+#
+# Pull requests that touch the desktop shell get a Linux build + smoke test.
+# Pushing a v* tag (or running the workflow manually with "release" checked)
+# builds every platform and attaches the installers to a draft GitHub Release.
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop.yml'
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Upload installers to a draft GitHub Release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: [self-hosted, Linux, X64]
+            target: --linux
+            pr: true
+          - name: Windows
+            os: windows-latest
+            target: --win
+            pr: false
+          - name: macOS
+            os: macos-latest
+            target: --mac
+            pr: false
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - name: Skip non-Linux builds on pull requests
+        id: gate
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ matrix.pr }}" != "true" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      - name: Install web app dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: npm ci
+
+      - name: Install desktop dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: npm ci
+        working-directory: desktop
+
+      - name: Desktop unit tests
+        if: steps.gate.outputs.run == 'true'
+        run: npm test
+        working-directory: desktop
+
+      - name: Build web bundle for the desktop app
+        if: steps.gate.outputs.run == 'true'
+        run: node scripts/prepare-web.mjs
+        working-directory: desktop
+
+      # Unsigned builds by default. To sign, add repository secrets:
+      #   Windows: WIN_CSC_LINK (base64 .pfx) + WIN_CSC_KEY_PASSWORD
+      #   macOS:   CSC_LINK (base64 .p12) + CSC_KEY_PASSWORD, and for
+      #            notarization APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER
+      # Without a macOS certificate the app is ad-hoc signed so it still
+      # launches on Apple silicon (users confirm it once via right-click > Open).
+      - name: Build installers
+        if: steps.gate.outputs.run == 'true'
+        shell: bash
+        working-directory: desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          publish=never
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event.inputs.release }}" = "true" ]; then
+            publish=always
+          fi
+          extra=()
+          if [ "${{ runner.os }}" = "macOS" ] && [ -z "$CSC_LINK" ]; then
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            extra+=(-c.mac.identity=- -c.mac.hardenedRuntime=false)
+          fi
+          # Empty secrets must not be passed through as empty strings.
+          for v in CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            [ -z "${!v}" ] && unset "$v"
+          done
+          npx electron-builder ${{ matrix.target }} --publish "$publish" "${extra[@]}"
+
+      - name: Smoke test the packaged app (Linux)
+        if: steps.gate.outputs.run == 'true' && runner.os == 'Linux'
+        working-directory: desktop
+        run: |
+          if command -v xvfb-run >/dev/null; then
+            xvfb-run -a node scripts/smoke.mjs --packaged release/linux-unpacked/cardspoke
+          else
+            echo "::warning::xvfb-run not available on this runner; skipping the packaged-app smoke test"
+          fi
+
+      - name: Smoke test the packaged app (Windows)
+        if: steps.gate.outputs.run == 'true' && runner.os == 'Windows'
+        working-directory: desktop
+        run: node scripts/smoke.mjs --packaged release/win-unpacked/CardSpoke.exe
+
+      - name: Upload installers
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardspoke-desktop-${{ runner.os }}
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.dmg
+            desktop/release/*.zip
+            desktop/release/*.AppImage
+            desktop/release/*.deb
+            desktop/release/latest*.yml
+          if-no-files-found: error

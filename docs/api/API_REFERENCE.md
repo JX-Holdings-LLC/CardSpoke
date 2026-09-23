@@ -4,7 +4,7 @@ This reference documents the surfaces plugin developers can rely on. It
 consolidates the runtime contracts assembled by
 `www/src/core/global-api.js` and consumed across `www/src/`.
 
-**Current Version:** 0.20.0 | **Schema Version:** 4
+**Current Version:** 0.21.1 | **Schema Version:** 4
 
 For the narrative guide, worked examples, and lifecycle walkthrough see
 [`../architecture/PLUGIN_SYSTEM.md`](../architecture/PLUGIN_SYSTEM.md). For the stability contract (what
@@ -107,7 +107,7 @@ real `setup`/`teardown` functions via `registerPlugin` — but only string
 ## Plugin context (`ctx`)
 
 - **`ctx.modId`** — the plugin id.
-- **`ctx.appVersion`** — `'0.20.0'`.
+- **`ctx.appVersion`** — `'0.21.1'`.
 - **`ctx.schemaVersion`** — `4`.
 - **`ctx.config`** — live `manifest.config` object (the settings panel writes
   here). Present when the manifest declares `config`.

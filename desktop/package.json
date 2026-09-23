@@ -1,0 +1,135 @@
+{
+  "name": "cardspoke-desktop",
+  "private": true,
+  "productName": "CardSpoke",
+  "version": "0.21.1",
+  "description": "A lightweight, local-first card-based knowledge app",
+  "main": "main.js",
+  "author": "Jeffrey Guntly <https://github.com/jxburros>",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/JX-Holdings-LLC/CardSpoke",
+  "scripts": {
+    "prepare:web": "node scripts/prepare-web.mjs",
+    "start": "node scripts/prepare-web.mjs && electron .",
+    "start:dev": "electron .",
+    "test": "node --test test/url-policy.test.js test/window-state.test.js",
+    "icon": "node scripts/render-icon.mjs",
+    "dist": "node scripts/prepare-web.mjs && electron-builder --publish never",
+    "dist:win": "node scripts/prepare-web.mjs && electron-builder --win --publish never",
+    "dist:mac": "node scripts/prepare-web.mjs && electron-builder --mac --publish never",
+    "dist:linux": "node scripts/prepare-web.mjs && electron-builder --linux --publish never",
+    "pack": "node scripts/prepare-web.mjs && electron-builder --dir --publish never",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.cardspoke.app",
+    "productName": "CardSpoke",
+    "copyright": "Copyright © 2026 Jeffrey Guntly (JX Holdings, LLC)",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "web/**/*",
+      "build/icon.png",
+      "package.json",
+      "!**/*.map"
+    ],
+    "extraMetadata": {
+      "main": "main.js"
+    },
+    "asar": true,
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CardSpoke",
+      "deleteAppDataOnUninstall": false,
+      "license": "../LICENSE"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "hardenedRuntime": true
+    },
+    "dmg": {
+      "title": "CardSpoke ${version}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Office",
+      "icon": "build/icons",
+      "synopsis": "Local-first card-based knowledge app",
+      "maintainer": "JX Holdings, LLC <https://jxholdings.com>",
+      "executableName": "cardspoke"
+    },
+    "deb": {
+      "packageCategory": "editors",
+      "packageName": "cardspoke"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "JX-Holdings-LLC",
+        "repo": "CardSpoke",
+        "releaseType": "draft"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JX-Holdings-LLC/CardSpoke.git"
+  }
+}

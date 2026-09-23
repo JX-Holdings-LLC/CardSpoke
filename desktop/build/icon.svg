@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- CardSpoke app icon: the linked-cards glyph from CardSpoke.svg on a
+       rounded tile (macOS-style 824px tile with a 100px safe margin). -->
+  <rect x="100" y="100" width="824" height="824" rx="184" fill="#111111"/>
+  <g fill="none" stroke="#ffffff" stroke-width="30" stroke-linejoin="miter">
+    <!-- spokes -->
+    <path d="M395 330 H470 V250 H760 V300"/>
+    <path d="M330 520 V580 H440"/>
+    <path d="M555 690 V770 H770 V650"/>
+    <!-- cards -->
+    <rect x="235" y="250" width="160" height="270"/>
+    <rect x="610" y="300" width="200" height="350" fill="#111111"/>
+    <rect x="440" y="500" width="190" height="190" fill="#111111"/>
+  </g>
+</svg>

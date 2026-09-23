@@ -60,6 +60,10 @@ if (existsSync(resolve(ROOT, 'dist/app.js'))) {
   check('dist/index.html exists (preview serves the app, not a 404)',
     existsSync(resolve(ROOT, 'dist/index.html')));
   check('dist/styles.css exists', existsSync(resolve(ROOT, 'dist/styles.css')));
+  // Dev-only harnesses must not ship in the built site.
+  for (const devPage of ['diagnostic.html', 'test.html']) {
+    check(`dist/${devPage} is not part of the built site`, !existsSync(resolve(ROOT, 'dist', devPage)));
+  }
 }
 
 // ── Bundle sanity ────────────────────────────────────────────────────────
@@ -109,6 +113,15 @@ check(`service-worker cache version (${swVersion}) matches package.json (${pkg.v
 const capabilities = JSON.parse(read('www/capabilities.json'));
 check(`capabilities.json version (${capabilities.version}) matches package.json (${pkg.version})`,
   capabilities.version === pkg.version);
+
+// The desktop installers are labelled with desktop/package.json's version
+// (desktop/scripts/prepare-web.mjs keeps it in sync on every desktop build).
+const desktopPkg = JSON.parse(read('desktop/package.json'));
+const desktopLock = JSON.parse(read('desktop/package-lock.json'));
+check(`desktop/package.json version (${desktopPkg.version}) matches package.json (${pkg.version})`,
+  desktopPkg.version === pkg.version);
+check(`desktop/package-lock.json version (${desktopLock.version}) matches package.json (${pkg.version})`,
+  desktopLock.version === pkg.version);
 
 check('footer links to the canonical CardSpoke repository',
   indexHtml.includes('href="https://github.com/jxburros/CardSpoke"'));

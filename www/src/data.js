@@ -85,15 +85,8 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         // Undo support
         pushUndo('createCard', { cardId: result.id, card: result.card });
         if (!skipSave) save();
-        // Fire middleware event for plugins (Task 1.1)
-        if (!skipHooks && window.CardSpoke && window.CardSpoke.Middleware) {
-          window.CardSpoke.Middleware.run('card.create', [result.id, store.cards[result.id]])
-            .catch(err => console.error('[Middleware] card.create error:', err));
-        }
-        // Notify plugin data-update listeners (ctx.api.data.onUpdate)
-        if (!skipHooks && window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.notifyDataUpdate) {
-          window.CardSpoke.Plugin.notifyDataUpdate({ type: 'card.create', cardId: result.id, card: store.cards[result.id] });
-        }
+        // Fire middleware event + data-update listeners for plugins (Task 1.1)
+        if (!skipHooks) runCardHooks('card.create', result.id);
         return result.id;
       }
 
@@ -106,26 +99,108 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
        */
       function updateCard(id, updates, skipSave = false, skipHooks = false) {
         _syncStoreToKernel();
-        const result = _kernel.updateCard(id, updates);
-        if (!result.previousState) return;
-        _syncKernelToStore();
+        const before = _kernel.getCard(id);
+        if (!before) return;
 
-        // Undo support
-        pushUndo('updateCard', {
+        // [[Title]] links resolve by title. When a rename changes what the
+        // old title resolves to, rewrite the links so they keep pointing at
+        // this card — but only if the old title identified this card alone
+        // (with duplicates, the links may mean another card).
+        const newTitle = updates && typeof updates.title === 'string' ? updates.title : null;
+        const renameLinks = newTitle !== null && !!before.title &&
+          normalizeCardName(newTitle) !== normalizeCardName(before.title) &&
+          !!normalizeCardName(newTitle) &&
+          _kernel.findCardsByName(before.title).length === 1;
+
+        // One undo group: a single Undo reverts the rename AND the rewrites.
+        const grouped = renameLinks && window.startUndoGroup && window.startUndoGroup('rename card');
+        let linkChanges = [];
+        try {
+          const result = _kernel.updateCard(id, updates);
+          if (!result.previousState) return;
+
+          // Undo support
+          pushUndo('updateCard', {
+            cardId: id,
+            previousState: result.previousState,
+            newState: result.card
+          });
+
+          if (renameLinks) {
+            linkChanges = _kernel.rewriteCardLinks(before.title, result.card.title);
+            linkChanges.forEach(change => {
+              pushUndo('updateCard', {
+                cardId: change.id,
+                previousState: change.previousState,
+                newState: change.card
+              });
+            });
+          }
+          _syncKernelToStore();
+        } finally {
+          if (grouped && window.endUndoGroup) window.endUndoGroup();
+        }
+
+        if (!skipSave) save();
+        if (!skipHooks) {
+          runCardHooks('card.update', id);
+          // Link rewrites are real edits of other cards: plugins observe
+          // them like any other update.
+          linkChanges.forEach(change => {
+            if (change.id !== id) runCardHooks('card.update', change.id);
+          });
+        }
+        if (linkChanges.length && typeof showToast === 'function') {
+          const others = linkChanges.filter(c => c.id !== id).length;
+          if (others > 0) showToast(`Updated links in ${others} card${others === 1 ? '' : 's'}`, 'info');
+        }
+      }
+
+      /**
+       * Fire the plugin-facing hooks for a card change: the middleware
+       * pipeline (card.create / card.update) and ctx.api.data.onUpdate
+       * listeners. Shared by the CRUD wrappers and the edit form, which
+       * applies several low-level writes but should notify plugins once.
+       * @param {'card.create'|'card.update'} operation
+       * @param {string} cardId
+       */
+      function runCardHooks(operation, cardId) {
+        if (!store.cards[cardId]) return;
+        if (window.CardSpoke && window.CardSpoke.Middleware) {
+          window.CardSpoke.Middleware.run(operation, [cardId, store.cards[cardId]])
+            .catch(err => console.error('[Middleware] ' + operation + ' error:', err));
+        }
+        if (window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.notifyDataUpdate) {
+          window.CardSpoke.Plugin.notifyDataUpdate({ type: operation, cardId, card: store.cards[cardId] });
+        }
+      }
+
+      /**
+       * Move a card under a new parent (or to root with null) through the
+       * kernel's reparent — which keeps parent.children, rootOrder and
+       * card.parentId consistent and refuses cycles — and record an
+       * undoable moveCard entry.
+       * @param {string} id
+       * @param {string|null} newParentId
+       * @param {boolean} [skipSave=false]
+       * @returns {boolean} True if the card moved.
+       */
+      function moveCard(id, newParentId, skipSave = false) {
+        _syncStoreToKernel();
+        const card = _kernel.getCard(id);
+        if (!card) return false;
+        const target = newParentId || null;
+        if ((card.parentId || null) === target) return false;
+        const result = _kernel.reparent(id, target);
+        if (!result.success) return false;
+        _syncKernelToStore();
+        pushUndo('moveCard', {
           cardId: id,
-          previousState: result.previousState,
-          newState: result.card
+          originalParentId: result.previousParentId || null,
+          newParentId: target
         });
         if (!skipSave) save();
-        // Fire middleware event for plugins (Task 1.1)
-        if (!skipHooks && window.CardSpoke && window.CardSpoke.Middleware) {
-          window.CardSpoke.Middleware.run('card.update', [id, store.cards[id]])
-            .catch(err => console.error('[Middleware] card.update error:', err));
-        }
-        // Notify plugin data-update listeners (ctx.api.data.onUpdate)
-        if (!skipHooks && window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.notifyDataUpdate) {
-          window.CardSpoke.Plugin.notifyDataUpdate({ type: 'card.update', cardId: id, card: store.cards[id] });
-        }
+        return true;
       }
 
       /**
@@ -483,7 +558,35 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         };
       }
 
-      function exportJSON(type = 'instance') {
+      /** The active dataset's session PIN, or null when it is not PIN-protected. */
+      function getActiveExportPin() {
+        return (typeof getSessionPin === 'function' && getSessionPin()) || null;
+      }
+
+      /**
+       * Plaintext exports of a PIN-protected dataset defeat its encryption.
+       * Require an explicit acknowledgement before writing one. Resolves
+       * true immediately for unprotected datasets.
+       * @param {string} formatLabel - e.g. 'TXT', 'Markdown', 'CSV'
+       * @returns {Promise<boolean>}
+       */
+      async function confirmUnencryptedExport(formatLabel) {
+        if (!getActiveExportPin()) return true;
+        if (typeof showConfirmDialog !== 'function') return false;
+        return !!(await showConfirmDialog(
+          `This dataset is PIN-protected, but ${formatLabel} exports are NOT encrypted.\n\n` +
+          'Anyone who gets the exported file can read these cards without the PIN.\n\n' +
+          'Export an unencrypted copy anyway?',
+          {
+            title: 'Unencrypted Export',
+            confirmLabel: 'Export Unencrypted',
+            cancelLabel: 'Cancel',
+            confirmClassName: 'btn btn-danger'
+          }
+        ));
+      }
+
+      async function exportJSON(type = 'instance') {
         let data;
         if (type === 'instance') {
           data = buildInstanceExport();
@@ -496,6 +599,35 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
             timestamp: Date.now(),
             plugins: store.plugins
           };
+        }
+        // A PIN-protected dataset's backup would otherwise leave the device
+        // as plaintext. Offer an encrypted backup (same envelope format as
+        // the stored dataset; importJSON prompts for the PIN) by default.
+        const pin = type === 'instance' ? getActiveExportPin() : null;
+        if (pin) {
+          const choice = typeof showChoiceDialog === 'function'
+            ? await showChoiceDialog(
+                'This dataset is PIN-protected.\n\n' +
+                'An encrypted backup can only be imported with the dataset PIN. ' +
+                'An unencrypted backup can be read by anyone who gets the file.',
+                {
+                  title: 'Export PIN-Protected Dataset',
+                  dismissValue: 'cancel',
+                  actions: [
+                    { label: 'Cancel', value: 'cancel', className: 'btn' },
+                    { label: 'Export Unencrypted', value: 'plaintext', className: 'btn btn-danger' },
+                    { label: 'Export Encrypted', value: 'encrypted', className: 'btn btn-primary', autoFocus: true }
+                  ]
+                }
+              )
+            : 'encrypted';
+          if (choice === 'encrypted') {
+            const envelope = await encryptStorePayload(JSON.stringify(data), pin);
+            const encBlob = new Blob([envelope], { type: 'application/json' });
+            downloadWithFeedback(encBlob, `cardspoke-${type}-${Date.now()}.encrypted.json`, 'Encrypted JSON');
+            return;
+          }
+          if (choice !== 'plaintext') return;
         }
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const filename = `cardspoke-${type}-${Date.now()}.json`;
@@ -569,7 +701,8 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         setTimeout(() => URL.revokeObjectURL(url), 60000);
       }
 
-      function exportTXT() {
+      async function exportTXT() {
+        if (!(await confirmUnencryptedExport('TXT'))) return;
         let text = '# CardSpoke Export\n\n';
         function writeCard(cardId, depth = 0) {
           const card = store.cards[cardId];
@@ -592,7 +725,8 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
       /**
        * Export cards to Markdown format with hierarchy
        */
-      function exportMarkdown() {
+      async function exportMarkdown() {
+        if (!(await confirmUnencryptedExport('Markdown'))) return;
         let markdown = '# CardSpoke Export\n\n';
         markdown += `*Exported: ${new Date().toLocaleString()}*\n\n`;
         markdown += '---\n\n';
@@ -633,7 +767,8 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         return '"' + text.replace(/"/g, '""') + '"';
       }
 
-      function exportCSV() {
+      async function exportCSV() {
+        if (!(await confirmUnencryptedExport('CSV'))) return;
         let csv = 'ID,Title,Body,Parent ID,Tags,Children Count,Created,Updated\n';
         Object.values(store.cards).forEach(card => {
           csv += [card.id || '', card.title || '', card.body || '', card.parentId || '',
@@ -650,16 +785,67 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         else if (type === 'plugins-json') exportJSON('plugins');
       }
 
-      async function importJSON(data, mode = 'root') {
-        const groupedUndo = window.startUndoGroup && window.startUndoGroup('importJSON');
-        try {
-          let pkg;
+      /**
+       * Decrypt an encrypted backup envelope (from an encrypted export or a
+       * locked dataset's "Download encrypted backup"). Tries the current
+       * session PIN silently first, then prompts in a retry loop like the
+       * dataset unlock flow. Resolves the parsed package, or null when the
+       * user cancels.
+       * @param {Object} envelope
+       * @returns {Promise<Object|null>}
+       */
+      async function decryptImportEnvelope(envelope) {
+        const raw = JSON.stringify(envelope);
+        const sessionPin = getActiveExportPin();
+        if (sessionPin) {
           try {
-            pkg = typeof data === 'string' ? JSON.parse(data) : data;
-          } catch (err) {
-            showToast('Invalid JSON: ' + err.message, 'error');
-            throw new Error('Failed to parse JSON: ' + err.message);
+            return JSON.parse(await decryptStorePayload(raw, sessionPin));
+          } catch (_err) {
+            // Different PIN than the open dataset — ask the user.
           }
+        }
+        if (typeof showPromptDialog !== 'function') return null;
+        let attempt = 0;
+        for (;;) {
+          const pin = await showPromptDialog({
+            title: 'Encrypted Backup',
+            message: attempt === 0
+              ? 'This backup is encrypted. Enter the PIN of the dataset it was exported from.'
+              : 'Incorrect PIN. Please try again.',
+            label: 'PIN',
+            type: 'password',
+            confirmLabel: 'Decrypt',
+            cancelLabel: 'Cancel'
+          });
+          if (pin === null || pin === undefined) return null;
+          attempt++;
+          if (!pin.trim()) continue;
+          try {
+            return JSON.parse(await decryptStorePayload(raw, pin));
+          } catch (_err) {
+            console.warn('[Import] Backup decryption attempt failed');
+          }
+        }
+      }
+
+      async function importJSON(data, mode = 'root') {
+        let pkg;
+        try {
+          pkg = typeof data === 'string' ? JSON.parse(data) : data;
+        } catch (err) {
+          showToast('Invalid JSON: ' + err.message, 'error');
+          throw new Error('Failed to parse JSON: ' + err.message);
+        }
+
+        // Encrypted backups (#372) are decrypted with the dataset PIN first.
+        if (isEncryptedEnvelope(pkg)) {
+          const decrypted = await decryptImportEnvelope(pkg);
+          if (!decrypted) {
+            showToast('Import cancelled — the encrypted backup was not unlocked', 'info');
+            return false;
+          }
+          pkg = decrypted;
+        }
 
         // Security: Validate import data structure
         if (!pkg || typeof pkg !== 'object') {
@@ -744,15 +930,25 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           importedIds.push(newId);
         });
         
+        // Only references INSIDE the import survive the remap. An unmapped
+        // id could collide with an unrelated existing card and graft the
+        // import onto it (or reparent it to root) — drop it instead.
         Object.values(remappedCards).forEach(card => {
-          card.children = (card.children || []).map(cid => idMap[cid] || cid);
-          if (card.parentId && idMap[card.parentId]) {
-            card.parentId = idMap[card.parentId];
-          }
+          card.children = (Array.isArray(card.children) ? card.children : [])
+            .map(cid => idMap[cid])
+            .filter(Boolean);
+          card.parentId = (card.parentId && idMap[card.parentId]) || null;
         });
-        
-        const remappedRootIds = (pkg.rootIds || []).map(id => idMap[id] || id);
-        
+
+        // rootIds (instance backups) or rootOrder (a raw dataset payload,
+        // e.g. a decrypted "encrypted backup"), plus any parentless card.
+        const declaredRootIds = Array.isArray(pkg.rootIds) ? pkg.rootIds
+          : (Array.isArray(pkg.rootOrder) ? pkg.rootOrder : []);
+        const remappedRootIds = declaredRootIds.map(id => idMap[id]).filter(Boolean);
+        importedIds.forEach(id => {
+          if (!remappedCards[id].parentId && !remappedRootIds.includes(id)) remappedRootIds.push(id);
+        });
+
         Object.values(remappedCards).forEach(card => {
           store.cards[card.id] = card;
         });
@@ -787,12 +983,16 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           // export/import silently break plugins (CS-005). Legacy-shape
           // entries ({js, css, meta}) are upgraded to a definition so they
           // become runnable again; they stay suspended until enabled.
+          // SECURITY: imported plugin code never auto-enables, whatever the
+          // backup's `enabled` flag says — the user must enable it
+          // explicitly through the Plugin Manager's consent gates.
+          if (!store.plugins || typeof store.plugins !== 'object') store.plugins = {};
           Object.entries(pkg.plugins).forEach(([modId, plugin]) => {
             if (store.plugins[modId] || !plugin || typeof plugin !== 'object') return;
             if (plugin.definition && plugin.definition.manifest) {
               store.plugins[modId] = {
                 definition: plugin.definition,
-                enabled: !!plugin.enabled
+                enabled: false
               };
             } else if (plugin.js || plugin.css || plugin.meta || plugin.manifest) {
               const meta = plugin.meta || plugin.manifest || {};
@@ -885,13 +1085,37 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           console.warn('[Import] Consistency repair skipped:', err);
         }
 
-        save();
-        
-        showToast(`Imported ${Object.keys(remappedCards).length} cards`);
-        render();
+        // Make the import undoable as ONE step: a createCard entry per
+        // imported card, parents before children (the group replays in
+        // reverse on Undo, so children are removed first; Redo replays in
+        // order, so parents exist before children re-attach). The group is
+        // opened only here — synchronously — so edits the user makes while
+        // an import dialog is awaiting can never be swallowed into it.
+        const importedSet = new Set(importedIds);
+        const undoOrder = [];
+        const visited = new Set();
+        const visitImported = id => {
+          if (visited.has(id) || !importedSet.has(id) || !store.cards[id]) return;
+          visited.add(id);
+          undoOrder.push(id);
+          (store.cards[id].children || []).forEach(visitImported);
+        };
+        remappedRootIds.forEach(visitImported);
+        importedIds.forEach(visitImported); // anything not reachable from a root
+        const groupedUndo = undoOrder.length && window.startUndoGroup && window.startUndoGroup('import');
+        try {
+          undoOrder.forEach(id => {
+            pushUndo('createCard', { cardId: id, card: kernelCloneCard(store.cards[id]) });
+          });
         } finally {
           if (groupedUndo && window.endUndoGroup) window.endUndoGroup();
         }
+
+        save();
+
+        showToast(`Imported ${Object.keys(remappedCards).length} cards`);
+        render();
+        return true;
       }
 
       function importTXT(text, mode = 'outline', location = 'root') {
@@ -1064,6 +1288,9 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
                   // silently recreate this dataset at its key.
                   if (isCurrent) cancelPendingSave();
                   localStorage.removeItem(key);
+                  // Also drop the IndexedDB mirror copy (and a chosen-file
+                  // handle) so the deleted dataset's data does not linger.
+                  await removeDatasetMirrors(key);
                   if (isCurrent && allKeys.length > 1) {
                     // Switch to another dataset
                     const otherKey = allKeys.find(k => k !== key);
@@ -1275,9 +1502,16 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
             await flushPendingSave();
             localStorage.setItem('activeInstance', newKey);
             setInstanceKey(newKey);
+            // Same session reset as load(): the previous (possibly PIN-
+            // protected) dataset's undo/redo history, trash, navigation and
+            // lock state must not leak into the new dataset.
+            resetSessionState();
             setStore(newStore);
             setSessionPin(pin || null);
             save();
+            // Tear down the previous dataset's running plugins (the new
+            // store has none) exactly as a dataset switch does.
+            await reconcilePluginsAfterDatasetSwitch();
             if (typeof updateDatasetSelector === 'function') updateDatasetSelector();
             render();
             overlay.remove();
@@ -2347,18 +2581,13 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         const txtAppendRadio = document.querySelector('input[name="txtImportMode"][value="append"]');
         if (txtAppendRadio) txtAppendRadio.checked = true;
 
-        // 4. Switch to the correct tab
-        uploadModal.tabs.forEach(t => t.classList.remove('active'));
-        uploadModal.tabContents.forEach(content => content.classList.remove('active'));
+        // 4. Switch to the correct tab (keeps aria-selected / roving
+        //    tabindex in sync — activateUploadTab lives in rendering.js)
+        activateUploadTab(tabName);
         
-        const tabEl = document.querySelector(`.modal-tab[data-tab="${tabName}"]`);
-        const contentEl = document.getElementById(`tab-${tabName}`);
-        
-        if (tabEl) tabEl.classList.add('active');
-        if (contentEl) contentEl.classList.add('active');
-        
-        // 5. Show the modal
-        uploadModal.overlay.classList.add('show');
+        // 5. Show the modal: locks body scroll, traps focus inside it and
+        //    remembers the opener so closing returns focus there.
+        openUploadModal();
       }
 
       function updateImportLocationOptions() {

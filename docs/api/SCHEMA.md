@@ -25,7 +25,7 @@ CardSpoke uses a schema version (`schemaVersion`) to track data model changes ac
 
 ## Current Migration Implementation
 
-**Note:** The current implementation (v0.20.0, schema v4) ships a baseline structural repair layer, implemented in `www/src/core/migrations.js`:
+**Note:** The current implementation (v0.21.1, schema v4) ships a baseline structural repair layer, implemented in `www/src/core/migrations.js`:
 
 - **`migrateCard(card)`**: Ensures baseline fields exist (`children` array, `tags` array, `modsData` object) without removing any existing fields. Returns `{ card, changed, warnings }`.
 - **`migrateStore(store)`**: Iterates every card in `store.cards` and runs `migrateCard` on each, catching per-card errors as warnings rather than dropping data. Returns `{ store, changed, migratedCount, warnings }`.
