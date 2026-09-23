@@ -313,3 +313,36 @@ Changing anything above? Then in the same PR:
 ## 0.21.1 trust migration and UI validation
 
 Every JS-bearing package now requires the persisted `plugin-code` grant in addition to manifest permissions. Existing packages prompt once at their next enable. No schema migration is needed (schema 4); the old trust key does not grant this permission. CSS-only themes are unaffected. Worker UI permits a safe element/attribute set; code that attempted active elements must use supported vnode UI. RPC paths cannot traverse inherited properties. See the canonical Plugin System trust model for limitations; do not describe workers as a complete hostile-code sandbox.
+
+## Security-audit hardening (post-0.21.1)
+
+- **Grants are bound to a fingerprint, not just an id.** `Permissions` stores
+  `cardspoke_plugin_permission_bindings` (`{ [id]: fingerprint }`) next to the
+  unchanged `cardspoke_plugin_permissions` key. The fingerprint
+  (`Permissions.computeFingerprint`, FNV-1a over `js` + `teardownJs` + sorted
+  `manifest.permissions`) is change detection, not crypto. A same-id plugin
+  whose code or permissions differ gets a fresh consent prompt, and runtime
+  permission checks fail for it until then. Grants saved before this change
+  have no binding and prompt once more.
+- **Function-form code is host-only (#370).** `Plugin.register()` rejects a
+  definition whose only code is `setup`/`teardown` functions; trusted
+  session-only host code must use `CardSpoke.registerPlugin()` (which calls
+  the non-enumerable `Plugin.registerHostPlugin()`). `install()` always
+  builds a sandboxed definition from `manifest`/`css`/`js`/`teardownJs` and
+  drops function fields. `www/src/examples/dynamic-plugin-loader.js` installs
+  JSON packages; it does not `import()` plugin modules.
+- **Worker hooks are permission-gated host-side.** `card.render`
+  middleware requires `ui-override`, as the `Card` component does. Middleware on
+  `card.create`/`card.update`/`card.delete` (or `'*'`) requires
+  `data-modify`. Without `data-modify`, other hooks such as `card.save` can
+  only observe. They cannot rewrite args, `preventDefault()` or
+  `stopPropagation()`. `Plugin.renderBatch()` drops a vnode or patch
+  unless the host accepted the matching registration. The worker stores a
+  renderer or decorator only after the host accepts it.
+- **`ctx.utils` over RPC is an allowlist.** Read helpers are ungated. Card/tag
+  writers need `data-modify`, and `setTheme`/`setTypography`/`setHighContrast`
+  need `ui-override`. A new `CardSpoke.utils` helper stays unreachable from
+  workers until it is classified in `UTILS_PERMISSIONS` (`plugin-api.js`).
+- **Plugin ids are validated strictly.** An id that does not match
+  `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$` is a validation error, not a warning.
+  Name-derived ids are slugified to that form.

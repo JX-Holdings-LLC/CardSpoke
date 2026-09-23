@@ -113,7 +113,7 @@ test('component registered via ctx.api.ui is unregistered when plugin is disable
   // Grant ui-override so registerComponent doesn't throw
   Permissions.grantPermissions('ui-component-cleanup-test', ['ui-override']);
 
-  Plugin.register('ui-component-cleanup-test', {
+  Plugin.registerHostPlugin('ui-component-cleanup-test', {
     manifest: {
       name: 'UI Component Cleanup Test',
       version: '1.0.0',
@@ -145,7 +145,7 @@ test('data onUpdate listener is cleaned up when plugin is disabled', async () =>
 
   let callCount = 0;
 
-  Plugin.register('data-listener-cleanup-test', {
+  Plugin.registerHostPlugin('data-listener-cleanup-test', {
     manifest: { name: 'Data Listener Cleanup Test', version: '1.0.0', layer: 'feature' },
     setup: async function(ctx) {
       ctx.api.data.onUpdate(function() { callCount++; });
@@ -173,7 +173,7 @@ test('event bus handler is removed when plugin is disabled', async () => {
 
   let received = 0;
 
-  Plugin.register('event-cleanup-test', {
+  Plugin.registerHostPlugin('event-cleanup-test', {
     manifest: { name: 'Event Cleanup Test', version: '1.0.0', layer: 'feature' },
     setup: async function(ctx) {
       ctx.api.events.on('test:ping', function() { received++; });
@@ -208,7 +208,7 @@ test('unregister awaits teardown before completing', async () => {
 
   Permissions.grantPermissions('unregister-async-test', ['ui-override']);
 
-  Plugin.register('unregister-async-test', {
+  Plugin.registerHostPlugin('unregister-async-test', {
     manifest: {
       name: 'Unregister Async Test',
       version: '1.0.0',

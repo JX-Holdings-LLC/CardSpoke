@@ -61,7 +61,9 @@ const CardSpokeAPI = Object.freeze({
    * @returns {Promise<string>} The plugin id once enabled
    */
   registerPlugin: async function(id, definition) {
-    Plugin.register(id, definition);
+    // Explicit host-code path: function-form setup/teardown run unsandboxed
+    // on the main thread, which Plugin.register() refuses (see #370).
+    Plugin.registerHostPlugin(id, definition);
     await Plugin.enable(id);
     return id;
   },

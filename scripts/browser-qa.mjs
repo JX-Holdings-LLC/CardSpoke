@@ -479,7 +479,6 @@ await scenario('plugin-dataset-round-trip (NEW-4/reconcile)', async () => {
   // header marker; a second empty dataset has no plugins. Trust is pre-granted
   // so enabling never prompts.
   await page.evaluate(() => {
-    localStorage.setItem('cardspoke_plugin_permissions', JSON.stringify({ 'ds-marker': ['plugin-code', 'ui-override'] }));
     const pluginEntry = {
       definition: {
         manifest: { id: 'ds-marker', name: 'DS Marker', version: '1.0.0', author: 'QA', layer: 'feature', permissions: ['ui-override'] },
@@ -489,6 +488,12 @@ await scenario('plugin-dataset-round-trip (NEW-4/reconcile)', async () => {
       },
       enabled: true
     };
+    // Grants are bound to the plugin's code+permissions fingerprint; an
+    // unbound (legacy) grant would prompt again.
+    localStorage.setItem('cardspoke_plugin_permissions', JSON.stringify({ 'ds-marker': ['plugin-code', 'ui-override'] }));
+    localStorage.setItem('cardspoke_plugin_permission_bindings', JSON.stringify({
+      'ds-marker': window.CardSpoke.Permissions.computeFingerprint(pluginEntry.definition)
+    }));
     // Default dataset store + a sibling empty dataset.
     const def = JSON.parse(localStorage.getItem('nested_cards_store') || '{}');
     def.cards = def.cards || {}; def.rootOrder = def.rootOrder || [];

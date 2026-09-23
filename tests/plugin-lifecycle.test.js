@@ -566,7 +566,7 @@ test('a hung plugin setup is time-boxed so it cannot block boot forever', async 
   const id = 'hang-plugin';
   // Programmatic registration with a never-resolving setup (no js string, so no
   // consent needed) models a plugin whose setup() hangs on boot.
-  Plugin.register(id, {
+  Plugin.registerHostPlugin(id, {
     manifest: { id, name: 'Hang', version: '1.0.0', author: 't', layer: 'feature' },
     setup: () => new Promise(() => {})
   });

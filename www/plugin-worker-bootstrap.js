@@ -286,8 +286,9 @@ function createUIApi() {
       if (!component || typeof component.render !== "function") {
         throw new Error("registerComponent requires a { render } object");
       }
-      componentRenderers.set(name, component.render);
-      await channel.call(["ui", "registerComponent"], [name, component.priority || 0]);
+      const won = await channel.call(["ui", "registerComponent"], [name, component.priority || 0]);
+      if (won !== false) componentRenderers.set(name, component.render);
+      return won;
     },
     unregisterComponent: async function(name) {
       componentRenderers.delete(name);
@@ -345,17 +346,29 @@ function createMiddlewareApi() {
         throw new Error("Middleware must have a name and a handler function");
       }
       const operations = middleware.operations || ["*"];
-      if (operations.indexOf("card.render") !== -1) {
-        decoratorHandlers.set(middleware.name, middleware.handler);
-      } else {
-        middlewareHandlers.set(middleware.name, { operations, handler: middleware.handler });
-      }
-      channel.call(["middleware", "register"], [middleware.name, middleware.priority || 0, operations]);
-      return function() {
+      const isDecorator = operations.indexOf("card.render") !== -1;
+      let cancelled = false;
+      const ready = channel.call(["middleware", "register"], [middleware.name, middleware.priority || 0, operations]).then(function() {
+        if (cancelled) return;
+        if (isDecorator) {
+          decoratorHandlers.set(middleware.name, middleware.handler);
+        } else {
+          middlewareHandlers.set(middleware.name, { operations, handler: middleware.handler });
+        }
+      }, function(err) {
+        channel.call(["logger", "error"], ["[Plugin:" + pluginId + '] middleware "' + middleware.name + '" was not registered: ' + String(err && err.message || err)]);
+        throw err;
+      });
+      ready.catch(function() {
+      });
+      const unregister = function() {
+        cancelled = true;
         decoratorHandlers.delete(middleware.name);
         middlewareHandlers.delete(middleware.name);
         channel.call(["middleware", "unregister"], [middleware.name]);
       };
+      unregister.ready = ready;
+      return unregister;
     },
     unregister: function(name) {
       decoratorHandlers.delete(name);
