@@ -110,6 +110,15 @@ const capabilities = JSON.parse(read('www/capabilities.json'));
 check(`capabilities.json version (${capabilities.version}) matches package.json (${pkg.version})`,
   capabilities.version === pkg.version);
 
+// The desktop installers are labelled with desktop/package.json's version
+// (desktop/scripts/prepare-web.mjs keeps it in sync on every desktop build).
+const desktopPkg = JSON.parse(read('desktop/package.json'));
+const desktopLock = JSON.parse(read('desktop/package-lock.json'));
+check(`desktop/package.json version (${desktopPkg.version}) matches package.json (${pkg.version})`,
+  desktopPkg.version === pkg.version);
+check(`desktop/package-lock.json version (${desktopLock.version}) matches package.json (${pkg.version})`,
+  desktopLock.version === pkg.version);
+
 check('footer links to the canonical CardSpoke repository',
   indexHtml.includes('href="https://github.com/jxburros/CardSpoke"'));
 check('footer credits Jeffrey Guntly GitHub profile',
