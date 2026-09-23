@@ -227,6 +227,21 @@ test('Kernel.updateCard strips id/parentId/children/createdAt', () => {
   assert.is(({}).polluted, undefined);
 });
 
+test('a card parked at root with a missing parent is not listed twice after reparent/delete', () => {
+  // C was restored from Trash while its parent P is still trashed: it sits in
+  // rootOrder but keeps parentId 'p' so restoring P can re-adopt it.
+  const k = new Kernel({
+    cards: { q: card('q', 'Q'), c: card('c', 'C', '', { parentId: 'p' }), d: card('d', 'D', '', { parentId: 'p' }) },
+    rootOrder: ['q', 'c', 'd']
+  });
+  const r = k.reparent('c', 'q');
+  assert.ok(r.success);
+  assert.equal(k.rootOrder, ['q', 'd'], 'c left root when moved under q');
+  assert.equal(k.getCard('q').children, ['c']);
+  k.deleteCard('d');
+  assert.equal(k.rootOrder, ['q'], 'deleted orphan does not leave a dangling root id');
+});
+
 test('moveCard reparents through the kernel with an undoable entry', () => {
   const { context, store } = createAppLayer({
     cards: { p: card('p', 'P'), x: card('x', 'X', '', { children: ['kid'] }), kid: card('kid', 'Kid', '', { parentId: 'x' }) },

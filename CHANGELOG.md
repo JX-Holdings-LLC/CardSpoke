@@ -33,7 +33,9 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
   restored from a local file with a changed definition.
 - Removed the unsandboxed function-plugin path from `install()`/`register()`
   (#370). Trusted host code uses `registerHostPlugin()`.
-- Plugin ids containing unsafe characters are rejected.
+- New plugin installs must use ids made of letters, digits, `.`, `_` and
+  `-`. Ids already stored by earlier releases keep loading with a warning, and
+  plugin style lookups escape the id.
 - The service worker only refreshes the cached app shell from app-root
   navigations. `diagnostic.html`/`test.html` carry a CSP, no longer use
   `innerHTML`, and are no longer copied into `dist/`.

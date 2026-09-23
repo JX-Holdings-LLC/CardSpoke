@@ -311,15 +311,16 @@ export class Kernel {
       const children = (card.children || []).slice();
       children.forEach(cid => remove(cid));
 
-      // Detach from parent or rootOrder
+      // Detach from parent and rootOrder. A card whose parent is missing
+      // (e.g. restored from Trash while its parent is still trashed) is
+      // parked at root despite having a parentId, so always clear rootOrder.
       if (card.parentId) {
         const parent = this.cards[card.parentId];
         if (parent) {
           parent.children = parent.children.filter(c => c !== cardId);
         }
-      } else {
-        this.rootOrder = this.rootOrder.filter(c => c !== cardId);
       }
+      this.rootOrder = this.rootOrder.filter(c => c !== cardId);
 
       delete this.cards[cardId];
     };
@@ -441,15 +442,15 @@ export class Kernel {
 
     const previousParentId = card.parentId;
 
-    // Detach from current location
+    // Detach from current location. Always clear rootOrder too: a card
+    // whose parent is missing is parked at root despite having a parentId.
     if (card.parentId) {
       const oldParent = this.cards[card.parentId];
       if (oldParent) {
         oldParent.children = oldParent.children.filter(c => c !== id);
       }
-    } else {
-      this.rootOrder = this.rootOrder.filter(c => c !== id);
     }
+    this.rootOrder = this.rootOrder.filter(c => c !== id);
 
     // Attach to new location
     card.parentId = newParentId || null;

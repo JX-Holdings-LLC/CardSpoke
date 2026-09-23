@@ -224,7 +224,8 @@
   var MAX_CSS_LENGTH = 1e5;
   var MAX_JS_LENGTH = 5e5;
   var PLUGIN_ID_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-  var PLUGIN_ID_SAFE_CHARS = /^[A-Za-z0-9_-]+$/;
+  var PLUGIN_ID_FORBIDDEN = /[\u0000-\u001f\u007f]/;
+  var PLUGIN_ID_MAX_LENGTH = 200;
   var DANGEROUS_CSS_PATTERNS = [
     { pattern: /@import/gi, name: "@import (external resource loading)" },
     { pattern: /javascript:/gi, name: "javascript: protocol" },
@@ -250,8 +251,8 @@
       }
       if (!plugin.id || typeof plugin.id !== "string") {
         errors.push("Plugin must have a string id");
-      } else if (!PLUGIN_ID_SAFE_CHARS.test(plugin.id)) {
-        errors.push("Plugin id may only contain letters, numbers, hyphens and underscores: " + JSON.stringify(plugin.id));
+      } else if (PLUGIN_ID_FORBIDDEN.test(plugin.id) || plugin.id.length > PLUGIN_ID_MAX_LENGTH) {
+        errors.push("Plugin id must not contain control characters or exceed " + PLUGIN_ID_MAX_LENGTH + " characters: " + JSON.stringify(plugin.id));
       } else if (!PLUGIN_ID_PATTERN.test(plugin.id)) {
         warnings.push("Plugin id should use lowercase letters, numbers, and hyphens only (no leading/trailing hyphen): " + JSON.stringify(plugin.id));
       }
@@ -2156,8 +2157,7 @@
       if (instance.context && instance.definition.manifest.config) {
         instance.context.config = instance.definition.manifest.config;
       }
-      const requiredPermissions = [...instance.definition.manifest.permissions || []];
-      if (instance.definition.js || instance.definition.teardownJs) requiredPermissions.push("plugin-code");
+      const requiredPermissions = this._requiredPermissions(instance);
       if (requiredPermissions.length) {
         const granted = await this._checkPermissions(id, requiredPermissions);
         if (!granted) {
@@ -2265,8 +2265,15 @@
         }
       }
     },
+    // Find a plugin's <style> element. The id is escaped for the quoted
+    // attribute value so no id (legacy ids may contain quotes) can inject
+    // into the selector.
+    _findStyle: function(id) {
+      const value = typeof CSS !== "undefined" && CSS && typeof CSS.escape === "function" ? CSS.escape(id) : String(id).replace(/[\\"]/g, "\\$&").replace(/[\n\r\f]/g, " ");
+      return document.querySelector('style[data-plugin-id="' + value + '"]');
+    },
     _applyCSS: function(id, css) {
-      const existing = document.querySelector('style[data-plugin-id="' + id + '"]');
+      const existing = this._findStyle(id);
       if (existing) {
         existing.textContent = css;
       } else {
@@ -2277,7 +2284,7 @@
       }
     },
     _removeCSS: function(id) {
-      const style = document.querySelector('style[data-plugin-id="' + id + '"]');
+      const style = this._findStyle(id);
       if (style && style.parentNode) {
         style.parentNode.removeChild(style);
       }
@@ -2503,6 +2510,9 @@
       if (!id) {
         throw new Error("Invalid plugin package: could not derive a plugin id from manifest.name; set manifest.id");
       }
+      if (!/^[A-Za-z0-9._-]+$/.test(id) || id.length > 200) {
+        throw new Error('Invalid plugin package: manifest.id may only contain letters, numbers, ".", "_" and "-": ' + JSON.stringify(id));
+      }
       if (plugins.has(id)) {
         await this.unregister(id);
       }
@@ -2603,8 +2613,20 @@
     // cannot block the sequential boot sync and leave the app on a blank
     // screen. For a sandboxed plugin this also forcibly terminates the
     // worker on timeout — a capability main-thread execution never had.
+    _requiredPermissions: function(instance) {
+      const required = [...instance.definition.manifest.permissions || []];
+      if (instance.definition.js || instance.definition.teardownJs) required.push("plugin-code");
+      return required;
+    },
     _enableWithTimeout: async function(id, timeoutMs) {
       const limit = typeof timeoutMs === "number" ? timeoutMs : ENABLE_TIMEOUT_MS;
+      const pending = plugins.get(id);
+      if (pending && !pending.enabled) {
+        const required = this._requiredPermissions(pending);
+        if (required.length && !await this._checkPermissions(id, required)) {
+          throw new Error("Permissions not granted for plugin: " + id);
+        }
+      }
       let timer = null;
       const timeout = new Promise((_resolve, reject) => {
         timer = setTimeout(
@@ -3179,9 +3201,8 @@
           if (parent) {
             parent.children = parent.children.filter((c) => c !== cardId);
           }
-        } else {
-          this.rootOrder = this.rootOrder.filter((c) => c !== cardId);
         }
+        this.rootOrder = this.rootOrder.filter((c) => c !== cardId);
         delete this.cards[cardId];
       };
       remove(id);
@@ -3287,9 +3308,8 @@
         if (oldParent) {
           oldParent.children = oldParent.children.filter((c) => c !== id);
         }
-      } else {
-        this.rootOrder = this.rootOrder.filter((c) => c !== id);
       }
+      this.rootOrder = this.rootOrder.filter((c) => c !== id);
       card.parentId = newParentId || null;
       if (newParentId) {
         const newParent = this.cards[newParentId];

@@ -107,6 +107,25 @@ test.after(() => {
   resetForTesting();
 });
 
+test('a slow permission answer does not race the enable timeout', async () => {
+  fresh();
+  const id = 'slow-consent';
+  Plugin.register(id, { manifest: manifest(id, []), js: 'ctx.logger.info("hi");' });
+  // The user takes longer than the (shortened) hang timeout to answer.
+  Permissions._showConsentDialog = async () => {
+    await new Promise(r => setTimeout(r, 1500));
+    consentCalls.push({ id });
+    return true;
+  };
+  try {
+    await Plugin._enableWithTimeout(id, 1000);
+    assert.ok(Plugin.get(id).enabled, 'plugin enabled after a slow Allow');
+    assert.is(consentCalls.length, 1, 'user asked exactly once');
+  } finally {
+    await Plugin.disable(id).catch(() => {});
+  }
+});
+
 // ── 1. Fingerprint-bound grants ───────────────────────────────────────────
 
 test('computeFingerprint changes with code/permissions and ignores permission order', () => {
@@ -413,14 +432,15 @@ test('dynamic-plugin-loader example installs JSON packages, never import()s code
 
 // ── 5. Plugin id validation ───────────────────────────────────────────────
 
-test('plugin ids with unsafe characters are validation errors', () => {
-  const bad = ['a"b', "x'] , body {", 'a b', 'a/b', '../x', 'a.b', ''];
+test('stored plugin ids: control characters are errors, legacy ids stay loadable', () => {
+  const bad = ['a\u0000b', 'line\nbreak', 'x'.repeat(201), ''];
   bad.forEach(id => {
     const r = PluginValidator.validate({ id, manifest: { name: 'n', version: '1.0.0', layer: 'feature' } });
     assert.is(r.valid, false, JSON.stringify(id) + ' must be rejected');
   });
-  // Legacy ids accepted by earlier releases keep loading, with a warning.
-  ['Upper', '-lead', 'trail-', 'a_b'].forEach(id => {
+  // Ids earlier releases produced (name-derived or explicit) keep loading
+  // after an upgrade, with a warning.
+  ['Upper', '-lead', 'trail-', 'a_b', 'focus-mode-(beta)', 'theme-v1.2', "bob's-theme", 'com.acme.focus'].forEach(id => {
     const r = PluginValidator.validate({ id, manifest: { name: 'n', version: '1.0.0', layer: 'feature' } });
     assert.is(r.valid, true, JSON.stringify(id) + ' must stay loadable');
     assert.ok(r.warnings.some(w => /should use lowercase/.test(w)), JSON.stringify(id) + ' must warn');
@@ -428,7 +448,20 @@ test('plugin ids with unsafe characters are validation errors', () => {
   ['a', 'good-id', 'a1-b2', 'card-color-tags'].forEach(id => {
     const r = PluginValidator.validate({ id, manifest: { name: 'n', version: '1.0.0', layer: 'feature' } });
     assert.is(r.valid, true, id + ' must be accepted');
+    assert.is(r.warnings.filter(w => /Plugin id/.test(w)).length, 0, id + ' must not warn');
   });
+});
+
+test('plugin CSS lookup escapes the id inside the selector', () => {
+  fresh();
+  const seen = [];
+  const realQS = document.querySelector;
+  document.querySelector = sel => { seen.push(sel); return null; };
+  Plugin._findStyle('x"] , style, [data-y="');
+  document.querySelector = realQS;
+  assert.is(seen.length, 1);
+  // The only unescaped quotes are the two delimiting the attribute value.
+  assert.is((seen[0].match(/(^|[^\\])"/g) || []).length, 2, seen[0]);
 });
 
 test('install() rejects a quoted explicit id and slugifies a name-derived one', async () => {
@@ -437,7 +470,9 @@ test('install() rejects a quoted explicit id and slugifies a name-derived one', 
   try {
     await Plugin.install({ manifest: { id: 'bad"]id', name: 'x', version: '1.0.0', layer: 'theme' }, css: '.a{}' });
   } catch (e) { threw = e; }
-  assert.ok(threw && /validation failed/.test(threw.message));
+  assert.ok(threw && /manifest\.id may only contain/.test(threw.message));
+  const dotted = await Plugin.install({ manifest: { id: 'com.acme.focus', name: 'x', version: '1.0.0', layer: 'theme' }, css: '.a{}' });
+  assert.is(dotted, 'com.acme.focus', 'reverse-DNS ids can be installed');
   const id = await Plugin.install({ manifest: { name: 'My Cool Plugin!', version: '1.0.0', layer: 'theme' }, css: '.a{}' });
   assert.is(id, 'my-cool-plugin');
 });

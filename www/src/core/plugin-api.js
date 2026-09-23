@@ -1112,10 +1112,7 @@ let nextDomHandleId = 1;
       // JS has no ambient access outside these permission-gated calls, so a
       // granted permission is an enforced capability grant, not a polite
       // request (CS-002, resolved).
-      const requiredPermissions = [...(instance.definition.manifest.permissions || [])];
-      // A same-origin worker is useful isolation, but dynamic imports and new
-      // browser APIs mean it is not a complete hostile-code security boundary.
-      if (instance.definition.js || instance.definition.teardownJs) requiredPermissions.push('plugin-code');
+      const requiredPermissions = this._requiredPermissions(instance);
       if (requiredPermissions.length) {
         const granted = await this._checkPermissions(id, requiredPermissions);
         if (!granted) {
@@ -1262,8 +1259,18 @@ let nextDomHandleId = 1;
       }
     },
 
+    // Find a plugin's <style> element. The id is escaped for the quoted
+    // attribute value so no id (legacy ids may contain quotes) can inject
+    // into the selector.
+    _findStyle: function(id) {
+      const value = (typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function')
+        ? CSS.escape(id)
+        : String(id).replace(/[\\"]/g, '\\$&').replace(/[\n\r\f]/g, ' ');
+      return document.querySelector('style[data-plugin-id="' + value + '"]');
+    },
+
     _applyCSS: function(id, css) {
-      const existing = document.querySelector('style[data-plugin-id="' + id + '"]');
+      const existing = this._findStyle(id);
       if (existing) {
         existing.textContent = css;
       } else {
@@ -1275,7 +1282,7 @@ let nextDomHandleId = 1;
     },
 
     _removeCSS: function(id) {
-      const style = document.querySelector('style[data-plugin-id="' + id + '"]');
+      const style = this._findStyle(id);
       if (style && style.parentNode) {
         style.parentNode.removeChild(style);
       }
@@ -1543,6 +1550,13 @@ let nextDomHandleId = 1;
       if (!id) {
         throw new Error('Invalid plugin package: could not derive a plugin id from manifest.name; set manifest.id');
       }
+      // New installs get a strict id rule (letters, digits, '.', '_', '-').
+      // Stored plugins from earlier releases are validated more leniently so
+      // they keep loading (see plugin-validator.js).
+      if (!/^[A-Za-z0-9._-]+$/.test(id) || id.length > 200) {
+        throw new Error('Invalid plugin package: manifest.id may only contain letters, numbers, ' +
+          '".", "_" and "-": ' + JSON.stringify(id));
+      }
 
       // Task 2.4: If a plugin with this ID already exists, this install is an
       // update: fully unregister (disable + cleanup + store removal) first.
@@ -1682,8 +1696,28 @@ let nextDomHandleId = 1;
     // cannot block the sequential boot sync and leave the app on a blank
     // screen. For a sandboxed plugin this also forcibly terminates the
     // worker on timeout — a capability main-thread execution never had.
+    _requiredPermissions: function(instance) {
+      const required = [...(instance.definition.manifest.permissions || [])];
+      // A same-origin worker is useful isolation, but dynamic imports and new
+      // browser APIs mean it is not a complete hostile-code security boundary.
+      if (instance.definition.js || instance.definition.teardownJs) required.push('plugin-code');
+      return required;
+    },
+
     _enableWithTimeout: async function(id, timeoutMs) {
       const limit = typeof timeoutMs === 'number' ? timeoutMs : ENABLE_TIMEOUT_MS;
+      // Ask for consent BEFORE the clock starts: a user reading a permission
+      // dialog (e.g. the one-time re-confirmation after upgrading) must not
+      // race the hang timeout, which would otherwise dismiss their answer and
+      // kill the freshly started worker. enable() re-checks and finds the
+      // grant, so the user is not prompted twice.
+      const pending = plugins.get(id);
+      if (pending && !pending.enabled) {
+        const required = this._requiredPermissions(pending);
+        if (required.length && !(await this._checkPermissions(id, required))) {
+          throw new Error('Permissions not granted for plugin: ' + id);
+        }
+      }
       let timer = null;
       const timeout = new Promise((_resolve, reject) => {
         timer = setTimeout(
