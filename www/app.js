@@ -7143,13 +7143,8 @@ This action cannot be undone!`, {
     }
     const txtAppendRadio = document.querySelector('input[name="txtImportMode"][value="append"]');
     if (txtAppendRadio) txtAppendRadio.checked = true;
-    uploadModal.tabs.forEach((t) => t.classList.remove("active"));
-    uploadModal.tabContents.forEach((content) => content.classList.remove("active"));
-    const tabEl = document.querySelector(`.modal-tab[data-tab="${tabName}"]`);
-    const contentEl = document.getElementById(`tab-${tabName}`);
-    if (tabEl) tabEl.classList.add("active");
-    if (contentEl) contentEl.classList.add("active");
-    uploadModal.overlay.classList.add("show");
+    activateUploadTab(tabName);
+    openUploadModal();
   }
   function updateImportLocationOptions() {
     const selectJSON = uploadModal.importLocationSelectJSON;
@@ -8438,9 +8433,14 @@ ${prefix}`;
       localStorage.setItem("cardspoke_theme", theme);
     } catch {
     }
-    const moonIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
-    const sunIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
-    if (header.themeToggle) header.themeToggle.innerHTML = theme === "dark" ? sunIcon : moonIcon;
+    const moonIcon = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+    const sunIcon = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
+    if (header.themeToggle) {
+      header.themeToggle.innerHTML = theme === "dark" ? sunIcon : moonIcon;
+      const themeActionLabel = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+      header.themeToggle.setAttribute("aria-label", themeActionLabel);
+      header.themeToggle.setAttribute("title", themeActionLabel + " (Alt+T)");
+    }
   }
   function populateFooter() {
     try {
@@ -8528,15 +8528,22 @@ ${prefix}`;
     document.body.classList.remove("scroll-locked");
   }
   function closeMenuOverlay() {
+    const wasOpen = !!(menu.overlay && menu.overlay.classList.contains("show"));
     if (menu.overlay) menu.overlay.classList.remove("show");
-    unlockBodyScroll();
+    if (header.menuBtn) header.menuBtn.setAttribute("aria-expanded", "false");
     if (menuFocusTrapCleanup) {
       menuFocusTrapCleanup();
       menuFocusTrapCleanup = null;
     }
+    if (!wasOpen) return;
+    unlockBodyScroll();
+    if (header.menuBtn && typeof header.menuBtn.focus === "function" && document.contains(header.menuBtn)) {
+      header.menuBtn.focus();
+    }
   }
   if (header.menuBtn && menu.overlay) header.menuBtn.onclick = () => {
     menu.overlay.classList.add("show");
+    header.menuBtn.setAttribute("aria-expanded", "true");
     lockBodyScroll();
     if (menu.developerSection) {
       menu.developerSection.style.display = isDeveloperMode() ? "block" : "none";
@@ -8560,6 +8567,81 @@ ${prefix}`;
     closeMenuOverlay();
     goTo("edit", { cardId: null, parentId: null });
   };
+  function activateUploadTab(tabName, focusTab = false) {
+    const tabs = uploadModal.tabs ? Array.from(uploadModal.tabs) : [];
+    let target = tabs.find((t) => t.getAttribute("data-tab") === tabName);
+    if (!target) target = tabs.find((t) => t.getAttribute("data-tab") === "json") || tabs[0];
+    if (!target) return;
+    const activeName = target.getAttribute("data-tab");
+    tabs.forEach((t) => {
+      const selected = t === target;
+      t.classList.toggle("active", selected);
+      t.setAttribute("aria-selected", selected ? "true" : "false");
+      t.setAttribute("tabindex", selected ? "0" : "-1");
+    });
+    if (uploadModal.tabContents) uploadModal.tabContents.forEach((content) => {
+      content.classList.toggle("active", content.id === `tab-${activeName}`);
+    });
+    if (focusTab) target.focus();
+  }
+  let uploadModalReleaseFocus = null;
+  let uploadModalOpener = null;
+  function trapUploadModalFocus(modalEl) {
+    const selector = "button, [href], input, select, textarea, [tabindex]";
+    const focusables = () => Array.from(modalEl.querySelectorAll(selector)).filter((el) => !el.disabled && el.getAttribute("tabindex") !== "-1" && el.getClientRects().length > 0 && !(el.type === "radio" && !el.checked && modalEl.querySelector(`input[type="radio"][name="${el.name}"]:checked`)));
+    const onKeyDown = (e) => {
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !modalEl.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !modalEl.contains(document.activeElement))) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    modalEl.addEventListener("keydown", onKeyDown);
+    return () => modalEl.removeEventListener("keydown", onKeyDown);
+  }
+  function openUploadModal() {
+    if (!uploadModal.overlay) return;
+    const wasOpen = uploadModal.overlay.classList.contains("show");
+    if (!wasOpen) {
+      const active = document.activeElement;
+      uploadModalOpener = active && active !== document.body ? active : null;
+    }
+    uploadModal.overlay.classList.add("show");
+    lockBodyScroll();
+    if (uploadModalReleaseFocus) uploadModalReleaseFocus();
+    const dialog = uploadModal.overlay.querySelector(".modal");
+    uploadModalReleaseFocus = dialog ? trapUploadModalFocus(dialog) : null;
+    const activeTab = uploadModal.overlay.querySelector(".modal-tab.active") || uploadModal.overlay.querySelector(".modal-tab");
+    if (activeTab) activeTab.focus();
+  }
+  function closeUploadModal() {
+    if (!uploadModal.overlay) return;
+    const wasOpen = uploadModal.overlay.classList.contains("show");
+    uploadModal.overlay.classList.remove("show");
+    [uploadModal.fileUploadAreaJSON, uploadModal.fileUploadAreaTXT].forEach((area) => {
+      if (area) area.classList.remove("drag-over");
+    });
+    unlockBodyScroll();
+    if (uploadModalReleaseFocus) {
+      uploadModalReleaseFocus();
+      uploadModalReleaseFocus = null;
+    }
+    const opener = uploadModalOpener;
+    uploadModalOpener = null;
+    if (!wasOpen) return;
+    const active = document.activeElement;
+    const focusIsFree = !active || active === document.body || uploadModal.overlay.contains(active);
+    if (focusIsFree && opener && typeof opener.focus === "function" && document.contains(opener)) {
+      opener.focus();
+    }
+  }
   if (menu.upload) menu.upload.onclick = () => {
     closeMenuOverlay();
     updateImportLocationOptions();
@@ -8571,15 +8653,13 @@ ${prefix}`;
     }
     const txtOutlineRadio = document.querySelector('input[name="txtImportMode"][value="outline"]');
     if (txtOutlineRadio) txtOutlineRadio.checked = true;
-    const lastTab = localStorage.getItem("cardspoke_lastUploadTab") || "json";
-    uploadModal.tabs.forEach((t) => t.classList.remove("active"));
-    uploadModal.tabContents.forEach((content) => content.classList.remove("active"));
-    const tabToActivate = document.querySelector(`.modal-tab[data-tab="${lastTab}"]`) || document.querySelector('.modal-tab[data-tab="json"]');
-    const contentToActivate = document.getElementById(`tab-${lastTab}`) || document.getElementById("tab-json");
-    if (tabToActivate) tabToActivate.classList.add("active");
-    if (contentToActivate) contentToActivate.classList.add("active");
-    uploadModal.overlay.classList.add("show");
-    lockBodyScroll();
+    let lastTab = "json";
+    try {
+      lastTab = localStorage.getItem("cardspoke_lastUploadTab") || "json";
+    } catch {
+    }
+    activateUploadTab(lastTab);
+    openUploadModal();
   };
   if (menu.pluginManager) menu.pluginManager.onclick = () => {
     closeMenuOverlay();
@@ -8748,49 +8828,70 @@ ${prefix}`;
   if (uploadModal.tabs) uploadModal.tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       const tabName = tab.getAttribute("data-tab");
-      uploadModal.tabs.forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      uploadModal.tabContents.forEach((content) => content.classList.remove("active"));
-      const tabContent = document.getElementById(`tab-${tabName}`);
-      if (tabContent) tabContent.classList.add("active");
-      localStorage.setItem("cardspoke_lastUploadTab", tabName);
+      activateUploadTab(tabName);
+      try {
+        localStorage.setItem("cardspoke_lastUploadTab", tabName);
+      } catch {
+      }
+    });
+    tab.addEventListener("keydown", (e) => {
+      const tabs = Array.from(uploadModal.tabs);
+      const idx = tabs.indexOf(tab);
+      let next = null;
+      if (e.key === "ArrowRight") next = tabs[(idx + 1) % tabs.length];
+      else if (e.key === "ArrowLeft") next = tabs[(idx - 1 + tabs.length) % tabs.length];
+      else if (e.key === "Home") next = tabs[0];
+      else if (e.key === "End") next = tabs[tabs.length - 1];
+      if (!next) return;
+      e.preventDefault();
+      next.click();
+      next.focus();
     });
   });
   if (uploadModal.closeBtn) uploadModal.closeBtn.onclick = () => {
-    if (uploadModal.overlay) uploadModal.overlay.classList.remove("show");
-    unlockBodyScroll();
+    closeUploadModal();
   };
-  if (uploadModal.overlay) uploadModal.overlay.onclick = (e) => {
-    if (e.target === uploadModal.overlay) {
-      uploadModal.overlay.classList.remove("show");
-      unlockBodyScroll();
-    }
-  };
-  if (uploadModal.fileUploadAreaJSON) uploadModal.fileUploadAreaJSON.onclick = () => {
-    if (uploadModal.fileInputJSON) uploadModal.fileInputJSON.click();
-  };
-  if (uploadModal.fileInputJSON) uploadModal.fileInputJSON.addEventListener("change", (e) => {
-    const file = e.target.files[0];
+  if (uploadModal.overlay) {
+    uploadModal.overlay.onclick = (e) => {
+      if (e.target === uploadModal.overlay) {
+        closeUploadModal();
+      }
+    };
+    uploadModal.overlay.addEventListener("dragover", (e) => e.preventDefault());
+    uploadModal.overlay.addEventListener("drop", (e) => e.preventDefault());
+  }
+  function isUploadFileType(file, extension, mimeTypes) {
+    if (!file) return false;
+    const name = (file.name || "").toLowerCase();
+    if (name.endsWith("." + extension)) return true;
+    return mimeTypes.includes(file.type);
+  }
+  function handleJSONUploadFile(file) {
     if (!file) return;
+    if (!isUploadFileType(file, "json", ["application/json"])) {
+      showToast("Please choose a .json file", "error");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = async () => {
       try {
         const data = JSON.parse(reader.result);
         const mode = uploadModal.importLocationSelectJSON ? uploadModal.importLocationSelectJSON.value || "root" : "root";
         await importJSON(data, mode);
-        if (uploadModal.overlay) uploadModal.overlay.classList.remove("show");
+        closeUploadModal();
       } catch (err) {
         showToast("Failed to parse JSON: " + err.message, "error");
       }
     };
+    reader.onerror = () => showToast("Could not read file", "error");
     reader.readAsText(file);
-  });
-  if (uploadModal.fileUploadAreaTXT) uploadModal.fileUploadAreaTXT.onclick = () => {
-    if (uploadModal.fileInputTXT) uploadModal.fileInputTXT.click();
-  };
-  if (uploadModal.fileInputTXT) uploadModal.fileInputTXT.addEventListener("change", (e) => {
-    const file = e.target.files[0];
+  }
+  function handleTXTUploadFile(file) {
     if (!file) return;
+    if (!isUploadFileType(file, "txt", ["text/plain"])) {
+      showToast("Please choose a .txt file", "error");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const text = reader.result;
@@ -8798,10 +8899,57 @@ ${prefix}`;
       const mode = modeRadio ? modeRadio.value : "outline";
       const location2 = uploadModal.importLocationSelectTXT ? uploadModal.importLocationSelectTXT.value || "root" : "root";
       importTXT(text, mode, location2);
-      if (uploadModal.overlay) uploadModal.overlay.classList.remove("show");
+      closeUploadModal();
     };
+    reader.onerror = () => showToast("Could not read file", "error");
     reader.readAsText(file);
-  });
+  }
+  function bindUploadArea(area, input, handleFile) {
+    if (!area) return;
+    area.onclick = () => {
+      if (input) input.click();
+    };
+    const isSpace = (e) => e.key === " " || e.key === "Spacebar";
+    area.addEventListener("keydown", (e) => {
+      if (e.target !== area) return;
+      if (e.key === "Enter" && !e.repeat) {
+        if (input) input.click();
+      } else if (isSpace(e)) {
+        e.preventDefault();
+      }
+    });
+    area.addEventListener("keyup", (e) => {
+      if (e.target !== area) return;
+      if (isSpace(e) && input) input.click();
+    });
+    area.addEventListener("dragenter", (e) => {
+      e.preventDefault();
+      area.classList.add("drag-over");
+    });
+    area.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      area.classList.add("drag-over");
+    });
+    area.addEventListener("dragleave", (e) => {
+      if (e.relatedTarget && area.contains(e.relatedTarget)) return;
+      area.classList.remove("drag-over");
+    });
+    area.addEventListener("drop", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      area.classList.remove("drag-over");
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length) handleFile(files[0]);
+    });
+    if (input) input.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      handleFile(file);
+    });
+  }
+  bindUploadArea(uploadModal.fileUploadAreaJSON, uploadModal.fileInputJSON, handleJSONUploadFile);
+  bindUploadArea(uploadModal.fileUploadAreaTXT, uploadModal.fileInputTXT, handleTXTUploadFile);
   function pushUndo(action, data) {
     if (undoGroupState.active) {
       undoGroupState.actions.push({ action, data, timestamp: Date.now() });
@@ -9737,8 +9885,12 @@ ${prefix}`;
       return;
     }
     if (uploadModal.overlay.classList.contains("show")) {
-      uploadModal.overlay.classList.remove("show");
-      if (typeof unlockBodyScroll === "function") unlockBodyScroll();
+      if (typeof closeUploadModal === "function") {
+        closeUploadModal();
+      } else {
+        uploadModal.overlay.classList.remove("show");
+        if (typeof unlockBodyScroll === "function") unlockBodyScroll();
+      }
       return;
     }
     const helpModal = document.getElementById("keyboardHelpModal");
@@ -10419,6 +10571,7 @@ ${prefix}`;
                 h("a", {
                   href: "https://github.com/jxburros/CardSpoke/wiki/Language-Packs",
                   target: "_blank",
+                  rel: "noopener noreferrer",
                   style: "color: var(--primary);"
                 }, "CardSpoke Language Packs")
               )
@@ -10431,9 +10584,9 @@ ${prefix}`;
               h(
                 "p",
                 { style: "font-size: var(--text-sm);" },
-                h("a", { href: "https://github.com/jxburros/CardSpoke", target: "_blank", style: "color: var(--primary);" }, "GitHub"),
+                h("a", { href: "https://github.com/jxburros/CardSpoke", target: "_blank", rel: "noopener noreferrer", style: "color: var(--primary);" }, "GitHub"),
                 " · ",
-                h("a", { href: "https://github.com/jxburros/CardSpoke/blob/main/README.md", target: "_blank", style: "color: var(--primary);" }, "Documentation")
+                h("a", { href: "https://github.com/jxburros/CardSpoke/blob/main/README.md", target: "_blank", rel: "noopener noreferrer", style: "color: var(--primary);" }, "Documentation")
               )
             )
           )
@@ -10535,7 +10688,11 @@ ${prefix}`;
       }
       return;
     }
-    let key = e.key.toLowerCase();
+    let key = (e.key || "").toLowerCase();
+    if (e.altKey && !/^[a-z]$/.test(key)) {
+      const codeMatch = /^Key([A-Z])$/.exec(e.code || "");
+      if (codeMatch) key = codeMatch[1].toLowerCase();
+    }
     if (e.ctrlKey || e.metaKey) key = "ctrl+" + key;
     if (e.altKey) key = "alt+" + key;
     const shortcut = shortcuts[key];

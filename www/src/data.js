@@ -2347,18 +2347,13 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         const txtAppendRadio = document.querySelector('input[name="txtImportMode"][value="append"]');
         if (txtAppendRadio) txtAppendRadio.checked = true;
 
-        // 4. Switch to the correct tab
-        uploadModal.tabs.forEach(t => t.classList.remove('active'));
-        uploadModal.tabContents.forEach(content => content.classList.remove('active'));
+        // 4. Switch to the correct tab (keeps aria-selected / roving
+        //    tabindex in sync — activateUploadTab lives in rendering.js)
+        activateUploadTab(tabName);
         
-        const tabEl = document.querySelector(`.modal-tab[data-tab="${tabName}"]`);
-        const contentEl = document.getElementById(`tab-${tabName}`);
-        
-        if (tabEl) tabEl.classList.add('active');
-        if (contentEl) contentEl.classList.add('active');
-        
-        // 5. Show the modal
-        uploadModal.overlay.classList.add('show');
+        // 5. Show the modal: locks body scroll, traps focus inside it and
+        //    remembers the opener so closing returns focus there.
+        openUploadModal();
       }
 
       function updateImportLocationOptions() {
