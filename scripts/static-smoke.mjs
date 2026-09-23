@@ -60,6 +60,10 @@ if (existsSync(resolve(ROOT, 'dist/app.js'))) {
   check('dist/index.html exists (preview serves the app, not a 404)',
     existsSync(resolve(ROOT, 'dist/index.html')));
   check('dist/styles.css exists', existsSync(resolve(ROOT, 'dist/styles.css')));
+  // Dev-only harnesses must not ship in the built site.
+  for (const devPage of ['diagnostic.html', 'test.html']) {
+    check(`dist/${devPage} is not part of the built site`, !existsSync(resolve(ROOT, 'dist', devPage)));
+  }
 }
 
 // ── Bundle sanity ────────────────────────────────────────────────────────
