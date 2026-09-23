@@ -1229,8 +1229,14 @@ import {
         }
         // Close upload modal if open
         if (uploadModal.overlay.classList.contains('show')) {
-          uploadModal.overlay.classList.remove('show');
-          if (typeof unlockBodyScroll === 'function') unlockBodyScroll();
+          // Shared close path: releases scroll lock + focus trap and
+          // restores focus to the opener.
+          if (typeof closeUploadModal === 'function') {
+            closeUploadModal();
+          } else {
+            uploadModal.overlay.classList.remove('show');
+            if (typeof unlockBodyScroll === 'function') unlockBodyScroll();
+          }
           return;
         }
         // Close help if open
@@ -1850,6 +1856,7 @@ import {
                     h('a', {
                       href: 'https://github.com/jxburros/CardSpoke/wiki/Language-Packs',
                       target: '_blank',
+                      rel: 'noopener noreferrer',
                       style: 'color: var(--primary);'
                     }, 'CardSpoke Language Packs')
                   )
@@ -1859,9 +1866,9 @@ import {
                 h('div', { style: 'padding-top: var(--space-md); border-top: 1px solid var(--border); text-align: center; color: var(--text-secondary);' },
                   h('p', {}, `CardSpoke v${APP_VERSION}`),
                   h('p', { style: 'font-size: var(--text-sm);' },
-                    h('a', { href: 'https://github.com/jxburros/CardSpoke', target: '_blank', style: 'color: var(--primary);' }, 'GitHub'),
+                    h('a', { href: 'https://github.com/jxburros/CardSpoke', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'GitHub'),
                     ' · ',
-                    h('a', { href: 'https://github.com/jxburros/CardSpoke/blob/main/README.md', target: '_blank', style: 'color: var(--primary);' }, 'Documentation')
+                    h('a', { href: 'https://github.com/jxburros/CardSpoke/blob/main/README.md', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'Documentation')
                   )
                 )
               )
@@ -1954,7 +1961,16 @@ import {
         }
         
         // Build shortcut key string
-        let key = e.key.toLowerCase();
+        let key = (e.key || '').toLowerCase();
+        // On macOS, Option+<letter> produces a composed character in e.key
+        // (Option+T => '†'), so Alt/Option shortcuts would never match.
+        // Derive the letter from the physical key code instead (only when
+        // e.key is not already a plain letter, so non-QWERTY layouts that
+        // report the real letter keep working).
+        if (e.altKey && !/^[a-z]$/.test(key)) {
+          const codeMatch = /^Key([A-Z])$/.exec(e.code || '');
+          if (codeMatch) key = codeMatch[1].toLowerCase();
+        }
         if (e.ctrlKey || e.metaKey) key = 'ctrl+' + key;
         if (e.altKey) key = 'alt+' + key;
         

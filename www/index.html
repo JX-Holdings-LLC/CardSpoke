@@ -45,10 +45,10 @@
       <button class="header-btn" id="homeBtn" title="Home" aria-label="Go to home" data-plugin-anchor="btn-home">
         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
       </button>
-      <button class="header-btn" id="themeToggle" title="Toggle dark mode" aria-label="Toggle dark mode" data-plugin-anchor="btn-theme-toggle">
+      <button class="header-btn" id="themeToggle" title="Switch to dark mode (Alt+T)" aria-label="Switch to dark mode" data-plugin-anchor="btn-theme-toggle">
         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
       </button>
-      <button class="header-btn" id="menuBtn" title="Open menu" aria-label="Open menu" data-plugin-anchor="btn-menu">&#9776;</button>
+      <button class="header-btn" id="menuBtn" title="Open menu" aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="menuOverlay" data-plugin-anchor="btn-menu">&#9776;</button>
     </div>
   </header>
 
@@ -161,36 +161,36 @@
         <button class="modal-close" id="closeUploadModal" aria-label="Close upload modal">&#10005;</button>
       </div>
       
-      <div class="modal-tabs" role="tablist">
-        <button class="modal-tab active" data-tab="json" role="tab" aria-selected="true" aria-controls="tab-json">JSON</button>
-        <button class="modal-tab" data-tab="txt" role="tab" aria-selected="false" aria-controls="tab-txt">TXT</button>
+      <div class="modal-tabs" role="tablist" aria-label="Upload format">
+        <button class="modal-tab active" id="tab-btn-json" data-tab="json" role="tab" aria-selected="true" aria-controls="tab-json" tabindex="0">JSON</button>
+        <button class="modal-tab" id="tab-btn-txt" data-tab="txt" role="tab" aria-selected="false" aria-controls="tab-txt" tabindex="-1">TXT</button>
       </div>
       
       <div class="modal-body">
-        <div class="tab-content active" id="tab-json" role="tabpanel" aria-labelledby="tab-json">
-          <div class="file-upload-area" id="fileUploadAreaJSON">
-            <div class="upload-text">Click to select or drag & drop JSON file</div>
-            <div class="upload-hint">Supports card, subtree, and instance exports</div>
+        <div class="tab-content active" id="tab-json" role="tabpanel" aria-labelledby="tab-btn-json">
+          <div class="file-upload-area" id="fileUploadAreaJSON" role="button" tabindex="0" aria-describedby="uploadHintJSON">
+            <div class="upload-text">Choose a JSON file, or drag &amp; drop it here</div>
+            <div class="upload-hint" id="uploadHintJSON">Supports card, subtree, and instance exports</div>
           </div>
-          <input type="file" id="fileInputJSON" accept=".json" style="display: none;" />
+          <input type="file" id="fileInputJSON" accept=".json,application/json" tabindex="-1" aria-hidden="true" style="display: none;" />
           
           <div class="form-group">
-            <label class="form-label">Import Location</label>
+            <label class="form-label" for="importLocationSelectJSON">Import Location</label>
             <select id="importLocationSelectJSON" class="form-select">
               <option value="root">Add as Root Cards</option>
             </select>
           </div>
         </div>
         
-        <div class="tab-content" id="tab-txt" role="tabpanel" aria-labelledby="tab-txt">
-          <div class="file-upload-area" id="fileUploadAreaTXT">
-            <div class="upload-text">Click to select or drag & drop TXT file</div>
-            <div class="upload-hint">Plain text or hierarchical outline</div>
+        <div class="tab-content" id="tab-txt" role="tabpanel" aria-labelledby="tab-btn-txt">
+          <div class="file-upload-area" id="fileUploadAreaTXT" role="button" tabindex="0" aria-describedby="uploadHintTXT">
+            <div class="upload-text">Choose a TXT file, or drag &amp; drop it here</div>
+            <div class="upload-hint" id="uploadHintTXT">Plain text or hierarchical outline</div>
           </div>
-          <input type="file" id="fileInputTXT" accept=".txt" style="display: none;" />
+          <input type="file" id="fileInputTXT" accept=".txt,text/plain" tabindex="-1" aria-hidden="true" style="display: none;" />
           
-          <div class="form-group">
-            <label class="form-label">Import Mode</label>
+          <fieldset class="form-group form-fieldset">
+            <legend class="form-label">Import Mode</legend>
             <div class="radio-group">
               <label class="radio-option">
                 <input type="radio" name="txtImportMode" value="outline" checked />
@@ -207,10 +207,10 @@
                 </div>
               </label>
             </div>
-          </div>
+          </fieldset>
           
           <div class="form-group">
-            <label class="form-label">Import Location</label>
+            <label class="form-label" for="importLocationSelectTXT">Import Location</label>
             <select id="importLocationSelectTXT" class="form-select">
               <option value="root">Add as Root Cards (Outline Mode)</option>
             </select>

@@ -1167,6 +1167,23 @@
     :root.dark .file-upload-area:hover {
       background: #0d0d0d;
     }
+
+    /* Keyboard focus and drag-over share the hover affordance so the drop
+       target is obvious whether reached by Tab or by dragging a file. */
+    .file-upload-area:focus-visible {
+      outline: var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);
+      outline-offset: var(--focus-outline-offset);
+    }
+
+    .file-upload-area.drag-over {
+      border-style: solid;
+      border-color: var(--accent-strong, #1d4ed8);
+      background: #f0f5ff;
+    }
+
+    :root.dark .file-upload-area.drag-over {
+      background: #0b1426;
+    }
     
     .upload-icon {
       font-size: var(--text-3xl);
@@ -1188,6 +1205,26 @@
     /* =============================================================
        RADIO GROUPS
        ============================================================= */
+    /* Import Mode radio group is a <fieldset>/<legend> for semantics; strip
+       the UA chrome so it renders exactly like the other .form-group blocks. */
+    .form-fieldset {
+      border: 0;
+      padding: 0;
+      margin-left: 0;
+      margin-right: 0;
+      min-width: 0;
+    }
+
+    .form-fieldset > legend.form-label {
+      padding: 0;
+      float: left;
+      width: 100%;
+    }
+
+    .form-fieldset > legend.form-label + * {
+      clear: both;
+    }
+
     .radio-group {
       display: flex;
       flex-direction: column;
@@ -1597,6 +1634,7 @@
     .btn-ghost:focus-visible,
     .form-child-delete:focus-visible,
     .modal-close:focus-visible,
+    .modal-tab:focus-visible,
     .empty-new-card-btn:focus-visible {
       outline: var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);
       outline-offset: var(--focus-outline-offset);

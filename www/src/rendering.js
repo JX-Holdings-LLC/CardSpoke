@@ -1320,10 +1320,18 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
           localStorage.setItem('cardspoke_theme', theme);
         } catch { }
         
-        // Sync header button
-        const moonIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
-        const sunIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
-        if (header.themeToggle) header.themeToggle.innerHTML = theme === 'dark' ? sunIcon : moonIcon;
+        // Update the header theme toggle: its icon shows the mode a click
+        // switches TO (moon while light, sun while dark), and its accessible
+        // name/tooltip describe that action rather than a generic "toggle"
+        // (issue #371). The SVGs are decorative — the label carries meaning.
+        const moonIcon = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+        const sunIcon = '<svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
+        if (header.themeToggle) {
+          header.themeToggle.innerHTML = theme === 'dark' ? sunIcon : moonIcon;
+          const themeActionLabel = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+          header.themeToggle.setAttribute('aria-label', themeActionLabel);
+          header.themeToggle.setAttribute('title', themeActionLabel + ' (Alt+T)');
+        }
         
       }
       
@@ -1466,16 +1474,30 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
        * listener is always removed and never accumulates (QA A11Y-4).
        */
       function closeMenuOverlay() {
+        const wasOpen = !!(menu.overlay && menu.overlay.classList.contains('show'));
         if (menu.overlay) menu.overlay.classList.remove('show');
-        unlockBodyScroll();
+        if (header.menuBtn) header.menuBtn.setAttribute('aria-expanded', 'false');
         if (menuFocusTrapCleanup) {
           menuFocusTrapCleanup();
           menuFocusTrapCleanup = null;
+        }
+        // Only undo the open-side effects when the menu was actually open:
+        // shortcuts such as Ctrl+U call closeMenu() right after opening the
+        // upload modal, and must not unlock its scroll or steal its focus.
+        if (!wasOpen) return;
+        unlockBodyScroll();
+        // Return focus to the opener so keyboard users are not dropped at
+        // the top of the document (menu items that navigate or open another
+        // dialog move focus again afterwards, which is fine).
+        if (header.menuBtn && typeof header.menuBtn.focus === 'function' &&
+            document.contains(header.menuBtn)) {
+          header.menuBtn.focus();
         }
       }
 
       if (header.menuBtn && menu.overlay) header.menuBtn.onclick = () => {
         menu.overlay.classList.add('show');
+        header.menuBtn.setAttribute('aria-expanded', 'true');
         lockBodyScroll();
         // Show/hide developer section based on developer mode
         if (menu.developerSection) {
@@ -1505,6 +1527,120 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         goTo('edit', { cardId: null, parentId: null });
       };
 
+      // --- Upload modal: tabs, open/close, focus management ---
+
+      /**
+       * Activate one upload-modal tab ('json' | 'txt'): toggles the visual
+       * state, keeps aria-selected and the roving tabindex in sync, and shows
+       * the matching panel. Every tab switch (click, arrow keys, opening the
+       * modal from the menu or from a card) must go through here.
+       * @param {string} tabName
+       * @param {boolean} [focusTab=false] - move focus to the tab button
+       */
+      function activateUploadTab(tabName, focusTab = false) {
+        const tabs = uploadModal.tabs ? Array.from(uploadModal.tabs) : [];
+        let target = tabs.find(t => t.getAttribute('data-tab') === tabName);
+        if (!target) target = tabs.find(t => t.getAttribute('data-tab') === 'json') || tabs[0];
+        if (!target) return;
+        const activeName = target.getAttribute('data-tab');
+        tabs.forEach(t => {
+          const selected = t === target;
+          t.classList.toggle('active', selected);
+          t.setAttribute('aria-selected', selected ? 'true' : 'false');
+          t.setAttribute('tabindex', selected ? '0' : '-1');
+        });
+        if (uploadModal.tabContents) uploadModal.tabContents.forEach(content => {
+          content.classList.toggle('active', content.id === `tab-${activeName}`);
+        });
+        if (focusTab) target.focus();
+      }
+
+      // Focus bookkeeping for the static upload modal (it is not observer-
+      // enhanced like generated modals, so it manages its own contract).
+      let uploadModalReleaseFocus = null;
+      let uploadModalOpener = null;
+
+      /**
+       * Trap Tab/Shift+Tab inside the upload dialog. Unlike the generic
+       * trapFocus(), focusables are recomputed on every Tab so the inactive
+       * tab panel (display:none) and roving tabindex=-1 tabs are skipped.
+       */
+      function trapUploadModalFocus(modalEl) {
+        const selector = 'button, [href], input, select, textarea, [tabindex]';
+        const focusables = () => Array.from(modalEl.querySelectorAll(selector)).filter(el =>
+          !el.disabled && el.getAttribute('tabindex') !== '-1' &&
+          el.getClientRects().length > 0 &&
+          !(el.type === 'radio' && !el.checked && modalEl.querySelector(`input[type="radio"][name="${el.name}"]:checked`)));
+        const onKeyDown = (e) => {
+          if (e.key !== 'Tab') return;
+          const list = focusables();
+          if (!list.length) return;
+          const first = list[0];
+          const last = list[list.length - 1];
+          if (e.shiftKey && (document.activeElement === first || !modalEl.contains(document.activeElement))) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && (document.activeElement === last || !modalEl.contains(document.activeElement))) {
+            e.preventDefault();
+            first.focus();
+          }
+        };
+        modalEl.addEventListener('keydown', onKeyDown);
+        return () => modalEl.removeEventListener('keydown', onKeyDown);
+      }
+
+      /**
+       * Show the upload modal and move focus into it. Callers set up the
+       * tab/select/radio state first (see menu.upload and
+       * openUploadModalForCard in data.js).
+       */
+      function openUploadModal() {
+        if (!uploadModal.overlay) return;
+        const wasOpen = uploadModal.overlay.classList.contains('show');
+        if (!wasOpen) {
+          const active = document.activeElement;
+          uploadModalOpener = active && active !== document.body ? active : null;
+        }
+        uploadModal.overlay.classList.add('show');
+        lockBodyScroll();
+        if (uploadModalReleaseFocus) uploadModalReleaseFocus();
+        const dialog = uploadModal.overlay.querySelector('.modal');
+        uploadModalReleaseFocus = dialog ? trapUploadModalFocus(dialog) : null;
+        const activeTab = uploadModal.overlay.querySelector('.modal-tab.active') ||
+          uploadModal.overlay.querySelector('.modal-tab');
+        if (activeTab) activeTab.focus();
+      }
+
+      /**
+       * Hide the upload modal. Every close path (close button, backdrop,
+       * Escape in systems.js, successful import) goes through here so the
+       * body scroll lock and focus trap are always released and focus
+       * returns to whatever opened the modal.
+       */
+      function closeUploadModal() {
+        if (!uploadModal.overlay) return;
+        const wasOpen = uploadModal.overlay.classList.contains('show');
+        uploadModal.overlay.classList.remove('show');
+        [uploadModal.fileUploadAreaJSON, uploadModal.fileUploadAreaTXT].forEach(area => {
+          if (area) area.classList.remove('drag-over');
+        });
+        unlockBodyScroll();
+        if (uploadModalReleaseFocus) {
+          uploadModalReleaseFocus();
+          uploadModalReleaseFocus = null;
+        }
+        const opener = uploadModalOpener;
+        uploadModalOpener = null;
+        if (!wasOpen) return;
+        // If a follow-up dialog (e.g. an import confirm) already took focus,
+        // leave it there.
+        const active = document.activeElement;
+        const focusIsFree = !active || active === document.body || uploadModal.overlay.contains(active);
+        if (focusIsFree && opener && typeof opener.focus === 'function' && document.contains(opener)) {
+          opener.focus();
+        }
+      }
+
       if (menu.upload) menu.upload.onclick = () => {
         closeMenuOverlay();
         updateImportLocationOptions();
@@ -1522,17 +1658,12 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         if (txtOutlineRadio) txtOutlineRadio.checked = true;
 
         // Restore last used tab or default to json
-        const lastTab = localStorage.getItem('cardspoke_lastUploadTab') || 'json';
-        uploadModal.tabs.forEach(t => t.classList.remove('active'));
-        uploadModal.tabContents.forEach(content => content.classList.remove('active'));
-        const tabToActivate = document.querySelector(`.modal-tab[data-tab="${lastTab}"]`) || document.querySelector('.modal-tab[data-tab="json"]');
-        const contentToActivate = document.getElementById(`tab-${lastTab}`) || document.getElementById('tab-json');
-        if (tabToActivate) tabToActivate.classList.add('active');
-        if (contentToActivate) contentToActivate.classList.add('active');
+        let lastTab = 'json';
+        try { lastTab = localStorage.getItem('cardspoke_lastUploadTab') || 'json'; } catch { }
+        activateUploadTab(lastTab);
         
         // Show modal
-        uploadModal.overlay.classList.add('show');
-        lockBodyScroll();
+        openUploadModal();
       };
 
       if (menu.pluginManager) menu.pluginManager.onclick = () => {
@@ -1724,56 +1855,82 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
       if (uploadModal.tabs) uploadModal.tabs.forEach(tab => {
         tab.addEventListener('click', () => {
           const tabName = tab.getAttribute('data-tab');
-          uploadModal.tabs.forEach(t => t.classList.remove('active'));
-          tab.classList.add('active');
-          uploadModal.tabContents.forEach(content => content.classList.remove('active'));
-          const tabContent = document.getElementById(`tab-${tabName}`);
-          if (tabContent) tabContent.classList.add('active');
+          activateUploadTab(tabName);
           // Remember last used tab
-          localStorage.setItem('cardspoke_lastUploadTab', tabName);
+          try { localStorage.setItem('cardspoke_lastUploadTab', tabName); } catch { }
+        });
+        // WAI-ARIA tabs pattern: arrows/Home/End move between tabs.
+        tab.addEventListener('keydown', (e) => {
+          const tabs = Array.from(uploadModal.tabs);
+          const idx = tabs.indexOf(tab);
+          let next = null;
+          if (e.key === 'ArrowRight') next = tabs[(idx + 1) % tabs.length];
+          else if (e.key === 'ArrowLeft') next = tabs[(idx - 1 + tabs.length) % tabs.length];
+          else if (e.key === 'Home') next = tabs[0];
+          else if (e.key === 'End') next = tabs[tabs.length - 1];
+          if (!next) return;
+          e.preventDefault();
+          next.click();
+          next.focus();
         });
       });
 
       if (uploadModal.closeBtn) uploadModal.closeBtn.onclick = () => {
-        if (uploadModal.overlay) uploadModal.overlay.classList.remove('show');
-        unlockBodyScroll();
+        closeUploadModal();
       };
 
-      if (uploadModal.overlay) uploadModal.overlay.onclick = (e) => {
-        if (e.target === uploadModal.overlay) {
-          uploadModal.overlay.classList.remove('show');
-          unlockBodyScroll();
-        }
-      };
+      if (uploadModal.overlay) {
+        uploadModal.overlay.onclick = (e) => {
+          if (e.target === uploadModal.overlay) {
+            closeUploadModal();
+          }
+        };
+        // A file dropped anywhere on the modal outside a drop zone must not
+        // make the browser navigate away to the file.
+        uploadModal.overlay.addEventListener('dragover', (e) => e.preventDefault());
+        uploadModal.overlay.addEventListener('drop', (e) => e.preventDefault());
+      }
 
-      if (uploadModal.fileUploadAreaJSON) uploadModal.fileUploadAreaJSON.onclick = () => {
-        if (uploadModal.fileInputJSON) uploadModal.fileInputJSON.click();
-      };
+      /** True when `file` looks like the expected upload type. */
+      function isUploadFileType(file, extension, mimeTypes) {
+        if (!file) return false;
+        const name = (file.name || '').toLowerCase();
+        if (name.endsWith('.' + extension)) return true;
+        return mimeTypes.includes(file.type);
+      }
 
-      if (uploadModal.fileInputJSON) uploadModal.fileInputJSON.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+      /**
+       * Import a JSON file picked via the file input or dropped on the
+       * upload area — both paths share this function.
+       */
+      function handleJSONUploadFile(file) {
         if (!file) return;
+        if (!isUploadFileType(file, 'json', ['application/json'])) {
+          showToast('Please choose a .json file', 'error');
+          return;
+        }
         const reader = new FileReader();
         reader.onload = async () => {
           try {
             const data = JSON.parse(reader.result);
             const mode = uploadModal.importLocationSelectJSON ? uploadModal.importLocationSelectJSON.value || 'root' : 'root';
             await importJSON(data, mode);
-            if (uploadModal.overlay) uploadModal.overlay.classList.remove('show');
+            closeUploadModal();
           } catch (err) {
             showToast('Failed to parse JSON: ' + err.message, 'error');
           }
         };
+        reader.onerror = () => showToast('Could not read file', 'error');
         reader.readAsText(file);
-      });
+      }
 
-      if (uploadModal.fileUploadAreaTXT) uploadModal.fileUploadAreaTXT.onclick = () => {
-        if (uploadModal.fileInputTXT) uploadModal.fileInputTXT.click();
-      };
-
-      if (uploadModal.fileInputTXT) uploadModal.fileInputTXT.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+      /** Import a TXT file from the file input or a drop (shared path). */
+      function handleTXTUploadFile(file) {
         if (!file) return;
+        if (!isUploadFileType(file, 'txt', ['text/plain'])) {
+          showToast('Please choose a .txt file', 'error');
+          return;
+        }
         const reader = new FileReader();
         reader.onload = () => {
           const text = reader.result;
@@ -1781,10 +1938,70 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
           const mode = modeRadio ? modeRadio.value : 'outline';
           const location = uploadModal.importLocationSelectTXT ? uploadModal.importLocationSelectTXT.value || 'root' : 'root';
           importTXT(text, mode, location);
-          if (uploadModal.overlay) uploadModal.overlay.classList.remove('show');
+          closeUploadModal();
         };
+        reader.onerror = () => showToast('Could not read file', 'error');
         reader.readAsText(file);
-      });
+      }
+
+      /**
+       * Wire a .file-upload-area as a keyboard-operable button (Enter/Space
+       * open the picker) and as a real drag-and-drop target that feeds the
+       * dropped file through the same handler as the file input.
+       */
+      function bindUploadArea(area, input, handleFile) {
+        if (!area) return;
+        area.onclick = () => {
+          if (input) input.click();
+        };
+        // Mirror native <button> semantics: Enter activates on keydown,
+        // Space on keyup (its keydown is cancelled only to stop scrolling).
+        // Enter's keydown is deliberately NOT preventDefault()ed — Chromium
+        // refuses to open a file picker from a cancelled keydown.
+        const isSpace = (e) => e.key === ' ' || e.key === 'Spacebar';
+        area.addEventListener('keydown', (e) => {
+          if (e.target !== area) return;
+          if (e.key === 'Enter' && !e.repeat) {
+            if (input) input.click();
+          } else if (isSpace(e)) {
+            e.preventDefault();
+          }
+        });
+        area.addEventListener('keyup', (e) => {
+          if (e.target !== area) return;
+          if (isSpace(e) && input) input.click();
+        });
+        area.addEventListener('dragenter', (e) => {
+          e.preventDefault();
+          area.classList.add('drag-over');
+        });
+        area.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+          area.classList.add('drag-over');
+        });
+        area.addEventListener('dragleave', (e) => {
+          // Ignore leave events fired when moving between child elements.
+          if (e.relatedTarget && area.contains(e.relatedTarget)) return;
+          area.classList.remove('drag-over');
+        });
+        area.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          area.classList.remove('drag-over');
+          const files = e.dataTransfer && e.dataTransfer.files;
+          if (files && files.length) handleFile(files[0]);
+        });
+        if (input) input.addEventListener('change', (e) => {
+          const file = e.target.files && e.target.files[0];
+          // Reset so picking the same file again still fires 'change'.
+          e.target.value = '';
+          handleFile(file);
+        });
+      }
+
+      bindUploadArea(uploadModal.fileUploadAreaJSON, uploadModal.fileInputJSON, handleJSONUploadFile);
+      bindUploadArea(uploadModal.fileUploadAreaTXT, uploadModal.fileInputTXT, handleTXTUploadFile);
 
 
       // =============================================================
