@@ -2,7 +2,7 @@
 
 This catalog describes the current public CardSpoke app scope: the main local-first web app, followed by desktop and mobile packaging. It intentionally excludes OS-specific shells, spin-off apps, typed-card platform systems, runtime profiles, core-only builds, and cloud storage drivers.
 
-**Current Public Preview:** 0.20.0 | **Schema Version:** 4
+**Current Public Preview:** 0.21.1 | **Schema Version:** 4
 
 ## Core Product Shape
 

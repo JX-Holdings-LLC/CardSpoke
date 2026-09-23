@@ -45,7 +45,7 @@ import { createServer } from 'http';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { resolve, dirname, extname, join, normalize } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { chromium } from 'playwright-core';
+import { chromium } from 'playwright';
 import { encryptStorePayload, isEncryptedEnvelope, decryptStorePayload } from '../www/src/core/dataset-crypto.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -1062,6 +1062,29 @@ await scenario('thousand-card-search', async () => {
   check('search returns target card', await page.locator('#searchResultGrid').innerText().then(text => text.includes('Research topic 999')), 'Search time ' + (Date.now()-searchStart) + ' ms');
   writeFileSync(join(ART_DIR, 'scale-timing.json'), JSON.stringify({ loadAndSearchTotalMs: Date.now()-start, searchMs: Date.now()-searchStart, cards: 1000 }));
   await context.close();
+});
+
+await scenario('boot-error-message', async () => {
+  // A missing bundle must produce a readable message, not a blank page or a
+  // second error from a doomed ESM fallback.
+  const { context, page } = await freshPage([]);
+  await page.route('**/app.js', route => route.fulfill({ status: 404, body: 'missing' }));
+  await page.goto(BASE);
+  const alert = await page.waitForSelector('.boot-error[role=alert]', { timeout: 8000 });
+  check('missing app.js shows a boot-error alert', /could not start/.test(await alert.textContent()));
+  await context.close();
+
+  // A bundle that throws before the store exists shows the same message.
+  const second = await freshPage([]);
+  await second.page.route('**/app.js', route => route.fulfill({
+    status: 200, contentType: 'text/javascript', body: 'throw new Error("boom at boot");'
+  }));
+  await second.page.goto(BASE);
+  const alert2 = await second.page.waitForSelector('.boot-error[role=alert]', { timeout: 8000 });
+  check('bundle that throws at boot shows the error detail', /boom at boot/.test(await alert2.textContent()));
+  check('no ESM fallback script is injected',
+    await second.page.evaluate(() => !document.querySelector('script[src*="src/main.js"]')));
+  await second.context.close();
 });
 
 await browser.close();

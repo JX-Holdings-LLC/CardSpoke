@@ -2,7 +2,7 @@
 
 This file summarizes the persisted data model and schema versioning rules used by CardSpoke.
 
-**Current App Version:** 0.20.0 | **Schema Version:** 4 | **Release Date:** 2026-07-20
+**Current App Version:** 0.21.1 | **Schema Version:** 4 | **Release Date:** 2026-09-17
 
 ## Versioning
 

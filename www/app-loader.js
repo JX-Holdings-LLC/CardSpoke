@@ -16,48 +16,70 @@
 
 /**
  * Application entry point loader.
- * Prefers the stable bundled app.js; falls back to the ESM entry (src/main.js)
- * if app.js fails to load (e.g. file not found) OR fails to execute (runtime error).
+ * Loads the bundled app.js. If the bundle is missing or throws before the app
+ * has booted, shows a plain boot-error message instead of a blank page.
+ *
+ * (Earlier versions fell back to the ESM entry src/main.js. That fallback
+ * could never succeed in a browser: the app-layer sources rely on the fused
+ * single-scope build and on @core/ import aliases, so it only buried the
+ * original error under a second one.)
  *
  * This is an external script file so it can be served under the 'self' CSP
  * source without requiring 'unsafe-inline'.
  */
 (function() {
-  var loaded = false;
-  var fallbackUsed = false;
+  var shown = false;
+  var firstError = null;
 
-  function loadModuleEntry() {
-    if (fallbackUsed) return;
-    fallbackUsed = true;
-    var entry = document.createElement('script');
-    entry.type = 'module';
-    entry.src = './src/main.js';
-    document.body.appendChild(entry);
+  function showBootError(detail) {
+    if (shown) return;
+    shown = true;
+    var main = document.getElementById('main') || document.body;
+    var box = document.createElement('div');
+    box.setAttribute('role', 'alert');
+    box.className = 'boot-error';
+    box.style.cssText = 'max-width:40rem;margin:3rem auto;padding:1.5rem;border:1px solid currentColor;border-radius:8px;';
+    var title = document.createElement('h2');
+    title.textContent = 'CardSpoke could not start';
+    var text = document.createElement('p');
+    text.textContent = 'Your cards are still stored on this device. Try reloading the page. ' +
+      'If you are running from source, run "npm run build" to generate app.js.';
+    box.appendChild(title);
+    box.appendChild(text);
+    if (detail) {
+      var pre = document.createElement('pre');
+      pre.style.cssText = 'white-space:pre-wrap;font-size:0.85em;opacity:0.8;';
+      pre.textContent = String(detail);
+      box.appendChild(pre);
+    }
+    main.appendChild(box);
   }
 
-  // Catch fatal JS errors that originate from the bundle. The script onerror
-  // event only fires for network failures (404), not for JS execution errors, so
-  // we also install a temporary window.onerror listener during the window in
-  // which the bundle is expected to initialise.
-  var originalOnError = window.onerror;
-  window.onerror = function(msg, src, line, col, err) {
-    if (!loaded && !fallbackUsed) {
-      console.warn('[app-loader] Bundle error detected, falling back to ESM entry:', msg);
-      loadModuleEntry();
+  // Record the first uncaught error raised by the bundle while it executes;
+  // the script's onerror event only fires for network failures (404).
+  function onBundleError(event) {
+    if (!firstError && event && /(^|\/)app\.js(\?|#|$)/.test(event.filename || '')) {
+      firstError = event.message || 'Unknown error';
     }
-    // Restore previous handler and propagate
-    window.onerror = originalOnError;
-    return false;
-  };
+  }
+  window.addEventListener('error', onBundleError);
 
   var bundle = document.createElement('script');
   bundle.src = './app.js';
   bundle.defer = true;
   bundle.onload = function() {
-    loaded = true;
-    // Bundle executed successfully; remove the onerror safety net.
-    window.onerror = originalOnError;
+    window.removeEventListener('error', onBundleError);
+    // A non-fatal error during boot is only logged; the page is replaced
+    // with a message only when the app state never came up.
+    if (firstError && typeof window.store === 'undefined') {
+      console.error('[app-loader] CardSpoke failed to boot:', firstError);
+      showBootError(firstError);
+    }
   };
-  bundle.onerror = loadModuleEntry;
+  bundle.onerror = function() {
+    window.removeEventListener('error', onBundleError);
+    console.error('[app-loader] Could not load app.js');
+    showBootError('app.js could not be loaded.');
+  };
   document.body.appendChild(bundle);
 })();

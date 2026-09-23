@@ -1,8 +1,80 @@
 # Changelog
 
+All notable changes to CardSpoke are documented in this file.
+
+The format follows Keep a Changelog and the project uses semantic versioning where practical.
+
+---
+
+## [Unreleased]
+
+### Added
+
+- **Desktop app.** A locked-down Electron shell in `desktop/` with installers
+  for Windows (NSIS, x64/arm64), macOS (dmg/zip, x64/arm64) and Linux
+  (AppImage/deb). The app is served from a dedicated `cardspoke://app` origin,
+  has a sandboxed renderer with no Node.js access, blocks navigation, pop-ups
+  and permission requests, opens external links in the system browser,
+  remembers window state and runs as a single instance. It makes no network
+  requests on its own. Includes a Playwright-driven smoke test, a
+  `Desktop app` CI workflow that publishes installers to a draft GitHub
+  Release on `v*` tags, and a [Desktop guide](docs/guides/DESKTOP.md).
+
+### Security
+
+- Plugin permission grants are bound to a fingerprint of the plugin's code
+  and requested permissions, so a same-id plugin with different code (for
+  example from an imported dataset) needs fresh consent. Grants saved by
+  earlier versions are confirmed once.
+- `card.render` hooks now require `ui-override`. Card write middleware and
+  the write helpers in `ctx.utils` now require `data-modify`, and theme
+  setters require `ui-override`.
+- Plugins are always imported suspended (`enabled: false`), including when
+  restored from a local file with a changed definition.
+- Removed the unsandboxed function-plugin path from `install()`/`register()`
+  (#370). Trusted host code uses `registerHostPlugin()`.
+- Plugin ids containing unsafe characters are rejected.
+- The service worker only refreshes the cached app shell from app-root
+  navigations. `diagnostic.html`/`test.html` carry a CSP, no longer use
+  `innerHTML`, and are no longer copied into `dist/`.
+
+### Fixed
+
+- Renaming a card rewrites `[[Old Title]]` links in other cards, as one undo
+  step (#375).
+- Exporting a PIN-protected dataset offers an encrypted JSON backup or asks
+  for explicit confirmation before writing plaintext. Encrypted backups can be
+  re-imported with the PIN (#372).
+- Creating a dataset no longer carries the previous dataset's undo, redo or
+  trash into it.
+- JSON import is a single undoable step. Undoing an edit restores content
+  fields only.
+- Tags are normalized, and Tag Manager handles mixed-case tags.
+- Restoring a trashed child whose parent is still in the trash moves it to
+  the root instead of hiding it. Permanently deleted cards can no longer be
+  resurrected with Undo.
+- `updateCard` ignores structural fields. Moving a card through the edit
+  form is undoable, and plugin `card.update`/`card.create` hooks now fire for
+  edits made in the UI.
+- Clear All Data and dataset deletion also remove the IndexedDB copies.
+- A stale local file no longer overwrites newer local data on boot.
+- Upload modal: scroll is unlocked after a successful import, drop zones are
+  keyboard accessible and drag-and-drop actually works, focus is trapped and
+  restored, and tab ARIA state stays in sync.
+- Theme toggle labels describe the action and the icons are hidden from
+  screen readers (#371). Alt/Option+T works on macOS. The menu button exposes
+  `aria-expanded` and gets focus back when the menu closes.
+- A missing or crashing `app.js` shows a readable boot-error message instead
+  of a doomed ESM fallback.
+- Documentation and type package versions now match the release (#362), and
+  the README's preview/QA instructions are fixed.
+
+---
+
 ## [0.21.1] - 2026-09-17
 
 ### Fixed
+
 - Escape every CSV field, preserve multiline bodies, and neutralize spreadsheet formula-like text. Open newly navigated cards at the top on mobile.
 - Preserve loaded, imported, reparented and undo-restored cards when using kernel-backed operations. Deep-clone metadata and guard cyclic delete/duplicate and missing parents.
 - Serialize encrypted saves, await selected secondary storage, reject failed switch flushes, cancel obsolete writes, and wait for IndexedDB transaction commit. Do not overwrite primary data with a stale mirror.
@@ -12,37 +84,8 @@
 - Refresh five vulnerable transitive dependencies, align browser QA with worker plugins, expand regression coverage, restrict offline caching to shell assets, and document supported Node versions.
 
 ### Compatibility
+
 - Schema remains 4. JS plugin packages retain their format and now require a new trust grant. Active HTML elements and unsafe vnode attributes are rejected.
-
-
-All notable changes to CardSpoke are documented in this file.
-
-The format follows Keep a Changelog and the project uses semantic versioning where practical.
-
----
-
-## [Unreleased]
-
-### Changed
-
-- Documented dataset encryption at rest (AES-GCM with a PBKDF2-derived key from the optional dataset PIN) in the storage/privacy and security policies, where the shipped feature had gone unmentioned.
-- Documented the Plugin Manager gallery request to `raw.githubusercontent.com` as the app's only outbound connection, including what it does and does not reveal.
-- Rewrote the architecture overview to match the implementation: no plugin sandbox or isolated contexts, the real storage-driver set with LocalStorage as the default, real bundle sizes, and honest priority tie-breaking rules.
-- Pointed security disclosures at private GitHub vulnerability reporting instead of public issues.
-- Added the `npm run smoke` and `npm run qa:browser` deployment gates to the test guide, developer guide, release checklist, and QA profile, which previously named only a subset of the checks CI enforces.
-- Annotated the 2026-07-10 audit report with the five findings resolved in v0.18.2 and the two still open.
-
-### Fixed
-
-- Corrected the component registry documentation: the host queries only `Card`, `Header`, `Sidebar`, and `SearchBar`, and three of the four documented prop shapes were wrong. Examples and the TypeScript snippet now match `www/src/rendering.js`.
-- Corrected `PluginUtils` in `types/index.d.ts`, which declared six helpers that are not reachable from `ctx.utils` while omitting the twenty async helpers that are. Added the Header/Sidebar/SearchBar prop types and fixed registry return types.
-- Aligned `types/package.json` version and license with the root package (0.20.0, Apache-2.0).
-- Fixed plugin documentation paths in the agent skill files, which pointed at `docs/PLUGIN_SYSTEM.md` and `docs/PLUGIN_INVARIANTS.md` instead of their real `docs/architecture/` locations.
-- Corrected stale counts, dates, and claims: test suite baseline (33 files, 403 tests), Code of Conduct date, Capacitor CLI dependency location, export filename patterns, the nonexistent plugin dev-tools surface, and a "legacy concatenation build" that no longer exists.
-- Added the missing `analysis/` entry to the documentation index.
-- Removed the nonexistent Node package entry point from this browser-only package.
-- Moved dependency-audit summary generation into a checked-in Node script so the GitHub Pages workflow passes shell validation without changing the release gate.
-- Corrected the remaining markdownlint findings in the QA profile, plugin review skill, and historical audit report.
 
 ---
 
@@ -122,6 +165,27 @@ updated `sample-plugins/` packages demonstrate.
   test-only `Worker` global backed by a real Node `worker_threads` thread
   running the actual production worker-bootstrap source, so plugin tests
   exercise genuine thread isolation rather than a same-process mock.
+
+### Documentation (changed)
+
+- Documented dataset encryption at rest (AES-GCM with a PBKDF2-derived key from the optional dataset PIN) in the storage/privacy and security policies, where the shipped feature had gone unmentioned.
+- Documented the Plugin Manager gallery request to `raw.githubusercontent.com` as the app's only outbound connection, including what it does and does not reveal.
+- Rewrote the architecture overview to match the implementation: no plugin sandbox or isolated contexts, the real storage-driver set with LocalStorage as the default, real bundle sizes, and honest priority tie-breaking rules.
+- Pointed security disclosures at private GitHub vulnerability reporting instead of public issues.
+- Added the `npm run smoke` and `npm run qa:browser` deployment gates to the test guide, developer guide, release checklist, and QA profile, which previously named only a subset of the checks CI enforces.
+- Annotated the 2026-07-10 audit report with the five findings resolved in v0.18.2 and the two still open.
+
+### Documentation (fixed)
+
+- Corrected the component registry documentation: the host queries only `Card`, `Header`, `Sidebar`, and `SearchBar`, and three of the four documented prop shapes were wrong. Examples and the TypeScript snippet now match `www/src/rendering.js`.
+- Corrected `PluginUtils` in `types/index.d.ts`, which declared six helpers that are not reachable from `ctx.utils` while omitting the twenty async helpers that are. Added the Header/Sidebar/SearchBar prop types and fixed registry return types.
+- Aligned `types/package.json` version and license with the root package (0.20.0, Apache-2.0).
+- Fixed plugin documentation paths in the agent skill files, which pointed at `docs/PLUGIN_SYSTEM.md` and `docs/PLUGIN_INVARIANTS.md` instead of their real `docs/architecture/` locations.
+- Corrected stale counts, dates, and claims: test suite baseline (33 files, 403 tests), Code of Conduct date, Capacitor CLI dependency location, export filename patterns, the nonexistent plugin dev-tools surface, and a "legacy concatenation build" that no longer exists.
+- Added the missing `analysis/` entry to the documentation index.
+- Removed the nonexistent Node package entry point from this browser-only package.
+- Moved dependency-audit summary generation into a checked-in Node script so the GitHub Pages workflow passes shell validation without changing the release gate.
+- Corrected the remaining markdownlint findings in the QA profile, plugin review skill, and historical audit report.
 
 ---
 

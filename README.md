@@ -91,7 +91,6 @@ The plugin runtime includes consent prompts, risk labels, safe mode, resource cl
 
 **Trust model:** JavaScript packages run in dedicated workers with permission-checked API calls and restricted UI descriptions. Workers reduce risk but are not a complete hostile-code sandbox. The app asks for `plugin-code` trust consent before running any package JavaScript; plugins can read unlocked cards and dynamic imports are not covered by the host network permission. Only allow authors you trust. See [Security & Safety](./docs/policies/SECURITY_AND_SAFETY.md).
 
-
 ## Getting Started
 
 1. Install dependencies. Node 20.19+ or 22.12+ is recommended.

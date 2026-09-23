@@ -1,6 +1,6 @@
 # Plugin API Documentation
 
-**Version:** 0.20.0
+**Version:** 0.21.1
 
 The Plugin API provides a permission-scoped, resource-managed surface for
 plugin development. Plugin JS runs on the **main thread** (there is no iframe
@@ -96,7 +96,7 @@ Every plugin receives a context object:
 ```javascript
 {
   modId: string,              // Plugin ID
-  appVersion: string,         // App version (0.20.0)
+  appVersion: string,         // App version (0.21.1)
   schemaVersion: number,      // Schema version (4)
   api: {
     ui: UIApi,                 // UI manipulation
@@ -366,6 +366,15 @@ Operations fired by the host app:
 | `card.save` | `[store]` | **aborts the save** |
 | `card.render` | `[card, cardTileElement]` | no effect (post-processing) |
 
+Required permissions:
+
+- A `card.render` decorator needs `ui-override`.
+- Middleware on `card.create`, `card.update`, `card.delete` or `'*'` needs
+  `data-modify`.
+- Other hooks, such as `card.save`, need no extra permission. Without
+  `data-modify` they can only observe: their changes to `mw.args`,
+  `preventDefault()` and `stopPropagation()` are ignored.
+
 #### `ctx.api.middleware.unregister(name)`
 
 Remove one of this plugin's middlewares (the `<pluginId>:` prefix is added
@@ -391,6 +400,14 @@ Output: `[Plugin:my-plugin] Info message`
 inner object that the host app layer (`www/src/storage.js`) populates **in
 place** with async helpers once those functions exist — so plugin code
 reaches them through `ctx.utils`. Treat it as read-only.
+
+From a plugin Worker, only an allowlist of helpers is reachable, and helpers
+that change data or appearance are permission-gated:
+
+- Card and tag writers (`createCard`, `updateCard`, `addTag`, `setTags`,
+  `removeTag`, ...) require `data-modify`.
+- `setTheme`, `setTypography` and `setHighContrast` require `ui-override`.
+- Read-only helpers need no extra permission.
 
 ```javascript
 // Async host helpers (see the CardSpoke.utils block in www/src/storage.js

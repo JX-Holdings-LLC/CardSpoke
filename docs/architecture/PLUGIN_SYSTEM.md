@@ -266,7 +266,7 @@ Every sandboxed plugin gets its own worker-local context:
 ```text
 ctx
 ├─ modId            plugin id (string)
-├─ appVersion       e.g. '0.21.0'
+├─ appVersion       e.g. '0.21.1'
 ├─ schemaVersion    e.g. 4
 ├─ config           manifest.config (live; settings panel writes propagate on next enable)
 ├─ h                ctx.h(tag, props, children) — build a vnode, see above
@@ -370,6 +370,10 @@ exactly as if it ran locally.
 `(mwCtx, next)` shape above at all.
 
 ### The `card.render` decorator contract
+
+Registering a `card.render` decorator requires the `ui-override` permission.
+The host accepts it only after that check passes. A replacement vnode is
+honoured only for the plugin that owns the host-registered `Card` component.
 
 `card.render` fires once per card tile, in a hot render-batch loop (up to 60
 tiles per batch, on every scroll/search/navigation) — too frequent for a

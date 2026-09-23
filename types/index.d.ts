@@ -17,7 +17,7 @@
 
 /**
  * CardSpoke Core Type Definitions
- * @version 0.21.0
+ * @version 0.21.1
  * @module @cardspoke/core
  */
 
