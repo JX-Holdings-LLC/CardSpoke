@@ -2793,6 +2793,16 @@
       card.tags = [];
       changed = true;
     }
+    const normalizedTags = [];
+    for (const t of card.tags) {
+      if (t == null || typeof t === "object" || typeof t === "function") continue;
+      const tag = String(t).trim().replace(/^#/, "").trim().toLowerCase();
+      if (tag && !normalizedTags.includes(tag)) normalizedTags.push(tag);
+    }
+    if (normalizedTags.length !== card.tags.length || normalizedTags.some((tag, i) => tag !== card.tags[i])) {
+      card.tags = normalizedTags;
+      changed = true;
+    }
     if (card.modsData == null || typeof card.modsData !== "object") {
       card.modsData = {};
       changed = true;
@@ -3003,6 +3013,25 @@
     const normalized = normalizeCardName(cardName);
     return links.some((link) => normalizeCardName(link.cardName) === normalized);
   }
+  function replaceCardLinks(text, oldName, newName) {
+    if (!text || typeof text !== "string" || !oldName || !newName) return { text, count: 0 };
+    const replacementName = String(newName).trim();
+    if (!replacementName || /[[\]]/.test(replacementName)) return { text, count: 0 };
+    const target = normalizeCardName(String(oldName));
+    if (!target) return { text, count: 0 };
+    let count = 0;
+    const out = text.replace(/\[\[([^\]]+)\]\]/g, (match, inner) => {
+      if (normalizeCardName(inner) !== target) return match;
+      count++;
+      return "[[" + replacementName + "]]";
+    });
+    return { text: out, count };
+  }
+  function normalizeTag(tag) {
+    if (tag == null || typeof tag === "object" || typeof tag === "function") return "";
+    return String(tag).trim().replace(/^#/, "").trim().toLowerCase();
+  }
+  const PROTECTED_UPDATE_FIELDS = /* @__PURE__ */ new Set(["id", "parentId", "children", "createdAt", "__proto__", "constructor", "prototype"]);
   function extractTags(body) {
     if (!body) return [];
     const matches = body.match(/#\w+/g);
@@ -3093,7 +3122,9 @@
       return { id, card: cloneCard(card) };
     }
     /**
-     * Update fields on an existing card.
+     * Update content fields on an existing card. Structural fields (id,
+     * parentId, children, createdAt) are ignored — moves go through reparent()
+     * so parent.children / rootOrder can never disagree with card.parentId.
      * @param {string} id
      * @param {Object} updates - Fields to merge onto the card.
      * @returns {{ previousState: Object|null, card: Object|null }} Cloned before/after.
@@ -3103,7 +3134,13 @@
       if (!card) return { previousState: null, card: null };
       const previousState = cloneCard(card);
       const updateTimestamp = Date.now();
-      Object.assign(card, updates, { updatedAt: updateTimestamp });
+      const safeUpdates = {};
+      if (updates && typeof updates === "object") {
+        for (const key of Object.keys(updates)) {
+          if (!PROTECTED_UPDATE_FIELDS.has(key)) safeUpdates[key] = updates[key];
+        }
+      }
+      Object.assign(card, safeUpdates, { updatedAt: updateTimestamp });
       return { previousState, card: cloneCard(card) };
     }
     /**
@@ -3340,10 +3377,10 @@
     addTag(cardId, tag) {
       const card = this.cards[cardId];
       if (!card) return false;
-      const normalized = tag.replace(/^#/, "").toLowerCase().trim();
+      const normalized = normalizeTag(tag);
       if (!normalized) return false;
-      if (!card.tags) card.tags = [];
-      if (card.tags.some((t) => t.toLowerCase() === normalized)) return false;
+      if (!Array.isArray(card.tags)) card.tags = [];
+      if (card.tags.some((t) => normalizeTag(t) === normalized)) return false;
       card.tags.push(normalized);
       card.updatedAt = Date.now();
       return true;
@@ -3356,10 +3393,11 @@
      */
     removeTag(cardId, tag) {
       const card = this.cards[cardId];
-      if (!card || !card.tags) return false;
-      const normalized = tag.replace(/^#/, "").toLowerCase().trim();
+      if (!card || !Array.isArray(card.tags)) return false;
+      const normalized = normalizeTag(tag);
+      if (!normalized) return false;
       const before = card.tags.length;
-      card.tags = card.tags.filter((t) => t.toLowerCase() !== normalized);
+      card.tags = card.tags.filter((t) => normalizeTag(t) !== normalized);
       if (card.tags.length === before) return false;
       card.updatedAt = Date.now();
       return true;
@@ -3373,7 +3411,7 @@
     setTags(cardId, tags) {
       const card = this.cards[cardId];
       if (!card) return false;
-      const normalized = tags.map((t) => t.replace(/^#/, "").toLowerCase().trim()).filter(Boolean);
+      const normalized = (Array.isArray(tags) ? tags : []).map(normalizeTag).filter(Boolean);
       card.tags = [...new Set(normalized)];
       card.updatedAt = Date.now();
       return true;
@@ -3438,6 +3476,25 @@
         link,
         cardId: this.findCardByName(link.cardName)
       }));
+    }
+    /**
+     * Rewrite [[oldName]] links to [[newName]] in every card body. Pure data
+     * operation: returns cloned before/after snapshots so the Shell can record
+     * undo entries and fire hooks.
+     * @param {string} oldName
+     * @param {string} newName
+     * @returns {Array<{id: string, previousState: Object, card: Object, count: number}>}
+     */
+    rewriteCardLinks(oldName, newName) {
+      const changes = [];
+      for (const [id, card] of Object.entries(this.cards)) {
+        if (!card || typeof card.body !== "string" || !card.body.includes("[[")) continue;
+        const { text, count } = replaceCardLinks(card.body, oldName, newName);
+        if (!count) continue;
+        const result = this.updateCard(id, { body: text });
+        changes.push({ id, previousState: result.previousState, card: result.card, count });
+      }
+      return changes;
     }
     /**
      * Get all cards that link to a given card via [[Title]] references.
@@ -4172,6 +4229,12 @@
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           this.db = request.result;
+          this.db.onversionchange = () => {
+            try {
+              this.db.close();
+            } catch (_e) {
+            }
+          };
           resolve();
         };
         request.onupgradeneeded = (event) => {
@@ -4701,7 +4764,16 @@
         const db = req.result;
         if (!db.objectStoreNames.contains("handles")) db.createObjectStore("handles");
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onversionchange = () => {
+          try {
+            db.close();
+          } catch (_e) {
+          }
+        };
+        resolve(db);
+      };
     });
   }
   async function saveDatasetFileHandle(handleKey, handle) {
@@ -4903,6 +4975,9 @@
   }
   async function persistStoreNow(key) {
     stripLegacyPinMetadata();
+    if (!store.metadata || typeof store.metadata !== "object") store.metadata = {};
+    const previousPersistedAt = Number(store.metadata.persistedAt) || 0;
+    store.metadata.persistedAt = Math.max(Date.now(), previousPersistedAt + 1);
     const payload = JSON.stringify(store);
     const activePin = activeSessionPin;
     const revision = saveRevision;
@@ -5031,6 +5106,34 @@
         indicator.title = "";
     }
   }
+  const APP_INDEXEDDB_DATABASES = ["CardSpokeDB", "CardSpokeFileHandles"];
+  async function deleteAppIndexedDbDatabases() {
+    if (typeof indexedDB === "undefined" || !indexedDB || typeof indexedDB.deleteDatabase !== "function") return [];
+    if (indexedDbMirrorDriver && indexedDbMirrorDriver.db && typeof indexedDbMirrorDriver.db.close === "function") {
+      try {
+        indexedDbMirrorDriver.db.close();
+      } catch (_err) {
+      }
+    }
+    indexedDbMirrorDriver = null;
+    return Promise.all(APP_INDEXEDDB_DATABASES.map((name) => new Promise((resolve) => {
+      try {
+        const req = indexedDB.deleteDatabase(name);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => {
+          console.warn("[Storage] Could not delete IndexedDB", name, req.error);
+          resolve(false);
+        };
+        req.onblocked = () => {
+          console.warn("[Storage] IndexedDB delete blocked by an open connection:", name);
+          resolve(false);
+        };
+      } catch (err) {
+        console.warn("[Storage] IndexedDB delete failed:", name, err);
+        resolve(false);
+      }
+    })));
+  }
   async function clearAllData() {
     if (!await showConfirmDialog("WARNING: This will DELETE ALL instances and data from localStorage.\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?", {
       title: "Delete All Data",
@@ -5054,7 +5157,10 @@
         const key = localStorage.key(i);
         allKeys.push(key);
       }
+      cancelPendingSave();
+      storageWriteLock = true;
       localStorage.clear();
+      await deleteAppIndexedDbDatabases();
       showToast(`Cleared ${allKeys.length} items from localStorage`, "success");
       setTimeout(() => {
         location.reload();
@@ -5224,19 +5330,80 @@
     document.body.appendChild(overlay);
     if (typeof trapFocus === "function") trapFocus(modal);
   }
-  async function load() {
-    const key = instanceKey || "nested_cards_store";
-    let raw = localStorage.getItem(key);
+  function resetSessionState() {
     storageWriteLock = false;
     if (Array.isArray(undoStack)) undoStack.length = 0;
     if (Array.isArray(redoStack)) redoStack.length = 0;
     if (Array.isArray(trashBin)) trashBin.length = 0;
-    if (typeof document !== "undefined") {
+    setNavState({
+      mode: navState && navState.mode || "cardspoke",
+      page: "list",
+      cardId: null,
+      parentId: null,
+      searchQuery: ""
+    });
+    setNavHistory([]);
+    if (typeof document !== "undefined" && document && typeof document.getElementById === "function") {
       const staleLock = document.getElementById("datasetLockScreen");
       if (staleLock) staleLock.remove();
       const staleRecovery = document.getElementById("corruptRecoveryScreen");
       if (staleRecovery) staleRecovery.remove();
     }
+  }
+  async function removeDatasetMirrors(key) {
+    if (!key || typeof indexedDB === "undefined") return;
+    try {
+      const driver = await getIndexedDbMirrorDriver();
+      await driver.remove(key);
+    } catch (err) {
+      console.warn("[Dataset] Could not remove IndexedDB mirror for", key, err);
+    }
+    try {
+      const db = await openFileHandleDb();
+      await new Promise((resolve) => {
+        const tx = db.transaction(["handles"], "readwrite");
+        tx.objectStore("handles").delete(`cardspoke_file_handle_${key}`);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+      });
+      db.close();
+    } catch (err) {
+      console.warn("[Dataset] Could not remove file handle for", key, err);
+    }
+  }
+  function isLocalFilePayloadCurrent(filePayload, localPayload) {
+    const rev = (p) => {
+      const value = p && p.metadata && Number(p.metadata.persistedAt);
+      return Number.isFinite(value) && value > 0 ? value : null;
+    };
+    const fileRev = rev(filePayload);
+    const localRev = rev(localPayload);
+    if (localRev === null) return true;
+    if (fileRev === null) return false;
+    return fileRev >= localRev;
+  }
+  function gateLocalFilePlugins(filePlugins, localPlugins) {
+    const result = {};
+    if (!filePlugins || typeof filePlugins !== "object") return result;
+    const local = localPlugins && typeof localPlugins === "object" ? localPlugins : {};
+    Object.entries(filePlugins).forEach(([id, entry]) => {
+      if (!entry || typeof entry !== "object") return;
+      const known = Object.prototype.hasOwnProperty.call(local, id) ? local[id] : null;
+      let sameDefinition = false;
+      try {
+        sameDefinition = !!known && JSON.stringify(known.definition) === JSON.stringify(entry.definition);
+      } catch (_err) {
+        sameDefinition = false;
+      }
+      result[id] = { ...entry, enabled: !!entry.enabled && !!known && !!known.enabled && sameDefinition };
+    });
+    return result;
+  }
+  async function load() {
+    const key = instanceKey || "nested_cards_store";
+    let raw = localStorage.getItem(key);
+    resetSessionState();
     if (!raw) {
       activeSessionPin = null;
       setStore(createDefaultStore());
@@ -5302,10 +5469,14 @@
             }
           }
           if (!parsedFile || typeof parsedFile !== "object") return;
+          if (!isLocalFilePayloadCurrent(parsedFile, store)) {
+            console.warn("[Local File] File copy is older than LocalStorage; keeping the LocalStorage data");
+            return;
+          }
           setStore({
             rootOrder: parsedFile.rootOrder || [],
             cards: parsedFile.cards || {},
-            plugins: parsedFile.plugins || {},
+            plugins: gateLocalFilePlugins(parsedFile.plugins, store.plugins),
             bookmarks: parsedFile.bookmarks || [],
             recentCards: parsedFile.recentCards || [],
             viewMode: parsedFile.viewMode || "normal",
@@ -5516,31 +5687,76 @@
     _syncKernelToStore();
     pushUndo("createCard", { cardId: result.id, card: result.card });
     if (!skipSave) save();
-    if (!skipHooks && window.CardSpoke && window.CardSpoke.Middleware) {
-      window.CardSpoke.Middleware.run("card.create", [result.id, store.cards[result.id]]).catch((err) => console.error("[Middleware] card.create error:", err));
-    }
-    if (!skipHooks && window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.notifyDataUpdate) {
-      window.CardSpoke.Plugin.notifyDataUpdate({ type: "card.create", cardId: result.id, card: store.cards[result.id] });
-    }
+    if (!skipHooks) runCardHooks("card.create", result.id);
     return result.id;
   }
   function updateCard(id, updates, skipSave = false, skipHooks = false) {
     _syncStoreToKernel();
-    const result = _kernel.updateCard(id, updates);
-    if (!result.previousState) return;
+    const before = _kernel.getCard(id);
+    if (!before) return;
+    const newTitle = updates && typeof updates.title === "string" ? updates.title : null;
+    const renameLinks = newTitle !== null && !!before.title && normalizeCardName(newTitle) !== normalizeCardName(before.title) && !!normalizeCardName(newTitle) && _kernel.findCardsByName(before.title).length === 1;
+    const grouped = renameLinks && window.startUndoGroup && window.startUndoGroup("rename card");
+    let linkChanges = [];
+    try {
+      const result = _kernel.updateCard(id, updates);
+      if (!result.previousState) return;
+      pushUndo("updateCard", {
+        cardId: id,
+        previousState: result.previousState,
+        newState: result.card
+      });
+      if (renameLinks) {
+        linkChanges = _kernel.rewriteCardLinks(before.title, result.card.title);
+        linkChanges.forEach((change) => {
+          pushUndo("updateCard", {
+            cardId: change.id,
+            previousState: change.previousState,
+            newState: change.card
+          });
+        });
+      }
+      _syncKernelToStore();
+    } finally {
+      if (grouped && window.endUndoGroup) window.endUndoGroup();
+    }
+    if (!skipSave) save();
+    if (!skipHooks) {
+      runCardHooks("card.update", id);
+      linkChanges.forEach((change) => {
+        if (change.id !== id) runCardHooks("card.update", change.id);
+      });
+    }
+    if (linkChanges.length && typeof showToast === "function") {
+      const others = linkChanges.filter((c) => c.id !== id).length;
+      if (others > 0) showToast(`Updated links in ${others} card${others === 1 ? "" : "s"}`, "info");
+    }
+  }
+  function runCardHooks(operation, cardId) {
+    if (!store.cards[cardId]) return;
+    if (window.CardSpoke && window.CardSpoke.Middleware) {
+      window.CardSpoke.Middleware.run(operation, [cardId, store.cards[cardId]]).catch((err) => console.error("[Middleware] " + operation + " error:", err));
+    }
+    if (window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.notifyDataUpdate) {
+      window.CardSpoke.Plugin.notifyDataUpdate({ type: operation, cardId, card: store.cards[cardId] });
+    }
+  }
+  function moveCard(id, newParentId, skipSave = false) {
+    _syncStoreToKernel();
+    const card = _kernel.getCard(id);
+    if (!card) return false;
+    const target = newParentId || null;
+    if ((card.parentId || null) === target) return false;
+    const result = _kernel.reparent(id, target);
+    if (!result.success) return false;
     _syncKernelToStore();
-    pushUndo("updateCard", {
+    pushUndo("moveCard", {
       cardId: id,
-      previousState: result.previousState,
-      newState: result.card
+      originalParentId: result.previousParentId || null,
+      newParentId: target
     });
     if (!skipSave) save();
-    if (!skipHooks && window.CardSpoke && window.CardSpoke.Middleware) {
-      window.CardSpoke.Middleware.run("card.update", [id, store.cards[id]]).catch((err) => console.error("[Middleware] card.update error:", err));
-    }
-    if (!skipHooks && window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.notifyDataUpdate) {
-      window.CardSpoke.Plugin.notifyDataUpdate({ type: "card.update", cardId: id, card: store.cards[id] });
-    }
+    return true;
   }
   function deleteCard(id, opts = {}) {
     _syncStoreToKernel();
@@ -5777,7 +5993,27 @@
       metadata
     };
   }
-  function exportJSON(type = "instance") {
+  function getActiveExportPin() {
+    return typeof getSessionPin === "function" && getSessionPin() || null;
+  }
+  async function confirmUnencryptedExport(formatLabel) {
+    if (!getActiveExportPin()) return true;
+    if (typeof showConfirmDialog !== "function") return false;
+    return !!await showConfirmDialog(
+      `This dataset is PIN-protected, but ${formatLabel} exports are NOT encrypted.
+
+Anyone who gets the exported file can read these cards without the PIN.
+
+Export an unencrypted copy anyway?`,
+      {
+        title: "Unencrypted Export",
+        confirmLabel: "Export Unencrypted",
+        cancelLabel: "Cancel",
+        confirmClassName: "btn btn-danger"
+      }
+    );
+  }
+  async function exportJSON(type = "instance") {
     let data;
     if (type === "instance") {
       data = buildInstanceExport();
@@ -5790,6 +6026,28 @@
         timestamp: Date.now(),
         plugins: store.plugins
       };
+    }
+    const pin = type === "instance" ? getActiveExportPin() : null;
+    if (pin) {
+      const choice = typeof showChoiceDialog === "function" ? await showChoiceDialog(
+        "This dataset is PIN-protected.\n\nAn encrypted backup can only be imported with the dataset PIN. An unencrypted backup can be read by anyone who gets the file.",
+        {
+          title: "Export PIN-Protected Dataset",
+          dismissValue: "cancel",
+          actions: [
+            { label: "Cancel", value: "cancel", className: "btn" },
+            { label: "Export Unencrypted", value: "plaintext", className: "btn btn-danger" },
+            { label: "Export Encrypted", value: "encrypted", className: "btn btn-primary", autoFocus: true }
+          ]
+        }
+      ) : "encrypted";
+      if (choice === "encrypted") {
+        const envelope = await encryptStorePayload(JSON.stringify(data), pin);
+        const encBlob = new Blob([envelope], { type: "application/json" });
+        downloadWithFeedback(encBlob, `cardspoke-${type}-${Date.now()}.encrypted.json`, "Encrypted JSON");
+        return;
+      }
+      if (choice !== "plaintext") return;
     }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const filename = `cardspoke-${type}-${Date.now()}.json`;
@@ -5840,7 +6098,8 @@
     }
     setTimeout(() => URL.revokeObjectURL(url), 6e4);
   }
-  function exportTXT() {
+  async function exportTXT() {
+    if (!await confirmUnencryptedExport("TXT")) return;
     let text = "# CardSpoke Export\n\n";
     function writeCard(cardId, depth = 0) {
       const card = store.cards[cardId];
@@ -5860,7 +6119,8 @@
     const filename = `cardspoke-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.txt`;
     downloadWithFeedback(blob, filename, "TXT");
   }
-  function exportMarkdown() {
+  async function exportMarkdown() {
+    if (!await confirmUnencryptedExport("Markdown")) return;
     let markdown = "# CardSpoke Export\n\n";
     markdown += `*Exported: ${(/* @__PURE__ */ new Date()).toLocaleString()}*
 
@@ -5895,7 +6155,8 @@
     if (/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
     return '"' + text.replace(/"/g, '""') + '"';
   }
-  function exportCSV() {
+  async function exportCSV() {
+    if (!await confirmUnencryptedExport("CSV")) return;
     let csv = "ID,Title,Body,Parent ID,Tags,Children Count,Created,Updated\n";
     Object.values(store.cards).forEach((card) => {
       csv += [
@@ -5918,58 +6179,94 @@
     else if (type === "instance-txt") exportTXT();
     else if (type === "plugins-json") exportJSON("plugins");
   }
-  async function importJSON(data, mode = "root") {
-    const groupedUndo = window.startUndoGroup && window.startUndoGroup("importJSON");
-    try {
-      let pkg;
+  async function decryptImportEnvelope(envelope) {
+    const raw = JSON.stringify(envelope);
+    const sessionPin = getActiveExportPin();
+    if (sessionPin) {
       try {
-        pkg = typeof data === "string" ? JSON.parse(data) : data;
-      } catch (err) {
-        showToast("Invalid JSON: " + err.message, "error");
-        throw new Error("Failed to parse JSON: " + err.message);
+        return JSON.parse(await decryptStorePayload(raw, sessionPin));
+      } catch (_err) {
       }
-      if (!pkg || typeof pkg !== "object") {
-        showToast("Invalid import: data must be an object", "error");
-        throw new Error("Invalid import data structure");
+    }
+    if (typeof showPromptDialog !== "function") return null;
+    let attempt = 0;
+    for (; ; ) {
+      const pin = await showPromptDialog({
+        title: "Encrypted Backup",
+        message: attempt === 0 ? "This backup is encrypted. Enter the PIN of the dataset it was exported from." : "Incorrect PIN. Please try again.",
+        label: "PIN",
+        type: "password",
+        confirmLabel: "Decrypt",
+        cancelLabel: "Cancel"
+      });
+      if (pin === null || pin === void 0) return null;
+      attempt++;
+      if (!pin.trim()) continue;
+      try {
+        return JSON.parse(await decryptStorePayload(raw, pin));
+      } catch (_err) {
+        console.warn("[Import] Backup decryption attempt failed");
       }
-      if (pkg.cards && (typeof pkg.cards !== "object" || Array.isArray(pkg.cards))) {
-        showToast("Invalid import: cards must be an object", "error");
-        throw new Error("Invalid cards structure");
+    }
+  }
+  async function importJSON(data, mode = "root") {
+    let pkg;
+    try {
+      pkg = typeof data === "string" ? JSON.parse(data) : data;
+    } catch (err) {
+      showToast("Invalid JSON: " + err.message, "error");
+      throw new Error("Failed to parse JSON: " + err.message);
+    }
+    if (isEncryptedEnvelope(pkg)) {
+      const decrypted = await decryptImportEnvelope(pkg);
+      if (!decrypted) {
+        showToast("Import cancelled — the encrypted backup was not unlocked", "info");
+        return false;
       }
-      if (pkg.cards) {
-        for (const [cardId, card] of Object.entries(pkg.cards)) {
-          if (!card || typeof card !== "object" || Array.isArray(card)) {
-            showToast(`Invalid card structure for ID: ${cardId}`, "error");
-            throw new Error("Invalid card structure");
-          }
-          if (card.children && !Array.isArray(card.children)) {
-            showToast(`Invalid children array for card: ${cardId}`, "error");
-            throw new Error("Invalid card children structure");
-          }
+      pkg = decrypted;
+    }
+    if (!pkg || typeof pkg !== "object") {
+      showToast("Invalid import: data must be an object", "error");
+      throw new Error("Invalid import data structure");
+    }
+    if (pkg.cards && (typeof pkg.cards !== "object" || Array.isArray(pkg.cards))) {
+      showToast("Invalid import: cards must be an object", "error");
+      throw new Error("Invalid cards structure");
+    }
+    if (pkg.cards) {
+      for (const [cardId, card] of Object.entries(pkg.cards)) {
+        if (!card || typeof card !== "object" || Array.isArray(card)) {
+          showToast(`Invalid card structure for ID: ${cardId}`, "error");
+          throw new Error("Invalid card structure");
+        }
+        if (card.children && !Array.isArray(card.children)) {
+          showToast(`Invalid children array for card: ${cardId}`, "error");
+          throw new Error("Invalid card children structure");
         }
       }
-      if (pkg.rootIds && !Array.isArray(pkg.rootIds)) {
-        showToast("Invalid import: rootIds must be an array", "error");
-        throw new Error("Invalid rootIds structure");
-      }
-      if (typeof pkg.schemaVersion === "number" && pkg.schemaVersion > SCHEMA_VERSION) {
-        const proceed = await showConfirmDialog(
-          `This backup uses schema v${pkg.schemaVersion}, but this app version supports schema v${SCHEMA_VERSION}.
+    }
+    if (pkg.rootIds && !Array.isArray(pkg.rootIds)) {
+      showToast("Invalid import: rootIds must be an array", "error");
+      throw new Error("Invalid rootIds structure");
+    }
+    if (typeof pkg.schemaVersion === "number" && pkg.schemaVersion > SCHEMA_VERSION) {
+      const proceed = await showConfirmDialog(
+        `This backup uses schema v${pkg.schemaVersion}, but this app version supports schema v${SCHEMA_VERSION}.
 
 Importing may lose fields this version does not understand. Continue?`,
-          {
-            title: "Newer Backup Format",
-            confirmLabel: "Import Anyway",
-            cancelLabel: "Cancel"
-          }
-        );
-        if (!proceed) throw new Error("Import cancelled: incompatible schema version");
-      }
-      if (pkg.plugins && (pkg.exportType === "instance" || pkg.exportType === "plugins")) {
-        const modCount = Object.keys(pkg.plugins).length;
-        if (modCount > 0) {
-          const confirmImportMods = await showConfirmDialog(
-            `⚠️ SECURITY WARNING
+        {
+          title: "Newer Backup Format",
+          confirmLabel: "Import Anyway",
+          cancelLabel: "Cancel"
+        }
+      );
+      if (!proceed) throw new Error("Import cancelled: incompatible schema version");
+    }
+    if (pkg.plugins && (pkg.exportType === "instance" || pkg.exportType === "plugins")) {
+      const modCount = Object.keys(pkg.plugins).length;
+      if (modCount > 0) {
+        const confirmImportMods = await showConfirmDialog(
+          `⚠️ SECURITY WARNING
 
 This import includes ${modCount} plugin(s).
 
@@ -5977,145 +6274,165 @@ Plugins can execute code and access your data. Only import plugins from sources 
 
 Do you want to import the plugins?
 (Click Cancel to import only the cards without plugins)`,
-            {
-              title: "Plugin Import Warning",
-              confirmLabel: "Import Plugins",
-              cancelLabel: "Cards Only",
-              confirmClassName: "btn btn-danger"
-            }
-          );
-          if (!confirmImportMods) {
-            delete pkg.plugins;
+          {
+            title: "Plugin Import Warning",
+            confirmLabel: "Import Plugins",
+            cancelLabel: "Cards Only",
+            confirmClassName: "btn btn-danger"
           }
+        );
+        if (!confirmImportMods) {
+          delete pkg.plugins;
         }
       }
-      const importedIds = [];
-      const idMap = /* @__PURE__ */ Object.create(null);
-      const remappedCards = {};
-      Object.entries(pkg.cards || {}).forEach(([oldId, card]) => {
-        const newId = uid();
-        idMap[oldId] = newId;
-        remappedCards[newId] = { ...card, id: newId };
-        importedIds.push(newId);
-      });
-      Object.values(remappedCards).forEach((card) => {
-        card.children = (card.children || []).map((cid) => idMap[cid] || cid);
-        if (card.parentId && idMap[card.parentId]) {
-          card.parentId = idMap[card.parentId];
+    }
+    const importedIds = [];
+    const idMap = /* @__PURE__ */ Object.create(null);
+    const remappedCards = {};
+    Object.entries(pkg.cards || {}).forEach(([oldId, card]) => {
+      const newId = uid();
+      idMap[oldId] = newId;
+      remappedCards[newId] = { ...card, id: newId };
+      importedIds.push(newId);
+    });
+    Object.values(remappedCards).forEach((card) => {
+      card.children = (Array.isArray(card.children) ? card.children : []).map((cid) => idMap[cid]).filter(Boolean);
+      card.parentId = card.parentId && idMap[card.parentId] || null;
+    });
+    const declaredRootIds = Array.isArray(pkg.rootIds) ? pkg.rootIds : Array.isArray(pkg.rootOrder) ? pkg.rootOrder : [];
+    const remappedRootIds = declaredRootIds.map((id) => idMap[id]).filter(Boolean);
+    importedIds.forEach((id) => {
+      if (!remappedCards[id].parentId && !remappedRootIds.includes(id)) remappedRootIds.push(id);
+    });
+    Object.values(remappedCards).forEach((card) => {
+      store.cards[card.id] = card;
+    });
+    if (mode === "root") {
+      remappedRootIds.forEach((id) => {
+        if (store.cards[id]) {
+          store.cards[id].parentId = null;
+          if (!store.rootOrder.includes(id)) {
+            store.rootOrder.push(id);
+          }
         }
       });
-      const remappedRootIds = (pkg.rootIds || []).map((id) => idMap[id] || id);
-      Object.values(remappedCards).forEach((card) => {
-        store.cards[card.id] = card;
-      });
-      if (mode === "root") {
-        remappedRootIds.forEach((id) => {
-          if (store.cards[id]) {
-            store.cards[id].parentId = null;
-            if (!store.rootOrder.includes(id)) {
-              store.rootOrder.push(id);
+    } else {
+      const parentCard = store.cards[mode];
+      if (parentCard) {
+        remappedRootIds.forEach((cardId) => {
+          if (store.cards[cardId]) {
+            store.cards[cardId].parentId = mode;
+            if (!parentCard.children.includes(cardId)) {
+              parentCard.children.push(cardId);
             }
           }
         });
-      } else {
-        const parentCard = store.cards[mode];
-        if (parentCard) {
-          remappedRootIds.forEach((cardId) => {
-            if (store.cards[cardId]) {
-              store.cards[cardId].parentId = mode;
-              if (!parentCard.children.includes(cardId)) {
-                parentCard.children.push(cardId);
-              }
-            }
-          });
-        }
       }
-      if ((pkg.exportType === "instance" || pkg.exportType === "plugins") && pkg.plugins) {
-        Object.entries(pkg.plugins).forEach(([modId, plugin]) => {
-          if (store.plugins[modId] || !plugin || typeof plugin !== "object") return;
-          if (plugin.definition && plugin.definition.manifest) {
-            store.plugins[modId] = {
-              definition: plugin.definition,
-              enabled: !!plugin.enabled
-            };
-          } else if (plugin.js || plugin.css || plugin.meta || plugin.manifest) {
-            const meta = plugin.meta || plugin.manifest || {};
-            store.plugins[modId] = {
-              definition: {
-                manifest: {
-                  id: meta.id || modId,
-                  name: meta.name || modId,
-                  version: typeof meta.version === "string" && meta.version || "1.0.0",
-                  author: meta.author || meta.creator || "Unknown",
-                  layer: meta.layer || "feature",
-                  description: meta.description || "",
-                  permissions: Array.isArray(meta.permissions) ? meta.permissions : []
-                },
-                css: typeof plugin.css === "string" && plugin.css ? plugin.css : null,
-                js: typeof plugin.js === "string" && plugin.js ? plugin.js : null,
-                teardownJs: typeof plugin.teardownJs === "string" && plugin.teardownJs ? plugin.teardownJs : null
+    }
+    if ((pkg.exportType === "instance" || pkg.exportType === "plugins") && pkg.plugins) {
+      if (!store.plugins || typeof store.plugins !== "object") store.plugins = {};
+      Object.entries(pkg.plugins).forEach(([modId, plugin]) => {
+        if (store.plugins[modId] || !plugin || typeof plugin !== "object") return;
+        if (plugin.definition && plugin.definition.manifest) {
+          store.plugins[modId] = {
+            definition: plugin.definition,
+            enabled: false
+          };
+        } else if (plugin.js || plugin.css || plugin.meta || plugin.manifest) {
+          const meta = plugin.meta || plugin.manifest || {};
+          store.plugins[modId] = {
+            definition: {
+              manifest: {
+                id: meta.id || modId,
+                name: meta.name || modId,
+                version: typeof meta.version === "string" && meta.version || "1.0.0",
+                author: meta.author || meta.creator || "Unknown",
+                layer: meta.layer || "feature",
+                description: meta.description || "",
+                permissions: Array.isArray(meta.permissions) ? meta.permissions : []
               },
-              enabled: false
-            };
-          }
-        });
-        if (window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.syncFromStore) {
-          try {
-            await window.CardSpoke.Plugin.syncFromStore();
-          } catch (err) {
-            console.error("[Import] Plugin sync failed:", err);
-          }
-        }
-      }
-      if (pkg.exportType === "instance") {
-        if (Array.isArray(pkg.bookmarks)) {
-          if (!store.bookmarks) store.bookmarks = [];
-          pkg.bookmarks.forEach((oldId) => {
-            const newId = idMap[oldId];
-            if (newId && !store.bookmarks.includes(newId)) store.bookmarks.push(newId);
-          });
-        }
-        if (Array.isArray(pkg.recentCards)) {
-          if (!store.recentCards) store.recentCards = [];
-          const restoredRecents = pkg.recentCards.map((oldId) => idMap[oldId]).filter(Boolean);
-          store.recentCards = restoredRecents.concat(store.recentCards.filter((id) => !restoredRecents.includes(id))).slice(0, 10);
-        }
-        if (pkg.viewMode === "normal" || pkg.viewMode === "compact") {
-          store.viewMode = pkg.viewMode;
-        }
-        if (pkg.activeTheme === "light" || pkg.activeTheme === "dark") {
-          store.activeTheme = pkg.activeTheme;
-          if (typeof applyTheme === "function") applyTheme(pkg.activeTheme);
-        }
-        if (pkg.metadata && typeof pkg.metadata === "object") {
-          if (!store.metadata) store.metadata = {};
-          if (pkg.metadata.name && !store.metadata.name) {
-            store.metadata.name = pkg.metadata.name;
-          }
-        }
-      }
-      importedIds.forEach((cardId) => {
-        const storedCard = store.cards[cardId];
-        if (storedCard) {
-          try {
-            const migrated = migrateCard(storedCard);
-            migrated.warnings.forEach((w) => console.warn(`[Import] ${cardId}:`, w));
-          } catch (err) {
-            console.warn("[Import] Validation skipped for", cardId, err);
-          }
+              css: typeof plugin.css === "string" && plugin.css ? plugin.css : null,
+              js: typeof plugin.js === "string" && plugin.js ? plugin.js : null,
+              teardownJs: typeof plugin.teardownJs === "string" && plugin.teardownJs ? plugin.teardownJs : null
+            },
+            enabled: false
+          };
         }
       });
-      try {
-        if (typeof validateStoreConsistency === "function") validateStoreConsistency();
-      } catch (err) {
-        console.warn("[Import] Consistency repair skipped:", err);
+      if (window.CardSpoke && window.CardSpoke.Plugin && window.CardSpoke.Plugin.syncFromStore) {
+        try {
+          await window.CardSpoke.Plugin.syncFromStore();
+        } catch (err) {
+          console.error("[Import] Plugin sync failed:", err);
+        }
       }
-      save();
-      showToast(`Imported ${Object.keys(remappedCards).length} cards`);
-      render();
+    }
+    if (pkg.exportType === "instance") {
+      if (Array.isArray(pkg.bookmarks)) {
+        if (!store.bookmarks) store.bookmarks = [];
+        pkg.bookmarks.forEach((oldId) => {
+          const newId = idMap[oldId];
+          if (newId && !store.bookmarks.includes(newId)) store.bookmarks.push(newId);
+        });
+      }
+      if (Array.isArray(pkg.recentCards)) {
+        if (!store.recentCards) store.recentCards = [];
+        const restoredRecents = pkg.recentCards.map((oldId) => idMap[oldId]).filter(Boolean);
+        store.recentCards = restoredRecents.concat(store.recentCards.filter((id) => !restoredRecents.includes(id))).slice(0, 10);
+      }
+      if (pkg.viewMode === "normal" || pkg.viewMode === "compact") {
+        store.viewMode = pkg.viewMode;
+      }
+      if (pkg.activeTheme === "light" || pkg.activeTheme === "dark") {
+        store.activeTheme = pkg.activeTheme;
+        if (typeof applyTheme === "function") applyTheme(pkg.activeTheme);
+      }
+      if (pkg.metadata && typeof pkg.metadata === "object") {
+        if (!store.metadata) store.metadata = {};
+        if (pkg.metadata.name && !store.metadata.name) {
+          store.metadata.name = pkg.metadata.name;
+        }
+      }
+    }
+    importedIds.forEach((cardId) => {
+      const storedCard = store.cards[cardId];
+      if (storedCard) {
+        try {
+          const migrated = migrateCard(storedCard);
+          migrated.warnings.forEach((w) => console.warn(`[Import] ${cardId}:`, w));
+        } catch (err) {
+          console.warn("[Import] Validation skipped for", cardId, err);
+        }
+      }
+    });
+    try {
+      if (typeof validateStoreConsistency === "function") validateStoreConsistency();
+    } catch (err) {
+      console.warn("[Import] Consistency repair skipped:", err);
+    }
+    const importedSet = new Set(importedIds);
+    const undoOrder = [];
+    const visited = /* @__PURE__ */ new Set();
+    const visitImported = (id) => {
+      if (visited.has(id) || !importedSet.has(id) || !store.cards[id]) return;
+      visited.add(id);
+      undoOrder.push(id);
+      (store.cards[id].children || []).forEach(visitImported);
+    };
+    remappedRootIds.forEach(visitImported);
+    importedIds.forEach(visitImported);
+    const groupedUndo = undoOrder.length && window.startUndoGroup && window.startUndoGroup("import");
+    try {
+      undoOrder.forEach((id) => {
+        pushUndo("createCard", { cardId: id, card: kernelCloneCard(store.cards[id]) });
+      });
     } finally {
       if (groupedUndo && window.endUndoGroup) window.endUndoGroup();
     }
+    save();
+    showToast(`Imported ${Object.keys(remappedCards).length} cards`);
+    render();
+    return true;
   }
   function importTXT(text, mode = "outline", location2 = "root") {
     const createdIds = [];
@@ -6268,6 +6585,7 @@ This action cannot be undone!`, {
             })) {
               if (isCurrent) cancelPendingSave();
               localStorage.removeItem(key);
+              await removeDatasetMirrors(key);
               if (isCurrent && allKeys.length > 1) {
                 const otherKey = allKeys.find((k) => k !== key);
                 localStorage.setItem("activeInstance", otherKey);
@@ -6439,9 +6757,11 @@ This action cannot be undone!`, {
         await flushPendingSave();
         localStorage.setItem("activeInstance", newKey);
         setInstanceKey(newKey);
+        resetSessionState();
         setStore(newStore);
         setSessionPin(pin || null);
         save();
+        await reconcilePluginsAfterDatasetSwitch();
         if (typeof updateDatasetSelector === "function") updateDatasetSelector();
         render();
         overlay.remove();
@@ -8026,44 +8346,42 @@ This action cannot be undone!`, {
         const parentVal = form.querySelector("#cardParent").value || null;
         const tagsVal = tagEditor.getTags && tagEditor.getTags() || [];
         if (editing) {
-          const oldParentId = card.parentId;
-          if (oldParentId !== parentVal) {
-            if (oldParentId) {
-              const oldParent = store.cards[oldParentId];
-              if (oldParent) oldParent.children = oldParent.children.filter((c) => c !== card.id);
-            } else {
-              store.rootOrder = store.rootOrder.filter((c) => c !== card.id);
+          const editGroup = window.startUndoGroup && window.startUndoGroup("edit card");
+          try {
+            if ((card.parentId || null) !== parentVal && !moveCard(card.id, parentVal, true)) {
+              showToast("Cannot move a card into itself or its own child", "error");
             }
-            if (parentVal) {
-              const newParent = store.cards[parentVal];
-              if (newParent && !newParent.children.includes(card.id)) newParent.children.push(card.id);
-            } else {
-              if (!store.rootOrder.includes(card.id)) store.rootOrder.push(card.id);
-            }
-            card.parentId = parentVal;
+            updateCard(card.id, { title: titleVal, body: bodyVal, tags: tagsVal, isRichText: richToggle.checked }, true, false);
+            (store.cards[card.id].children || []).forEach((cid) => {
+              const inp = childrenInpMap[cid];
+              if (inp && store.cards[cid] && inp.value.trim() !== store.cards[cid].title) updateCard(cid, { title: inp.value.trim() }, true, false);
+            });
+            const newKidRows = form.querySelectorAll("#addChildList .form-child-row input");
+            newKidRows.forEach((inp) => {
+              const t = inp.value.trim();
+              if (t) createCard(t, "", card.id, true, false);
+            });
+          } finally {
+            if (editGroup && window.endUndoGroup) window.endUndoGroup();
           }
-          updateCard(card.id, { title: titleVal, body: bodyVal, tags: tagsVal, isRichText: richToggle.checked }, true, true);
-          card.children.forEach((cid) => {
-            const inp = childrenInpMap[cid];
-            if (inp) updateCard(cid, { title: inp.value.trim() }, true, true);
-          });
-          const newKidRows = form.querySelectorAll("#addChildList .form-child-row input");
-          newKidRows.forEach((inp) => {
-            const t = inp.value.trim();
-            if (t) createCard(t, "", card.id, true, true);
-          });
           save();
           goTo("read", { cardId: card.id });
         } else {
-          const newId = createCard(titleVal, bodyVal, parentVal, true, true);
-          updateCard(newId, { tags: tagsVal, isRichText: richToggle.checked }, true, true);
-          const newKidRows = form.querySelectorAll("#addChildList .form-child-row input");
-          newKidRows.forEach((inp) => {
-            const t = inp.value.trim();
-            if (t) createCard(t, "", newId, true, true);
-          });
-          save();
-          goTo("read", { cardId: newId });
+          const createGroup = window.startUndoGroup && window.startUndoGroup("create card");
+          try {
+            const newId = createCard(titleVal, bodyVal, parentVal, true, true);
+            updateCard(newId, { tags: tagsVal, isRichText: richToggle.checked }, true, true);
+            runCardHooks("card.create", newId);
+            const newKidRows = form.querySelectorAll("#addChildList .form-child-row input");
+            newKidRows.forEach((inp) => {
+              const t = inp.value.trim();
+              if (t) createCard(t, "", newId, true, false);
+            });
+            save();
+            goTo("read", { cardId: newId });
+          } finally {
+            if (createGroup && window.endUndoGroup) window.endUndoGroup();
+          }
         }
       }
     });
@@ -9084,26 +9402,69 @@ ${prefix}`;
       return false;
     }
   }
+  function restoreCardIntoTree(cardData) {
+    if (!cardData || !cardData.id) return;
+    const id = cardData.id;
+    const restored = typeof cloneCard === "function" ? cloneCard(cardData) : cardData;
+    store.cards[id] = restored;
+    if (!Array.isArray(store.rootOrder)) store.rootOrder = [];
+    const parent = restored.parentId ? store.cards[restored.parentId] : null;
+    if (parent) {
+      if (!Array.isArray(parent.children)) parent.children = [];
+      if (!parent.children.includes(id)) parent.children.push(id);
+      store.rootOrder = store.rootOrder.filter((c) => c !== id);
+    } else if (!store.rootOrder.includes(id)) {
+      store.rootOrder.push(id);
+    }
+    (restored.children || []).forEach((childId) => {
+      const child = store.cards[childId];
+      if (child && child.parentId === id && store.rootOrder.includes(childId)) {
+        store.rootOrder = store.rootOrder.filter((c) => c !== childId);
+      }
+    });
+    const trashIndex = trashBin.findIndex((t) => t && t.card && t.card.id === id);
+    if (trashIndex > -1) trashBin.splice(trashIndex, 1);
+  }
+  const UNDO_STRUCTURAL_FIELDS = ["id", "parentId", "children", "createdAt"];
+  function applyCardContentState(cardId, state, otherState) {
+    const target = store.cards[cardId];
+    if (!target || !state) return;
+    Object.keys(state).forEach((key) => {
+      if (UNDO_STRUCTURAL_FIELDS.includes(key)) return;
+      target[key] = state[key] && typeof state[key] === "object" ? JSON.parse(JSON.stringify(state[key])) : state[key];
+    });
+    if (otherState) {
+      Object.keys(otherState).forEach((key) => {
+        if (!UNDO_STRUCTURAL_FIELDS.includes(key) && !(key in state)) delete target[key];
+      });
+    }
+  }
+  function purgeUndoEntriesForCards(cardIds) {
+    const ids = new Set((cardIds || []).filter(Boolean));
+    if (!ids.size) return;
+    const resurrects = (entry) => entry && entry.action === "deleteCard" && entry.data && entry.data.card && ids.has(entry.data.card.id);
+    [undoStack, redoStack].forEach((stack) => {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const entry = stack[i];
+        if (entry && entry.action === "undoGroup" && entry.data && Array.isArray(entry.data.actions)) {
+          entry.data.actions = entry.data.actions.filter((a) => !resurrects(a));
+          if (!entry.data.actions.length) stack.splice(i, 1);
+        } else if (resurrects(entry)) {
+          stack.splice(i, 1);
+        }
+      }
+    });
+    if (undoGroupState.active) {
+      undoGroupState.actions = undoGroupState.actions.filter((a) => !resurrects(a));
+    }
+  }
   function applyUndoAction(action) {
     switch (action.action) {
       case "deleteCard":
-        const cardData = action.data.card;
-        store.cards[cardData.id] = cardData;
-        const undelParent = cardData.parentId ? store.cards[cardData.parentId] : null;
-        if (undelParent) {
-          if (Array.isArray(undelParent.children) && !undelParent.children.includes(cardData.id)) {
-            undelParent.children.push(cardData.id);
-          }
-        } else {
-          if (!store.rootOrder.includes(cardData.id)) {
-            store.rootOrder.push(cardData.id);
-          }
-        }
-        const trashIndex = trashBin.findIndex((t) => t.card.id === cardData.id);
-        if (trashIndex > -1) trashBin.splice(trashIndex, 1);
+        restoreCardIntoTree(action.data.card);
         break;
       case "updateCard":
-        Object.assign(store.cards[action.data.cardId], action.data.previousState);
+        applyCardContentState(action.data.cardId, action.data.previousState, action.data.newState);
         break;
       case "createCard":
         const card = store.cards[action.data.cardId];
@@ -9193,10 +9554,10 @@ ${prefix}`;
         }
         break;
       case "updateCard":
-        Object.assign(store.cards[action.data.cardId], action.data.newState);
+        applyCardContentState(action.data.cardId, action.data.newState, action.data.previousState);
         break;
       case "createCard":
-        const newCard = action.data.card;
+        const newCard = typeof cloneCard === "function" ? cloneCard(action.data.card) : action.data.card;
         store.cards[newCard.id] = newCard;
         if (newCard.parentId) {
           const parent = store.cards[newCard.parentId];
@@ -9275,18 +9636,9 @@ ${prefix}`;
         const restoreBtn = h("button", {
           className: "btn btn-primary",
           onclick: () => {
-            store.cards[item.card.id] = item.card;
-            if (item.card.parentId) {
-              const parent = store.cards[item.card.parentId];
-              if (parent && !parent.children.includes(item.card.id)) {
-                parent.children.push(item.card.id);
-              }
-            } else {
-              if (!store.rootOrder.includes(item.card.id)) {
-                store.rootOrder.push(item.card.id);
-              }
-            }
-            trashBin.splice(index, 1);
+            restoreCardIntoTree(item.card);
+            const staleIndex = trashBin.indexOf(item);
+            if (staleIndex > -1) trashBin.splice(staleIndex, 1);
             save();
             overlay.remove();
             showTrashBin();
@@ -9304,7 +9656,9 @@ ${prefix}`;
               cancelLabel: "Cancel",
               confirmClassName: "btn btn-danger"
             })) {
-              trashBin.splice(index, 1);
+              const removeIndex = trashBin.indexOf(item);
+              if (removeIndex > -1) trashBin.splice(removeIndex, 1);
+              purgeUndoEntriesForCards([item.card.id]);
               overlay.remove();
               showTrashBin();
               showToast("Card permanently deleted");
@@ -9325,6 +9679,7 @@ ${prefix}`;
             cancelLabel: "Cancel",
             confirmClassName: "btn btn-danger"
           })) {
+            purgeUndoEntriesForCards(trashBin.map((t) => t && t.card && t.card.id));
             trashBin.length = 0;
             overlay.remove();
             showToast("Trash emptied");
@@ -9341,14 +9696,14 @@ ${prefix}`;
     };
   }
   function renameTag(oldTag, newTag) {
-    const normalizedOld = oldTag.replace(/^#/, "").toLowerCase().trim();
-    const normalizedNew = newTag.replace(/^#/, "").toLowerCase().trim();
+    const normalizedOld = normalizeTag(oldTag);
+    const normalizedNew = normalizeTag(newTag);
     if (!normalizedOld || !normalizedNew) return 0;
     if (normalizedOld === normalizedNew) return 0;
     let count = 0;
     Object.values(store.cards).forEach((card) => {
-      if (card.tags && card.tags.includes(normalizedOld)) {
-        card.tags = card.tags.map((t) => t === normalizedOld ? normalizedNew : t);
+      if (Array.isArray(card.tags) && card.tags.some((t) => normalizeTag(t) === normalizedOld)) {
+        card.tags = card.tags.map((t) => normalizeTag(t) === normalizedOld ? normalizedNew : t);
         card.tags = [...new Set(card.tags)];
         card.updatedAt = Date.now();
         count++;
@@ -9361,12 +9716,12 @@ ${prefix}`;
     return renameTag(tag1, tag2);
   }
   function deleteTagGlobal(tag) {
-    const normalizedTag = tag.replace(/^#/, "").toLowerCase().trim();
+    const normalizedTag = normalizeTag(tag);
     if (!normalizedTag) return 0;
     let count = 0;
     Object.values(store.cards).forEach((card) => {
-      if (card.tags && card.tags.includes(normalizedTag)) {
-        card.tags = card.tags.filter((t) => t !== normalizedTag);
+      if (Array.isArray(card.tags) && card.tags.some((t) => normalizeTag(t) === normalizedTag)) {
+        card.tags = card.tags.filter((t) => normalizeTag(t) !== normalizedTag);
         card.updatedAt = Date.now();
         count++;
       }
@@ -9377,8 +9732,8 @@ ${prefix}`;
   function getTagStats() {
     const tagCounts = {};
     Object.values(store.cards).forEach((card) => {
-      if (card.tags) {
-        card.tags.forEach((tag) => {
+      if (Array.isArray(card.tags)) {
+        new Set(card.tags.map(normalizeTag).filter(Boolean)).forEach((tag) => {
           tagCounts[tag] = (tagCounts[tag] || 0) + 1;
         });
       }
@@ -9473,7 +9828,7 @@ ${prefix}`;
               confirmLabel: "Merge",
               cancelLabel: "Cancel"
             });
-            if (targetTag && otherTags.includes(targetTag.trim().toLowerCase())) {
+            if (targetTag && otherTags.includes(normalizeTag(targetTag))) {
               const affected = mergeTags(tag, targetTag.trim());
               if (affected > 0) {
                 showToast('Merged "' + tag + '" into "' + targetTag.trim() + '" (' + affected + " card(s))");
@@ -9631,10 +9986,13 @@ ${prefix}`;
   function showPluginStore() {
     showPluginManager("install");
   }
-  function bulkExportCards(cardIds, format) {
+  async function bulkExportCards(cardIds, format) {
     format = format || "json";
     if (!cardIds || cardIds.length === 0) {
       showToast("No cards selected for export", "error");
+      return;
+    }
+    if (typeof confirmUnencryptedExport === "function" && !await confirmUnencryptedExport(format === "markdown" ? "Markdown" : format.toUpperCase())) {
       return;
     }
     const exportCards = {};
