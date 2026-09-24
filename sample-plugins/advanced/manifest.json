@@ -1,0 +1,68 @@
+{
+  "version": "1.0.0",
+  "plugins": [
+    {
+      "id": "lab-paper-atlas",
+      "name": "Paper Atlas",
+      "description": "Editorial palettes, reading rhythm, adaptive cards and print layout.",
+      "layer": "theme",
+      "file": "themes/paper-atlas.json"
+    },
+    {
+      "id": "lab-nocturne-console",
+      "name": "Nocturne Console",
+      "description": "Analytical grid surfaces, code styling and keyboard navigation accents.",
+      "layer": "theme",
+      "file": "themes/nocturne-console.json"
+    },
+    {
+      "id": "lab-clear-harbor",
+      "name": "Clear Harbor",
+      "description": "Calm, large-target interface with light/dark, motion and forced-color rules.",
+      "layer": "theme",
+      "file": "themes/clear-harbor.json"
+    },
+    {
+      "id": "lab-knowledge-audit",
+      "name": "Knowledge Audit",
+      "description": "Find duplicate titles, empty cards, broken and ambiguous links; decorate card tiles.",
+      "layer": "feature",
+      "file": "features/knowledge-audit.json"
+    },
+    {
+      "id": "lab-smart-collections",
+      "name": "Smart Collections",
+      "description": "Save and reload compound text/tag filters with sorting and bounded result lists.",
+      "layer": "feature",
+      "file": "features/smart-collections.json"
+    },
+    {
+      "id": "lab-batch-workbench",
+      "name": "Batch Workbench",
+      "description": "Preview bulk title/tag edits and undo with conflict checks.",
+      "layer": "feature",
+      "file": "features/batch-workbench.json"
+    },
+    {
+      "id": "lab-project-planner",
+      "name": "Project Planner",
+      "description": "Project trees, task boards, dependencies, deadlines and completion tracking.",
+      "layer": "app",
+      "file": "apps/project-planner.json"
+    },
+    {
+      "id": "lab-study-studio",
+      "name": "Study Studio",
+      "description": "Flashcards, answer reveal, spaced repetition, due queues and review statistics.",
+      "layer": "app",
+      "file": "apps/study-studio.json"
+    },
+    {
+      "id": "lab-research-desk",
+      "name": "Research Desk",
+      "description": "Deduplicated sources, annotated excerpts and repeatable synthesis cards.",
+      "layer": "app",
+      "file": "apps/research-desk.json"
+    }
+  ]
+}

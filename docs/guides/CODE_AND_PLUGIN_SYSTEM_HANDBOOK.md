@@ -1,5 +1,8 @@
 # CardSpoke Code & Plugin System Handbook
 
+For new distributed JSON plugins, start with the [standalone authoring guide](./PLUGIN_AUTHORING_GUIDE.md).
+It distinguishes worker-package APIs from session-only host-code examples and includes tested templates.
+
 This handbook is the implementation-level guide to how CardSpoke works and how to build plugins for it safely.
 
 It is intentionally specific: you’ll find concrete field names, hook signatures, storage keys, runtime APIs, and practical examples tied to the current architecture.

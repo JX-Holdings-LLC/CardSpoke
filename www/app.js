@@ -1751,8 +1751,8 @@
           break;
       }
       const handleId = nextDomHandleId++;
-      domHandles.set(handleId, { element });
-      trackResource(pluginId, { type: "dom", element });
+      const resource = trackResource(pluginId, { type: "dom", element });
+      domHandles.set(handleId, { element, resource });
       return handleId;
     }
     function doReplace(selector, vnode) {
@@ -1765,8 +1765,8 @@
       const original = target;
       target.parentNode.replaceChild(element, target);
       const handleId = nextDomHandleId++;
-      domHandles.set(handleId, { element, original });
-      trackResource(pluginId, { type: "dom", element, original });
+      const resource = trackResource(pluginId, { type: "dom", element, original });
+      domHandles.set(handleId, { element, original, resource });
       return handleId;
     }
     return {
@@ -1785,6 +1785,8 @@
           entry.element.parentNode.removeChild(entry.element);
         }
         domHandles.delete(handleId);
+        const resources = pluginResources.get(pluginId);
+        if (resources) resources.delete(entry.resource);
       },
       updateInjected: function(handleId, vnode) {
         const entry = domHandles.get(handleId);
@@ -8068,8 +8070,6 @@ This action cannot be undone!`, {
     }
     return cardEl;
   }
-  const cardRenderCache = /* @__PURE__ */ new Map();
-  const CARD_RENDER_CACHE_LIMIT = 1e3;
   function buildTileSnapshot(tileEl) {
     const tagEls = tileEl.querySelectorAll(".card-tag");
     return {
@@ -8105,6 +8105,7 @@ This action cannot be undone!`, {
     });
   }
   async function scheduleCardRenderUpgrade(entries) {
+    await Promise.resolve();
     const Plugin = window.CardSpoke && window.CardSpoke.Plugin;
     if (!Plugin) return;
     const pluginIds = Plugin.getCardRenderPluginIds();
@@ -8116,30 +8117,12 @@ This action cannot be undone!`, {
     if (!byCardId.size) return;
     for (const pluginId of pluginIds) {
       const toFetch = [];
-      const cachedResults = [];
       byCardId.forEach((entry, cardId) => {
-        const cacheKey = pluginId + "|" + cardId + "|" + (entry.card.updatedAt || 0);
-        const cached = cardRenderCache.get(cacheKey);
-        if (cached) {
-          cachedResults.push({ cardId, vnode: cached.vnode, patch: cached.patch });
-        } else {
-          toFetch.push({ card: entry.card, isSelected: !!entry.isSelected, tileSnapshot: buildTileSnapshot(entry.tileEl) });
-        }
+        toFetch.push({ card: entry.card, isSelected: !!entry.isSelected, tileSnapshot: buildTileSnapshot(entry.tileEl) });
       });
-      if (cachedResults.length) applyCardRenderResults(cachedResults, byCardId);
       if (toFetch.length) {
         const results = await Plugin.renderBatch(pluginId, toFetch, {});
         if (results) {
-          results.forEach((r) => {
-            const entry = byCardId.get(r.cardId);
-            const key = pluginId + "|" + r.cardId + "|" + (entry ? entry.card.updatedAt || 0 : 0);
-            cardRenderCache.set(key, { vnode: r.vnode, patch: r.patch });
-          });
-          if (cardRenderCache.size > CARD_RENDER_CACHE_LIMIT) {
-            const excess = cardRenderCache.size - CARD_RENDER_CACHE_LIMIT;
-            const it = cardRenderCache.keys();
-            for (let i = 0; i < excess; i++) cardRenderCache.delete(it.next().value);
-          }
           applyCardRenderResults(results, byCardId);
         }
       }

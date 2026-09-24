@@ -617,8 +617,8 @@ let nextDomHandleId = 1;
           break;
       }
       const handleId = nextDomHandleId++;
-      domHandles.set(handleId, { element: element });
-      trackResource(pluginId, { type: 'dom', element: element });
+      const resource = trackResource(pluginId, { type: 'dom', element: element });
+      domHandles.set(handleId, { element: element, resource: resource });
       return handleId;
     }
 
@@ -632,8 +632,8 @@ let nextDomHandleId = 1;
       const original = target;
       target.parentNode.replaceChild(element, target);
       const handleId = nextDomHandleId++;
-      domHandles.set(handleId, { element: element, original: original });
-      trackResource(pluginId, { type: 'dom', element: element, original: original });
+      const resource = trackResource(pluginId, { type: 'dom', element: element, original: original });
+      domHandles.set(handleId, { element: element, original: original, resource: resource });
       return handleId;
     }
 
@@ -649,6 +649,9 @@ let nextDomHandleId = 1;
           entry.element.parentNode.removeChild(entry.element);
         }
         domHandles.delete(handleId);
+        // Repeated panel open/close must not retain detached DOM until suspend.
+        const resources = pluginResources.get(pluginId);
+        if (resources) resources.delete(entry.resource);
       },
       updateInjected: function(handleId, vnode) {
         const entry = domHandles.get(handleId);

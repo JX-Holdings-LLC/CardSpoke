@@ -10,6 +10,22 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Added
 
+- Nine advanced plugins (three themes, three features, three app workflows),
+  reproducible source-to-JSON packaging, and real-worker browser acceptance tests.
+- A standalone plugin authoring guide for humans and AI agents, with three
+  complete packages tested directly from its JSON examples.
+
+### Fixed
+
+- First-batch and child-card plugin decorations no longer run before their
+  tiles are attached. Rendering requests fresh output instead of reusing
+  state-dependent results and callback handles from old worker instances.
+- Explicitly removing worker UI handles releases tracked detached elements.
+- CSP hash tests normalize HTML line endings as browsers do, fixing Windows
+  checkout failures without changing the security policy.
+
+### Added (existing unreleased work)
+
 - **Desktop app.** A locked-down Electron shell in `desktop/` with installers
   for Windows (NSIS, x64/arm64), macOS (dmg/zip, x64/arm64) and Linux
   (AppImage/deb). The app is served from a dedicated `cardspoke://app` origin,
