@@ -46,7 +46,9 @@ for (const page of ['www/diagnostic.html', 'www/test.html']) {
     const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
     assert.ok(inline.length > 0);
     inline.forEach(body => {
-      const hash = "'sha256-" + createHash('sha256').update(body, 'utf8').digest('base64') + "'";
+      // HTML parsing normalizes CRLF/CR to LF before CSP hashes the script.
+      // Match that behavior on Windows checkouts without changing the policy.
+      const hash = "'sha256-" + createHash('sha256').update(body.replace(/\r\n?/g, '\n'), 'utf8').digest('base64') + "'";
       assert.ok(scriptSrc.includes(hash), `inline script hash ${hash} must be listed in script-src`);
     });
   });

@@ -1,0 +1,10 @@
+/* Shared finishing rules keep links, placeholders and selected controls on
+   the same tested palette. Existing high-contrast rules retain control. */
+:root:not(.high-contrast) a { color: var(--accent-strong); text-underline-offset: .16em; }
+:root:not(.high-contrast) a:hover { color: var(--text); }
+:root:not(.high-contrast) .breadcrumb.current { color: var(--text-muted); }
+:root:not(.high-contrast) input::placeholder, :root:not(.high-contrast) textarea::placeholder { color: var(--text-muted); opacity: 1; }
+:root:not(.high-contrast) .density-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+:root:not(.high-contrast) .density-btn:hover { outline: 1px solid var(--text); }
+:root:not(.high-contrast) .save-status.saved { color: var(--accent-strong); background: var(--surface); border-color: var(--accent-strong); }
+@media (prefers-reduced-motion: reduce) { .save-status, .density-btn { transition: none; animation: none; } }

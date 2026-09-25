@@ -217,6 +217,9 @@ Start with the [Documentation home](./docs/README.md) for a role-based map and t
 
 ### Plugin System
 
+- [Standalone Plugin Authoring Guide for Humans and AI Agents](./docs/guides/PLUGIN_AUTHORING_GUIDE.md)
+- [Nine Advanced Plugin Packages](./sample-plugins/advanced/README.md)
+- [Advanced Plugin Verification Report](./docs/reports/ADVANCED_PLUGIN_VERIFICATION.md)
 - [Plugin System Overview](./docs/architecture/PLUGIN_SYSTEM.md)
 - [Plugin Invariants](./docs/architecture/PLUGIN_INVARIANTS.md)
 

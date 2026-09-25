@@ -1,0 +1,17 @@
+.cs-lab { box-sizing: border-box; margin: 12px auto; padding: clamp(12px, 3vw, 28px); width: min(1120px, calc(100% - 24px)); border: 2px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); overflow-wrap: anywhere; }
+.cs-lab * { box-sizing: border-box; min-width: 0; }
+.cs-lab .lab-row { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 12px 0; }
+.cs-lab .lab-field { display: flex; flex: 1 1 180px; flex-direction: column; gap: 6px; }
+.cs-lab input, .cs-lab textarea, .cs-lab select { width: 100%; min-height: 44px; padding: 8px; border: 1px solid var(--text-muted); border-radius: 6px; color: var(--text); background: var(--bg); font: inherit; }
+.cs-lab textarea { min-height: 100px; resize: vertical; }
+.cs-lab button { min-height: 44px; white-space: normal; }
+.cs-lab button:disabled { opacity: .55; cursor: not-allowed; }
+.cs-lab :focus-visible { outline: 3px solid var(--accent-strong, currentColor); outline-offset: 3px; }
+.cs-lab .lab-box { padding: 12px; margin: 8px 0; border: 1px solid var(--border); border-radius: 8px; }
+.cs-lab .lab-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.cs-lab p, .cs-lab .lab-answer { white-space: pre-wrap; }
+.cs-lab .lab-notice { color: var(--accent-strong, var(--text)); }
+.cs-lab progress { width: 100%; }
+.lab-audit-badge { display: block; font-size: .8rem; font-weight: 700; }
+@media (max-width: 680px) { .cs-lab .lab-columns { grid-template-columns: 1fr; } .cs-lab .lab-row > button { flex: 1 1 120px; } }
+@media print { .cs-lab button, .cs-lab .lab-field { display: none; } .cs-lab { width: 100%; border: 0; } }

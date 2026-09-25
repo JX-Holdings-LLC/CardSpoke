@@ -271,8 +271,6 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
       // (card.render), racing a short deadline inside Plugin.renderBatch()
       // so a slow or hung plugin can never stall/stutter rendering — the
       // default tiles already on screen simply stand for that pass.
-      const cardRenderCache = new Map();
-      const CARD_RENDER_CACHE_LIMIT = 1000;
 
       function buildTileSnapshot(tileEl) {
         const tagEls = tileEl.querySelectorAll('.card-tag');
@@ -310,6 +308,10 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
        * @param {{card: object, tileEl: HTMLElement, isSelected?: boolean}[]} entries
        */
       async function scheduleCardRenderUpgrade(entries) {
+        // Callers build a grid/detail subtree before attaching it. Let the
+        // synchronous render finish before testing isConnected, including
+        // the first list/search batch and children in a card detail view.
+        await Promise.resolve();
         const Plugin = window.CardSpoke && window.CardSpoke.Plugin;
         if (!Plugin) return;
         const pluginIds = Plugin.getCardRenderPluginIds();
@@ -321,32 +323,16 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
 
         for (const pluginId of pluginIds) {
           const toFetch = [];
-          const cachedResults = [];
           byCardId.forEach((entry, cardId) => {
-            const cacheKey = pluginId + '|' + cardId + '|' + (entry.card.updatedAt || 0);
-            const cached = cardRenderCache.get(cacheKey);
-            if (cached) {
-              cachedResults.push({ cardId: cardId, vnode: cached.vnode, patch: cached.patch });
-            } else {
-              toFetch.push({ card: entry.card, isSelected: !!entry.isSelected, tileSnapshot: buildTileSnapshot(entry.tileEl) });
-            }
+            // Output can depend on other cards, config or worker-local state;
+            // card.updatedAt is not a valid cache key. Cached callback handles
+            // also belong to a particular worker and expire on suspend/update.
+            toFetch.push({ card: entry.card, isSelected: !!entry.isSelected, tileSnapshot: buildTileSnapshot(entry.tileEl) });
           });
-
-          if (cachedResults.length) applyCardRenderResults(cachedResults, byCardId);
 
           if (toFetch.length) {
             const results = await Plugin.renderBatch(pluginId, toFetch, {});
             if (results) {
-              results.forEach(r => {
-                const entry = byCardId.get(r.cardId);
-                const key = pluginId + '|' + r.cardId + '|' + (entry ? (entry.card.updatedAt || 0) : 0);
-                cardRenderCache.set(key, { vnode: r.vnode, patch: r.patch });
-              });
-              if (cardRenderCache.size > CARD_RENDER_CACHE_LIMIT) {
-                const excess = cardRenderCache.size - CARD_RENDER_CACHE_LIMIT;
-                const it = cardRenderCache.keys();
-                for (let i = 0; i < excess; i++) cardRenderCache.delete(it.next().value);
-              }
               applyCardRenderResults(results, byCardId);
             }
           }

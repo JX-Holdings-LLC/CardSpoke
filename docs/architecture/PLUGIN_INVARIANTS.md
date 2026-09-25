@@ -249,6 +249,12 @@ node cannot cross the Worker boundary at all. Instead:
 
 ## 8. Component registry names
 
+Render upgrade attachment checks run after the synchronous host render has
+attached its new subtree. Each rendering pass uses fresh worker results;
+card timestamps alone cannot identify state-dependent plugin output or
+callbacks from a particular worker instance. Keep the batched deadline and
+connected-element checks when changing this behavior.
+
 The host queries exactly these component names: `Card` (per render-batch,
 via the same batched worker round trip as `card.render` decorators — see
 §7), and `Header`, `Sidebar`, `SearchBar` (once at boot via
@@ -264,6 +270,10 @@ default tile on timeout/exception. Removing one of these lookups breaks
 published plugins that register the corresponding component.
 
 ## 9. DOM and CSS contract
+
+- A worker UI handle's explicit `remove()` releases its tracked DOM resource
+  immediately, so repeated open/close cycles do not retain detached panels
+  until suspension. Remaining handles still clean up on suspend/delete.
 
 - Plugin CSS is injected as `<style data-plugin-id="<id>">` in `<head>`;
   suspend/delete removes it. Nothing else may use that attribute.

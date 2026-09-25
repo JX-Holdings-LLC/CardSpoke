@@ -9,6 +9,11 @@ reference.
 
 Companion documents:
 
+- [Standalone authoring guide](../guides/PLUGIN_AUTHORING_GUIDE.md) — the
+  complete worker-package workflow, including copyable templates for authors
+  who have never opened CardSpoke, async exceptions, and supported UI elements.
+- [Advanced collection](../../sample-plugins/advanced/README.md) — nine additional
+  substantial packages, with real-browser workflow and lifecycle tests.
 - [`PLUGIN_INVARIANTS.md`](./PLUGIN_INVARIANTS.md) — the stability contract:
   everything that must **not** change or the plugin system breaks. Read it
   before touching runtime code.
@@ -282,11 +287,14 @@ ctx
    └─ filesystem    Capacitor file access                     [filesystem]
 ```
 
-Everything registered through `ctx.api.*` is tracked per plugin and removed
-automatically on disable/unregister (including terminating the worker
-itself). **Every method below is asynchronous** — always `await` it (or
-handle the returned Promise) — even `ctx.api.data.getCard`, which used to be
-synchronous before the sandbox.
+Everything registered through `ctx.api.*` is tracked per plugin and cleaned
+on disable/unregister, including terminating its worker. Await data, storage,
+UI, network, filesystem, and utility calls. Exceptions: `data.onUpdate` and
+`events.on/once` return synchronous unsubscribe functions; event emission is
+fire-and-forget. Middleware registration returns an unregister function with
+a `.ready` Promise: await that property to observe registration success.
+Already rendered component/decorator output may need navigation/reload to
+repaint; removing a registration alone does not rebuild the host screen.
 
 ### `ctx.api.ui` — permission: `ui-override`
 
@@ -334,10 +342,15 @@ returns unsubscriber), `off(event, cb)`, `once(event, cb)`,
 `emit(event, ...args)`. Handler errors are caught and logged, never
 propagated to the emitter.
 
-### `ctx.api.middleware` — no permission
+### `ctx.api.middleware` — operation-specific permissions
 
 Intercept core operations. Registrations are namespaced (`<pluginId>:<name>`)
 and tracked.
+
+`card.render` requires `ui-override`. `card.create/update/delete` and `*`
+require `data-modify`. Without `data-modify`, `card.save` is observe-only:
+argument edits and cancellation flags are ignored. Await the returned
+unregister function's `.ready` Promise when setup depends on the hook.
 
 ```javascript
 ctx.api.middleware.register({
@@ -411,6 +424,12 @@ it never blocks or stutters scrolling). There is no `next()`/
 decorator's patch is independent and additive by design. See
 `sample-plugins/features/card-color-tags.json` and `card-reading-time.json`
 for complete working examples.
+
+The plugin-lab fixes defer attachment checks until the synchronous host
+render is complete, so the first list/search batch and child-card tiles are
+included. Every rendering pass requests fresh worker output; output cannot
+be cached solely by card timestamp because other cards, settings, or a new
+worker instance can change the result. The batch deadline remains in place.
 
 A custom `registerComponent('Card', { render })` (full tile replacement) and
 `card.render` decorators (partial patches to the default tile) share the same

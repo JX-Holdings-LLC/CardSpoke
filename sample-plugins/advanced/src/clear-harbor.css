@@ -1,0 +1,18 @@
+/* Large-target calm theme that preserves user-selected typography presets. */
+:root { --bg: #edf5f6; --surface: #ffffff; --border: #879fa5; --text: #162e35; --text-medium: #29464e; --text-muted: #425f67; --text-ghost: #4d6970; --accent-strong: #006272; --radius: 12px; --space-lg: 16px; --line-height: 1.8; }
+:root.dark { --bg: #122a30; --surface: #1d3940; --border: #78979e; --text: #f1fcff; --text-medium: #d8edf2; --text-muted: #bad4db; --text-ghost: #b1cbd1; --accent-strong: #85e5ee; }
+.card-tile { border: 2px solid var(--border); border-radius: 12px; padding: 18px; box-shadow: none; }
+.card-tile:hover { border-color: var(--accent-strong); }
+.card-content { line-height: 1.8; overflow-wrap: anywhere; }
+.card-content a { text-decoration: underline; text-underline-offset: .2em; }
+.card-tag { border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--bg); padding: 4px 8px; }
+.header button, .menu-panel button, .cs-lab button { min-height: 44px; }
+.header { border-bottom: 2px solid var(--border); }
+.search-input-wrapper { border: 2px solid var(--border); border-radius: 10px; }
+.menu-panel { border-left: 2px solid var(--border); }
+:root:not(.high-contrast) :focus-visible { outline: 4px solid var(--accent-strong); outline-offset: 3px; }
+@media (pointer: coarse) { .card-tile { padding: 20px; } .card-tag { min-height: 32px; display: inline-flex; align-items: center; } }
+@media (max-width: 540px) { .card-tile { padding: 12px; border-radius: 8px; } #brandBtn { font-size: clamp(1.3rem, 7vw, 2rem); } }
+@media (prefers-reduced-motion: reduce) { .card-tile, .header, .menu-panel { transition: none; animation: none; } }
+@media (forced-colors: active) { .card-tile, .search-input-wrapper { border-color: CanvasText; } :focus-visible { outline-color: Highlight; } }
+@media print { :root, :root.dark { --bg: white; --surface: white; --text: black; --border: #777; } .header, .menu-panel { display: none; } .card-tile { break-inside: avoid; } }
