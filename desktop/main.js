@@ -29,19 +29,31 @@
  * The renderer has no Node.js access (contextIsolation + sandbox), cannot
  * navigate away from the app origin, and cannot open new windows; external
  * http(s)/mailto links are handed to the operating system instead.
+ *
+ * Datasets are stored as plain JSON files in a data folder the user chooses
+ * (lib/data-folder.js). The renderer reaches it only through the narrow
+ * `cardspoke-storage:*` IPC channels below, which accept dataset keys (never
+ * paths) and only from the app's own origin.
  */
 
 'use strict';
 
-const { app, BrowserWindow, Menu, dialog, net, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, net, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { resolveAssetPath, isAppUrl, isExternalUrl, APP_SCHEME, APP_ORIGIN } = require('./lib/url-policy');
 const { loadWindowState, trackWindowState } = require('./lib/window-state');
+const { DataFolder, defaultDataFolder, loadSettings, saveSettings, isDatasetKey } = require('./lib/data-folder');
 
 const REPO_URL = 'https://github.com/JX-Holdings-LLC/CardSpoke';
 const isDev = !app.isPackaged;
+
+// CARDSPOKE_DATA_DIR pins the data folder (portable installs, tests). While
+// it is set, the folder cannot be changed from the app.
+const DATA_DIR_OVERRIDE = process.env.CARDSPOKE_DATA_DIR ? path.resolve(process.env.CARDSPOKE_DATA_DIR) : null;
+let storageSettings = {};
+let dataFolder = null;
 
 // Web assets: bundled next to main.js in packaged builds (see
 // scripts/prepare-web.mjs), or read straight from the repo's www/ in dev.
@@ -80,6 +92,8 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     registerAppProtocol();
     lockDownSession(session.defaultSession);
+    initDataFolder();
+    registerStorageIpc();
     Menu.setApplicationMenu(buildMenu());
     createWindow();
 
@@ -127,6 +141,135 @@ function registerAppProtocol() {
       return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
     }
     return net.fetch(pathToFileURL(filePath).toString());
+  });
+}
+
+// ── Data folder ────────────────────────────────────────────────────────────
+
+function documentsDir() {
+  try {
+    return app.getPath('documents');
+  } catch {
+    return null; // Some Linux setups have no Documents folder.
+  }
+}
+
+function persistStorageSettings() {
+  try {
+    saveSettings(app.getPath('userData'), storageSettings);
+  } catch (err) {
+    console.error('[storage] Could not save storage settings:', err);
+  }
+}
+
+function initDataFolder() {
+  storageSettings = loadSettings(app.getPath('userData'));
+  const dir = DATA_DIR_OVERRIDE || storageSettings.dataFolder || defaultDataFolder(documentsDir());
+  dataFolder = new DataFolder(dir);
+  // Record the folder so the CLI can find it (see cli/cardspoke.js).
+  if (!DATA_DIR_OVERRIDE && storageSettings.dataFolder !== dir) {
+    storageSettings.dataFolder = dir;
+    persistStorageSettings();
+  }
+  dataFolder.ensure();
+}
+
+function watchDataFolder() {
+  dataFolder.watch((change) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('cardspoke-storage:changed', change);
+    }
+  });
+}
+
+function folderInfo() {
+  const status = dataFolder.ensure();
+  return { folder: dataFolder.dir, canChange: !DATA_DIR_OVERRIDE, ...status };
+}
+
+/** Only the app's own pages may use the storage channels. */
+function handle(channel, fn) {
+  ipcMain.handle(channel, (event, ...args) => {
+    const url = (event.senderFrame && event.senderFrame.url) || '';
+    if (!isAppUrl(url)) throw new Error('Storage access denied');
+    return fn(event, ...args);
+  });
+}
+
+function requireKey(key) {
+  if (!isDatasetKey(key)) throw new Error('Invalid dataset key');
+  return key;
+}
+
+function registerStorageIpc() {
+  handle('cardspoke-storage:info', () => folderInfo());
+
+  handle('cardspoke-storage:read-all', () => {
+    const info = folderInfo();
+    if (!info.available) return { ...info, datasets: [] };
+    return { ...info, datasets: dataFolder.readAll().map(({ key, text }) => ({ key, text })) };
+  });
+
+  handle('cardspoke-storage:write', (_event, key, text) => dataFolder.write(requireKey(key), text));
+
+  handle('cardspoke-storage:remove', (_event, key) => dataFolder.remove(requireKey(key)));
+
+  handle('cardspoke-storage:set-active', (_event, key) => {
+    requireKey(key);
+    // Recorded so the CLI defaults to the dataset open in the app.
+    if (storageSettings.activeDataset !== key) {
+      storageSettings.activeDataset = key;
+      persistStorageSettings();
+    }
+    return true;
+  });
+
+  handle('cardspoke-storage:open-folder', async () => {
+    const info = folderInfo();
+    if (!info.available) throw new Error(info.error || 'Data folder is not available');
+    const error = await shell.openPath(dataFolder.dir);
+    if (error) throw new Error(error);
+    return true;
+  });
+
+  handle('cardspoke-storage:choose-folder', async (event) => {
+    if (DATA_DIR_OVERRIDE) throw new Error('The data folder is set by CARDSPOKE_DATA_DIR');
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const picked = await dialog.showOpenDialog(win, {
+      title: 'Choose CardSpoke Data Folder',
+      defaultPath: dataFolder.dir,
+      buttonLabel: 'Use This Folder',
+      properties: ['openDirectory', 'createDirectory', 'promptToCreate']
+    });
+    if (picked.canceled || !picked.filePaths.length) return { changed: false };
+    const dir = path.resolve(picked.filePaths[0]);
+    if (dir === path.resolve(dataFolder.dir)) return { changed: false };
+
+    const next = new DataFolder(dir);
+    const status = next.ensure();
+    if (!status.available) throw new Error('Cannot use that folder: ' + status.error);
+
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'question',
+      buttons: ['Copy My Datasets', 'Use Folder As Is', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      title: 'Change Data Folder',
+      message: 'Copy your current datasets into the new folder?',
+      detail: 'Copy: your datasets are copied to ' + dir + '. Datasets the new folder already ' +
+        'has are kept as they are.\n\nUse As Is: CardSpoke opens only the datasets already in ' +
+        'that folder (for example, a folder synced from another computer).\n\n' +
+        'Nothing is deleted from the current folder (' + dataFolder.dir + ').'
+    });
+    if (response === 2) return { changed: false };
+    const copied = response === 0 ? next.copyFrom(dataFolder.dir) : [];
+
+    dataFolder.unwatch();
+    dataFolder = next;
+    storageSettings.dataFolder = dir;
+    persistStorageSettings();
+    watchDataFolder();
+    return { changed: true, folder: dir, copied };
   });
 }
 
@@ -199,13 +342,14 @@ function createWindow() {
       defaultId: 0,
       title: 'CardSpoke stopped unexpectedly',
       message: 'The CardSpoke window stopped responding (' + details.reason + ').',
-      detail: 'Your saved cards are kept in local storage. Reload to continue.'
+      detail: 'Your saved cards are kept in your data folder. Reload to continue.'
     });
     if (choice === 0) win.reload();
     else app.quit();
   });
 
   win.loadURL(APP_ORIGIN + '/index.html');
+  if (!dataFolder.watcher) watchDataFolder();
   return win;
 }
 
@@ -215,7 +359,24 @@ function buildMenu() {
     ...(isMac ? [{ role: 'appMenu' }] : []),
     {
       label: 'File',
-      submenu: [isMac ? { role: 'close' } : { role: 'quit' }]
+      submenu: [
+        {
+          label: 'Open Data Folder',
+          click: () => {
+            const info = folderInfo();
+            if (info.available) shell.openPath(dataFolder.dir);
+            else dialog.showErrorBox('Data folder unavailable', dataFolder.dir + '\n\n' + (info.error || ''));
+          }
+        },
+        {
+          label: 'Change Data Folder…',
+          enabled: !DATA_DIR_OVERRIDE,
+          // The page runs the change so it can save pending edits first.
+          click: (_item, win) => { if (win) win.webContents.send('cardspoke-storage:request-change-folder'); }
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
     },
     { role: 'editMenu' },
     {

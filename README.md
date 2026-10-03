@@ -142,18 +142,20 @@ The plugin runtime includes consent prompts, risk labels, safe mode, resource cl
 
 ## Command-Line Interface
 
-`cli/cardspoke.js` reads and edits CardSpoke JSON files (app backups or
-local-file datasets) from a terminal. It is built for scripts and AI agents:
-every command can print JSON, and it never uses the network.
+`cli/cardspoke.js` reads and edits CardSpoke datasets from a terminal. It is
+built for scripts and AI agents: every command can print JSON, and it never
+uses the network. With the desktop app, it works directly on the dataset
+files in your data folder, even while the app is open. It also works on any
+exported JSON backup.
 
 ```bash
-npm run cli -- init --file notes.json
-npm run cli -- create "Projects" --tag work --file notes.json
-npm run cli -- tree --file notes.json --json
+npm run cli -- datasets                         # datasets in the desktop data folder
+npm run cli -- create "Projects" --tag work     # added to the dataset open in the app
+npm run cli -- tree --dataset "Research" --json
+npm run cli -- tree --file backup.json          # an exported backup
 ```
 
-See the [CLI guide](./docs/guides/CLI.md) for every command and the
-export → edit → import workflow.
+See the [CLI guide](./docs/guides/CLI.md) for every command.
 
 ## Desktop and Mobile Packaging
 
@@ -176,8 +178,12 @@ npm run desktop:dist      # build installers for the current OS into desktop/rel
 npm run desktop:test      # desktop shell unit tests
 ```
 
-See the [Desktop guide](./docs/guides/DESKTOP.md) for installer details, the
-security model, code signing and the release workflow.
+The desktop app saves each dataset as a plain JSON file in a data folder you
+choose (default `Documents/CardSpoke`). Pick the folder in **Dataset Manager →
+Data Folder** or **File → Change Data Folder…**.
+
+See the [Desktop guide](./docs/guides/DESKTOP.md) for the data folder,
+installer details, the security model, code signing and the release workflow.
 
 ### Mobile (Capacitor)
 

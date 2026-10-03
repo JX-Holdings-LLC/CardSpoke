@@ -10,6 +10,18 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Added
 
+- **Desktop data folder.** The desktop app saves every dataset as a plain
+  JSON file in a folder you choose (default `Documents/CardSpoke`), set in
+  Dataset Manager → Data Folder or File → Change Data Folder…. The folder is
+  the source of truth. Existing datasets are copied in on first launch. Files
+  changed outside the app are reloaded, with a prompt if there are unsaved
+  edits. Deleted datasets are moved to the folder's `.trash/`. If the folder
+  is unavailable, the app keeps working from its internal copy and writes
+  the changes once the folder is back. `CARDSPOKE_DATA_DIR` pins the folder.
+  See the [Desktop guide](docs/guides/DESKTOP.md#where-data-lives).
+- The CLI works directly on the desktop data folder: `datasets`,
+  `init --dataset NAME`, `--dataset`/`-d`, `--data-dir`, and it defaults to
+  the dataset open in the desktop app.
 - A command-line interface (`cli/cardspoke.js`, `npm run cli`, `cardspoke`
   bin) for scripts and AI agents. It creates, shows, updates, moves,
   duplicates, deletes, tags, bookmarks, searches, imports, exports and

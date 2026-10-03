@@ -8,7 +8,7 @@
 
 import { test } from 'uvu';
 import * as assert from 'uvu/assert';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { main, parseArgs } from '../cli/cardspoke.js';
@@ -21,7 +21,7 @@ async function run(...args) {
   let err = '';
   const code = await main(['--file', join(dir, 'data.json'), ...args], {
     cwd: dir,
-    env: {},
+    env: { CARDSPOKE_DESKTOP_CONFIG_DIR: join(dir, 'no-desktop') },
     stdout: s => { out += s; },
     stderr: s => { err += s; }
   });
@@ -247,6 +247,79 @@ test('commands --json describes every command', async () => {
   const r = await runJson('commands');
   const names = r.result.data.commands.map(c => c.name);
   for (const n of ['create', 'update', 'delete', 'move', 'search', 'export', 'import']) assert.ok(names.includes(n), n);
+});
+
+async function runIn(env, ...args) {
+  let out = '';
+  let err = '';
+  const code = await main(args, { cwd: dir, env, stdout: s => { out += s; }, stderr: s => { err += s; } });
+  return { code, out, err, result: args.includes('--json') ? JSON.parse(out) : null };
+}
+
+function desktopSetup({ active } = {}) {
+  const folder = join(dir, 'Data Folder');
+  const config = join(dir, 'config');
+  mkdirSync(folder);
+  mkdirSync(config);
+  writeFileSync(join(config, 'storage.json'), JSON.stringify({ dataFolder: folder, activeDataset: active }));
+  return { folder, env: { CARDSPOKE_DESKTOP_CONFIG_DIR: config } };
+}
+
+test('data folder: init --dataset, datasets, and --dataset by name or key', async () => {
+  const { folder, env } = desktopSetup();
+  const created = (await runIn(env, 'init', '--dataset', 'Research Notes', '--json')).result;
+  assert.ok(created.ok);
+  const key = created.data.dataset;
+  assert.match(key, /^cards_research_notes_[a-z0-9]+$/);
+  const raw = JSON.parse(readFileSync(join(folder, key + '.json'), 'utf8'));
+  assert.ok(Array.isArray(raw.rootOrder), 'app payload format');
+  assert.is(raw.metadata.name, 'Research Notes');
+
+  await runIn(env, 'create', 'Paper', '-d', 'research notes');
+  const listed = (await runIn(env, 'list', '--dataset', key, '--json')).result;
+  assert.is(listed.dataset, key);
+  assert.is(listed.data.cards[0].title, 'Paper');
+
+  const datasets = (await runIn(env, 'datasets', '--json')).result.data;
+  assert.is(datasets.folder, folder);
+  assert.is(datasets.datasets.length, 1);
+  assert.is(datasets.datasets[0].cardCount, 1);
+});
+
+test('data folder: commands default to the dataset open in the app', async () => {
+  const { folder, env } = desktopSetup({ active: 'cards_open_ab12' });
+  writeFileSync(join(folder, 'cards_open_ab12.json'), JSON.stringify({ rootOrder: [], cards: {}, metadata: { name: 'Open' } }));
+  writeFileSync(join(folder, 'cards_other_cd34.json'), JSON.stringify({ rootOrder: [], cards: {}, metadata: { name: 'Other' } }));
+  const r = (await runIn(env, 'create', 'Into the open one', '--json')).result;
+  assert.is(r.dataset, 'cards_open_ab12');
+  assert.is(JSON.parse(readFileSync(join(folder, 'cards_open_ab12.json'), 'utf8')).rootOrder.length, 1);
+});
+
+test('data folder: several datasets and none open asks for --dataset', async () => {
+  const { folder, env } = desktopSetup();
+  writeFileSync(join(folder, 'cards_a_1.json'), '{"cards":{},"rootOrder":[]}');
+  writeFileSync(join(folder, 'cards_b_1.json'), '{"cards":{},"rootOrder":[]}');
+  const r = (await runIn(env, 'list', '--json')).result;
+  assert.is(r.error.code, 'dataset_required');
+  assert.is(r.error.details.datasets.length, 2);
+  assert.is((await runIn(env, 'list', '--dataset', 'nope', '--json')).result.error.code, 'not_found');
+});
+
+test('data folder: --file and CARDSPOKE_FILE still win', async () => {
+  const { env } = desktopSetup();
+  const r = await runIn({ ...env, CARDSPOKE_FILE: join(dir, 'standalone.json') }, 'init', '--json');
+  assert.ok(r.result.ok);
+  assert.ok(existsSync(join(dir, 'standalone.json')));
+  assert.is((await runIn(env, 'init', '--json')).result.error.code, 'usage', 'init needs --dataset when a folder exists');
+});
+
+test('data folder: CARDSPOKE_DATA_DIR without the desktop app', async () => {
+  const folder = join(dir, 'portable');
+  mkdirSync(folder);
+  const env = { CARDSPOKE_DATA_DIR: folder, CARDSPOKE_DESKTOP_CONFIG_DIR: join(dir, 'none') };
+  await runIn(env, 'init', '--dataset', 'Solo');
+  const r = (await runIn(env, 'create', 'Only dataset is used', '--json')).result;
+  assert.ok(r.ok, 'a single dataset is picked automatically');
 });
 
 test('unknown command exits with usage code 2', async () => {

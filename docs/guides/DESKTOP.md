@@ -76,8 +76,13 @@ reinstalling or upgrading never loses cards.
 The renderer is locked down:
 
 - `contextIsolation`, `sandbox` and no `nodeIntegration`. The preload script
-  only exposes a frozen `window.cardspokeDesktop` marker, with
-  `{ isDesktop, platform, versions }`.
+  exposes a frozen `window.cardspokeDesktop` object with
+  `{ isDesktop, platform, versions, storage }`. `storage` is the only bridge
+  to the main process: a few `cardspoke-storage:*` IPC calls that read,
+  write and remove dataset files by **dataset key**. The main process
+  accepts only the app's own key shapes (`nested_cards_*`, `cards_*`,
+  letters, digits, `_` and `-`), never a path. It answers only pages from
+  `cardspoke://app` (`desktop/lib/data-folder.js`).
 - Navigation away from `cardspoke://app` is blocked. `http(s)` and `mailto`
   links open in the system browser or mail client; every other scheme is
   dropped.
@@ -103,8 +108,46 @@ Other desktop behaviour:
 
 ### Where data lives
 
-The Electron profile directory holds the app's `localStorage`, IndexedDB and
-`window-state.json`:
+**Datasets live in the data folder.** Each dataset is a plain JSON file named
+after its dataset key, e.g. `nested_cards_store.json` or
+`cards_research_ab12.json`. The default folder is `Documents/CardSpoke`
+(`~/CardSpoke` if there is no Documents folder).
+
+- **Choose the folder** in **Dataset Manager → Data Folder → Change Folder…**
+  or **File → Change Data Folder…**. You can copy your datasets into the new
+  folder, or use the folder as it is (for example, one synced from another
+  computer). Nothing is deleted from the old folder.
+- **Open the folder** with **Open Folder** or **File → Open Data Folder**.
+- **File format.** Plaintext datasets are pretty-printed JSON in the same
+  format the app stores. PIN-protected datasets stay encrypted envelopes.
+- **Deleting a dataset** in the app moves its file to the folder's `.trash/`
+  subfolder. Delete All Data does the same for every dataset file.
+- **Changes from outside the app** are picked up while it runs. A file changed
+  by the CLI, a text editor or a sync client is reloaded. If the open dataset
+  has unsaved edits, the app asks whether to keep your version or load the
+  file. If the open dataset's file is deleted, the app writes it again.
+- **First launch** of this version copies existing datasets from the app's
+  internal storage into the folder. If the folder already has a different
+  dataset under the same key, the app's copy is kept beside it as
+  `<key>_local_<id>.json`.
+- **Folder unavailable** (an unplugged drive, for example): the app keeps
+  working from its internal copy and warns you. Edits made in the meantime
+  are written to the folder on the next launch where it is reachable, and
+  they take priority over the older files.
+- **`CARDSPOKE_DATA_DIR`** pins the folder (portable installs, testing). While
+  it is set, the folder cannot be changed from the app.
+
+The app still keeps a cache of every dataset in its `localStorage`, so the
+storage limit for a single dataset (about 10 MB in Electron) is unchanged.
+
+Plugin permission grants, appearance preferences and window state are not
+part of a dataset. They stay in the Electron profile directory. A plugin that
+arrives in a dataset file from another computer asks for consent again before
+it runs.
+
+The Electron profile directory holds the app's `localStorage` cache,
+IndexedDB, `window-state.json`, and `storage.json`. `storage.json` records the
+data folder and the dataset last open; the CLI reads it to find your data.
 
 | OS      | Profile directory                         |
 | ------- | ----------------------------------------- |
@@ -113,13 +156,14 @@ The Electron profile directory holds the app's `localStorage`, IndexedDB and
 | Linux   | `~/.config/CardSpoke`                     |
 
 The web app's built-in backup/export features work unchanged. File downloads
-open the native save dialog.
+open the native save dialog. To script or automate your datasets, use the
+[CLI](./CLI.md), which edits the files in the data folder directly.
 
 ## Testing
 
 ```bash
 cd desktop
-npm test                                   # unit tests: URL/path policy, window state
+npm test                                   # unit tests: URL/path policy, window state, data folder
 xvfb-run -a npm run smoke                  # end-to-end smoke of the dev app (Linux CI)
 npm run smoke                              # same, on a machine with a display
 node scripts/smoke.mjs --packaged release/linux-unpacked/cardspoke   # packaged app
@@ -133,7 +177,13 @@ Electron app with a throwaway profile. It checks:
 - the protocol traversal guard, and the popup and navigation blocking;
 - creating a card through the UI;
 - a sandboxed plugin Worker rendering through the vnode API;
-- that cards and enabled plugins persist across a full app restart.
+- that cards and enabled plugins persist across a full app restart;
+- that datasets are written as files in the data folder, that a CLI edit
+  made while the app runs is reloaded, and that all cards come back from the
+  folder after the app's internal storage is wiped.
+
+The smoke test points the data folder at a temporary directory through
+`storage.json`, so it never touches your real Documents folder.
 
 ## Code signing and releases
 

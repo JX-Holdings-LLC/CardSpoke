@@ -1172,6 +1172,31 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           'Manage your datasets. Each dataset is an independent collection of cards with its own storage.');
         modalBody.appendChild(description);
 
+        // Desktop: every dataset is a JSON file in the user's data folder.
+        const desktopFolder = typeof getDesktopDataFolder === 'function' ? getDesktopDataFolder() : null;
+        if (desktopFolder) {
+          const folderBox = h('div', {
+            style: 'background: var(--bg-secondary); padding: var(--space-lg); border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: var(--space-xl);'
+          });
+          folderBox.appendChild(h('h3', { style: 'margin-bottom: var(--space-xs);' }, 'Data Folder'));
+          folderBox.appendChild(h('div', {
+            style: 'font-family: var(--font-mono, monospace); word-break: break-all; margin-bottom: var(--space-sm);'
+          }, desktopFolder.folder));
+          folderBox.appendChild(h('div', { style: 'font-size: 0.875rem; color: var(--text-secondary); margin-bottom: var(--space-md);' },
+            'Each dataset is saved here as a JSON file. Changes made to these files outside CardSpoke ' +
+            '(for example with the command-line tool) are loaded automatically.'));
+          const folderActions = h('div', { style: 'display: flex; gap: var(--space-sm); flex-wrap: wrap;' });
+          folderActions.appendChild(h('button', { className: 'btn', onclick: () => openDesktopDataFolder() }, 'Open Folder'));
+          if (desktopFolder.canChange) {
+            folderActions.appendChild(h('button', {
+              className: 'btn',
+              onclick: async () => { if (await changeDesktopDataFolder()) overlay.remove(); }
+            }, 'Change Folder\u2026'));
+          }
+          folderBox.appendChild(folderActions);
+          modalBody.appendChild(folderBox);
+        }
+
         // Existing datasets section
         const datasetsTitle = h('h3', { style: 'margin-bottom: var(--space-md);' }, 'Your Datasets');
         modalBody.appendChild(datasetsTitle);
@@ -1218,12 +1243,13 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
               };
 
               const parsed = data ? JSON.parse(data) : null;
+              const folderLabel = desktopFolder && isFolderDatasetKey(key) ? `Data folder (${key}.json)` : null;
               if (parsed && parsed.encrypted === true && typeof parsed.payload === 'string') {
-                datasetMeta.textContent = `Storage: LocalStorage • Size: ${formatBytes(size)} • Encrypted (PIN protected)`;
+                datasetMeta.textContent = `Storage: ${folderLabel || 'LocalStorage'} • Size: ${formatBytes(size)} • Encrypted (PIN protected)`;
               } else {
                 const cardCount = parsed ? Object.keys(parsed.cards || {}).length : 0;
                 const storageType = (parsed && parsed.metadata && parsed.metadata.storageType) || 'localstorage';
-                const storageTypeDisplay = getStorageTypeLabel(storageType);
+                const storageTypeDisplay = folderLabel || getStorageTypeLabel(storageType);
                 datasetMeta.textContent = `Storage: ${storageTypeDisplay} • Size: ${formatBytes(size)} • Cards: ${cardCount}`;
               }
             } catch (e) {
@@ -1259,7 +1285,9 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
               actions.appendChild(openBtn);
             }
 
-            if (isCurrent) {
+            // Desktop datasets always live in the data folder; the browser
+            // storage backends are not a choice there.
+            if (isCurrent && !desktopFolder) {
               const storageBtn = h('button', {
                 className: 'btn',
                 onclick: async () => {
@@ -1431,7 +1459,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           style: 'width: 100%;',
           onclick: async () => {
             let name = document.getElementById('newDatasetName').value.trim();
-            const storageType = document.getElementById('newDatasetStorage').value;
+            const storageType = storageSelect.value;
             // The PIN is a secret: never silently normalize it (CS-106). The
             // unlock prompt uses the PIN exactly as typed, so creation must
             // too — but reject shapes the unlock flow can never accept.
@@ -1525,9 +1553,11 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
 
         createForm.appendChild(nameLabel);
         createForm.appendChild(nameInput);
-        createForm.appendChild(storageLabel);
-        createForm.appendChild(storageSelect);
-        createForm.appendChild(storageHelp);
+        if (!desktopFolder) {
+          createForm.appendChild(storageLabel);
+          createForm.appendChild(storageSelect);
+          createForm.appendChild(storageHelp);
+        }
         createForm.appendChild(pinLabel);
         createForm.appendChild(pinInput);
         createForm.appendChild(pinConfirmLabel);

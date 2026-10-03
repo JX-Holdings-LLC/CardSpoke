@@ -12,7 +12,7 @@
     "prepare:web": "node scripts/prepare-web.mjs",
     "start": "node scripts/prepare-web.mjs && electron .",
     "start:dev": "electron .",
-    "test": "node --test test/url-policy.test.js test/window-state.test.js",
+    "test": "node --test test/url-policy.test.js test/window-state.test.js test/data-folder.test.js",
     "icon": "node scripts/render-icon.mjs",
     "dist": "node scripts/prepare-web.mjs && electron-builder --publish never",
     "dist:win": "node scripts/prepare-web.mjs && electron-builder --win --publish never",

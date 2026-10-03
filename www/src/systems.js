@@ -2208,6 +2208,12 @@ import {
         // last-good/default store and continue so the user can still switch
         // datasets or reset. The relevant error toast is shown by load().
         try {
+          // Desktop: sync the dataset cache with the data folder first.
+          await hydrateFromDesktopFolder();
+        } catch (err) {
+          console.error('[Boot] Data folder sync failed; using the saved copy:', err);
+        }
+        try {
           await load();
         } catch (err) {
           console.error('[Boot] load() failed; continuing with a usable store:', err);

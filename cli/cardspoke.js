@@ -19,8 +19,9 @@
  * CardSpoke command-line interface.
  *
  * Drives the headless Kernel (www/src/kernel.js) against a CardSpoke JSON
- * file on disk: an instance backup exported from the app ("Export JSON"),
- * or a raw dataset payload such as a local-file dataset. Designed to be
+ * file on disk: a dataset in the desktop app's data folder, an instance
+ * backup exported from the app ("Export JSON"), or a raw dataset payload
+ * such as a local-file dataset. Designed to be
  * scriptable and easy for AI agents to drive: every command accepts --json
  * for machine-readable output, errors exit non-zero, and nothing touches
  * the network.
@@ -28,9 +29,10 @@
  * See docs/guides/CLI.md for the full reference.
  */
 
-import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, realpathSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, realpathSync, readdirSync, statSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { resolve, dirname, basename } from 'path';
+import { homedir } from 'os';
+import { resolve, dirname, basename, join } from 'path';
 import { Kernel, normalizeCardName, parseCardLinks, uid } from '../www/src/kernel.js';
 import { migrateStore } from '../www/src/core/migrations.js';
 import { APP_VERSION, SCHEMA_VERSION, createDefaultStore } from '../www/src/state.js';
@@ -56,7 +58,7 @@ const BOOLEAN_FLAGS = new Set([
   'fix', 'stdout', 'include-body', 'exact', 'yes'
 ]);
 const REPEATABLE_FLAGS = new Set(['tag']);
-const SHORT_FLAGS = { f: 'file', h: 'help', p: 'parent', t: 'title', b: 'body', o: 'out', n: 'limit' };
+const SHORT_FLAGS = { f: 'file', d: 'dataset', h: 'help', p: 'parent', t: 'title', b: 'body', o: 'out', n: 'limit' };
 
 /**
  * Parse argv into positionals and flags. Supports --key value, --key=value,
@@ -196,6 +198,145 @@ export async function saveDataset(filePath, dataset) {
     try { unlinkSync(tmp); } catch (_ignored) { /* nothing to clean up */ }
     throw new CliError(`Could not write ${filePath}: ${err.message}`, { code: 'write_failed' });
   }
+}
+
+// ── Desktop data folder ──────────────────────────────────────────────────────
+//
+// The desktop app keeps one JSON file per dataset in a user-chosen folder
+// (desktop/lib/data-folder.js) and records that folder, plus the dataset
+// open in the app, in storage.json inside its userData folder.
+
+const DATASET_KEY_RE = /^(nested_cards_|cards_)[A-Za-z0-9_-]+$/;
+
+/** The desktop app's userData folder (Electron's appData/CardSpoke). */
+export function desktopConfigDir(env = process.env, platform = process.platform, home = homedir()) {
+  if (env.CARDSPOKE_DESKTOP_CONFIG_DIR) return env.CARDSPOKE_DESKTOP_CONFIG_DIR;
+  if (platform === 'win32') return join(env.APPDATA || join(home, 'AppData', 'Roaming'), 'CardSpoke');
+  if (platform === 'darwin') return join(home, 'Library', 'Application Support', 'CardSpoke');
+  return join(env.XDG_CONFIG_HOME || join(home, '.config'), 'CardSpoke');
+}
+
+function readDesktopSettings(env) {
+  try {
+    const raw = JSON.parse(readFileSync(join(desktopConfigDir(env), 'storage.json'), 'utf8'));
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch (_err) {
+    return {};
+  }
+}
+
+/**
+ * Locate the data folder: --data-dir, then $CARDSPOKE_DATA_DIR, then the
+ * folder the desktop app recorded. Returns null when there is none.
+ */
+export function findDataFolder(flags, env, cwd) {
+  const settings = readDesktopSettings(env);
+  const active = typeof settings.activeDataset === 'string' && DATASET_KEY_RE.test(settings.activeDataset)
+    ? settings.activeDataset : null;
+  if (flags['data-dir'] !== undefined) return { dir: resolve(cwd, String(flags['data-dir'])), source: 'flag', activeDataset: active };
+  if (env.CARDSPOKE_DATA_DIR) return { dir: resolve(cwd, env.CARDSPOKE_DATA_DIR), source: 'env', activeDataset: active };
+  if (typeof settings.dataFolder === 'string' && settings.dataFolder) {
+    return { dir: settings.dataFolder, source: 'desktop', activeDataset: active };
+  }
+  return null;
+}
+
+/** Every dataset file in a data folder, with what can be read without a PIN. */
+export function listFolderDatasets(dir) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    throw new CliError(`Cannot read data folder ${dir}: ${err.message}`, { code: 'folder_unavailable' });
+  }
+  const datasets = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const key = entry.name.slice(0, -5);
+    if (!DATASET_KEY_RE.test(key)) continue;
+    const file = join(dir, entry.name);
+    const item = { key, file, name: null, encrypted: false, cardCount: null, updatedAt: null };
+    try {
+      item.updatedAt = statSync(file).mtimeMs;
+      const parsed = JSON.parse(readFileSync(file, 'utf8'));
+      if (isEncryptedEnvelope(parsed)) {
+        item.encrypted = true;
+      } else if (parsed && typeof parsed === 'object') {
+        item.name = (parsed.metadata && typeof parsed.metadata.name === 'string' && parsed.metadata.name) || null;
+        item.cardCount = parsed.cards && typeof parsed.cards === 'object' ? Object.keys(parsed.cards).length : 0;
+      }
+    } catch (_err) {
+      item.unreadable = true;
+    }
+    datasets.push(item);
+  }
+  return datasets.sort((a, b) => (a.name || a.key).localeCompare(b.name || b.key));
+}
+
+/** Resolve a dataset reference (key, file name or dataset name) in a folder. */
+function resolveFolderDataset(folder, ref) {
+  const datasets = listFolderDatasets(folder.dir);
+  const wanted = String(ref);
+  const byKey = datasets.find(d => d.key === wanted || d.key + '.json' === wanted);
+  if (byKey) return byKey;
+  const target = normalizeCardName(wanted);
+  const byName = datasets.filter(d => d.name && normalizeCardName(d.name) === target);
+  if (byName.length === 1) return byName[0];
+  const choices = datasets.map(d => ({ key: d.key, name: d.name, encrypted: d.encrypted }));
+  if (byName.length > 1) {
+    throw new CliError(`"${wanted}" matches ${byName.length} datasets by name; use a dataset key instead.`, {
+      code: 'ambiguous', details: { datasets: byName.map(d => ({ key: d.key, name: d.name })) }
+    });
+  }
+  throw new CliError(`No dataset "${wanted}" in ${folder.dir}`, { code: 'not_found', details: { datasets: choices } });
+}
+
+/** Same key shape as the app's Create Dataset flow. */
+function newDatasetKey(name) {
+  const clean = String(name).toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20) || 'dataset';
+  return 'cards_' + clean + '_' + Date.now().toString(36).slice(-4) + Math.random().toString(36).slice(2, 4);
+}
+
+/**
+ * Decide which file a command works on:
+ *   --file  >  --dataset  >  $CARDSPOKE_FILE  >  $CARDSPOKE_DATASET
+ *   >  the dataset open in the desktop app  >  ./cardspoke.json
+ */
+function resolveTarget(cmdName, flags, env, cwd) {
+  if (flags.file !== undefined) return { filePath: resolve(cwd, String(flags.file)) };
+  const datasetRef = flags.dataset !== undefined ? flags.dataset : (env.CARDSPOKE_FILE ? undefined : (env.CARDSPOKE_DATASET || undefined));
+  if (datasetRef === undefined && env.CARDSPOKE_FILE) return { filePath: resolve(cwd, env.CARDSPOKE_FILE) };
+
+  const folder = findDataFolder(flags, env, cwd);
+  if (datasetRef !== undefined && datasetRef !== true) {
+    if (!folder) {
+      throw new CliError('No data folder found. Pass --data-dir, set CARDSPOKE_DATA_DIR, or run the desktop app once.', { code: 'folder_not_found' });
+    }
+    if (cmdName === 'init') {
+      const key = newDatasetKey(datasetRef);
+      return { filePath: join(folder.dir, key + '.json'), folder, datasetKey: key, datasetName: String(datasetRef) };
+    }
+    const found = resolveFolderDataset(folder, datasetRef);
+    return { filePath: found.file, folder, datasetKey: found.key };
+  }
+  if (datasetRef === true) throw usageError('--dataset needs a dataset key or name');
+
+  if (folder && cmdName !== 'init') {
+    const datasets = listFolderDatasets(folder.dir);
+    const active = folder.activeDataset && datasets.find(d => d.key === folder.activeDataset);
+    const chosen = active || (datasets.length === 1 ? datasets[0] : null);
+    if (chosen) return { filePath: chosen.file, folder, datasetKey: chosen.key };
+    if (datasets.length > 1) {
+      throw new CliError(`Several datasets are in ${folder.dir}; pick one with --dataset (see "cardspoke datasets").`, {
+        code: 'dataset_required', details: { datasets: datasets.map(d => ({ key: d.key, name: d.name, encrypted: d.encrypted })) }
+      });
+    }
+    throw new CliError(`No datasets in ${folder.dir} yet. Create one with: cardspoke init --dataset NAME`, { code: 'not_found' });
+  }
+  if (folder && cmdName === 'init') {
+    throw usageError(`Pass --dataset NAME to create a dataset in ${folder.dir}, or --file FILE for a standalone file.`);
+  }
+  return { filePath: resolve(cwd, 'cardspoke.json') };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -548,17 +689,43 @@ const COMMANDS = {};
 function command(name, spec) { COMMANDS[name] = spec; }
 
 command('init', {
-  summary: 'Create a new, empty dataset file',
-  usage: 'init [--force] [--format instance|store] [--pin PIN]',
+  summary: 'Create a new, empty dataset (in the data folder with --dataset NAME)',
+  usage: 'init [--dataset NAME | --file FILE] [--force] [--format instance|store] [--pin PIN]',
   needsDataset: false,
-  async run({ flags, filePath, pin }) {
+  async run({ flags, filePath, pin, target }) {
     if (existsSync(filePath) && !flags.force) {
       throw new CliError(`${filePath} already exists (pass --force to overwrite)`, { code: 'exists' });
     }
-    const format = flags.format || 'instance';
+    // Data-folder datasets use the app's own (raw) payload format.
+    const format = target.datasetKey ? 'store' : (flags.format || 'instance');
     if (!['instance', 'store'].includes(format)) throw usageError('--format must be "instance" or "store"');
-    const dataset = { store: { ...createDefaultStore(), metadata: {} }, format, encrypted: !!pin, pin: pin || null };
-    return { dataset, write: true, data: { file: filePath, format, encrypted: !!pin }, text: `Created ${filePath}` };
+    const metadata = target.datasetKey
+      ? { name: target.datasetName, storageType: 'localstorage', storageConfig: {}, createdAt: Date.now() }
+      : {};
+    const dataset = { store: { ...createDefaultStore(), metadata }, format, encrypted: !!pin, pin: pin || null };
+    const data = { file: filePath, format, encrypted: !!pin };
+    if (target.datasetKey) Object.assign(data, { dataset: target.datasetKey, name: target.datasetName });
+    return { dataset, write: true, data, text: target.datasetKey ? `Created dataset "${target.datasetName}" (${target.datasetKey})` : `Created ${filePath}` };
+  }
+});
+
+command('datasets', {
+  summary: 'List the datasets in the desktop data folder',
+  usage: 'datasets [--data-dir DIR]',
+  needsDataset: false,
+  run({ flags, io }) {
+    const folder = findDataFolder(flags, io.env, io.cwd);
+    if (!folder) {
+      throw new CliError('No data folder found. Pass --data-dir, set CARDSPOKE_DATA_DIR, or run the desktop app once.', { code: 'folder_not_found' });
+    }
+    const datasets = listFolderDatasets(folder.dir).map(d => ({ ...d, active: d.key === folder.activeDataset }));
+    const lines = [`Data folder: ${folder.dir}`];
+    for (const d of datasets) {
+      const detail = d.encrypted ? 'encrypted' : d.unreadable ? 'unreadable' : `${d.cardCount} card(s)`;
+      lines.push(`${d.active ? '*' : ' '} ${d.key}  ${d.name || ''}  (${detail})`);
+    }
+    if (!datasets.length) lines.push('  (no datasets)');
+    return { data: { folder: folder.dir, source: folder.source, activeDataset: folder.activeDataset, datasets }, text: lines.join('\n') };
   }
 });
 
@@ -915,7 +1082,9 @@ command('commands', {
 });
 
 const GLOBAL_FLAGS = [
-  { flag: '--file, -f FILE', description: 'Dataset file (default: $CARDSPOKE_FILE or ./cardspoke.json)' },
+  { flag: '--dataset, -d NAME', description: 'Dataset in the data folder, by key or name (or set $CARDSPOKE_DATASET)' },
+  { flag: '--file, -f FILE', description: 'A standalone dataset or backup file (or set $CARDSPOKE_FILE)' },
+  { flag: '--data-dir DIR', description: 'Data folder (default: $CARDSPOKE_DATA_DIR, else the desktop app\'s folder)' },
   { flag: '--json', description: 'Print machine-readable JSON ({ ok, data } or { ok: false, error })' },
   { flag: '--pin PIN', description: 'PIN for an encrypted dataset (or set $CARDSPOKE_PIN)' },
   { flag: '--dry-run', description: 'Run the command but do not write any changes' },
@@ -936,6 +1105,7 @@ function helpText(name) {
     'Global flags:',
     ...GLOBAL_FLAGS.map(f => `  ${f.flag.padEnd(18)}  ${f.description}`),
     '',
+    'With no --dataset or --file, commands use the dataset open in the desktop app.',
     'Cards can be referenced by ID or by exact (case-insensitive) title.',
     'Run "cardspoke help <command>" for details. See docs/guides/CLI.md.'
   ].join('\n');
@@ -967,13 +1137,14 @@ export async function main(argv, io = {}) {
     if (!cmd) throw usageError(`Unknown command "${name}". Run "cardspoke help".`);
     if (flags.help) { io.stdout(helpText(name) + '\n'); return 0; }
 
-    const filePath = resolve(io.cwd, flags.file || io.env.CARDSPOKE_FILE || 'cardspoke.json');
+    const target = name === 'datasets' || name === 'commands' ? {} : resolveTarget(name, flags, io.env, io.cwd);
+    const filePath = target.filePath;
     const pin = flags.pin !== undefined ? String(flags.pin) : (io.env.CARDSPOKE_PIN || null);
     let dataset = null;
     if (cmd.needsDataset !== false) dataset = await loadDataset(filePath, { pin });
 
     const result = await cmd.run({
-      positionals: rest, flags, io, filePath, pin,
+      positionals: rest, flags, io, filePath, pin, target,
       dataset, store: dataset && dataset.store
     });
     if (result.dataset) dataset = result.dataset;
@@ -982,6 +1153,8 @@ export async function main(argv, io = {}) {
 
     if (json) {
       const payload = { ok: true, command: name, data: result.data };
+      if (filePath) payload.file = filePath;
+      if (target.datasetKey) payload.dataset = target.datasetKey;
       if (result.write) payload.saved = !dryRun;
       io.stdout(JSON.stringify(payload, null, 2) + '\n');
     } else {
@@ -998,6 +1171,9 @@ export async function main(argv, io = {}) {
       io.stderr(`cardspoke: ${message}\n`);
       if (known && err.details && err.details.matches) {
         io.stderr(err.details.matches.map(m => `  ${m.id}  ${m.path}`).join('\n') + '\n');
+      }
+      if (known && err.details && err.details.datasets && err.details.datasets.length) {
+        io.stderr(err.details.datasets.map(d => `  ${d.key}  ${d.name || ''}`).join('\n') + '\n');
       }
     }
     return known ? err.exitCode : 1;
