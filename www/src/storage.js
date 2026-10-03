@@ -19,7 +19,7 @@ import {
   store, setStore, createDefaultStore,
   navState, setNavState,
   navHistory, setNavHistory,
-  instanceKey,
+  instanceKey, setInstanceKey,
   undoStack, redoStack, trashBin
 } from './state.js';
 import { migrateStore as coreMigrateStore } from '@core/migrations.js';
@@ -825,6 +825,359 @@ import {
         return text || null;
       }
 
+      // =============================================================
+      // --- DESKTOP DATA FOLDER ---
+      // On the desktop app every dataset is a plain JSON file in a folder
+      // the user chooses (desktop/lib/data-folder.js). The folder is the
+      // source of truth; LocalStorage keeps a synchronous cache of it so
+      // the rest of the app (dataset list, search, load()) works unchanged.
+      //
+      //   boot     hydrateFromDesktopFolder() makes the cache match the
+      //            folder (first run: existing datasets are copied in).
+      //   save     persistStoreNow() writes the cache, then the file.
+      //   outside  a file changed by the CLI, an editor or a sync client
+      //            updates the cache; the open dataset reloads (asking
+      //            first if it has unsaved edits).
+      //
+      // A failed folder write never loses data: the edit stays in the
+      // cache, the key is remembered as unsynced and pushed to the folder
+      // on the next successful save or launch.
+      // =============================================================
+
+      const DESKTOP_FOLDER_MARKER_KEY = 'cardspoke_desktop_data_folder';
+      const DESKTOP_UNSYNCED_KEY = 'cardspoke_desktop_unsynced';
+      let desktopFolder = null;
+      let desktopReportedActiveKey = null;
+      let desktopLastWriteWarning = 0;
+      const desktopPendingChanges = new Map();
+      let desktopChangeRunner = null;
+
+      function getDesktopStorageApi() {
+        const desktop = typeof window !== 'undefined' ? window.cardspokeDesktop : null;
+        return desktop && desktop.storage && typeof desktop.storage.readAll === 'function' ? desktop.storage : null;
+      }
+
+      /** The active data folder ({ api, folder, canChange }), or null off-desktop. */
+      function getDesktopDataFolder() {
+        return desktopFolder;
+      }
+
+      /** Dataset keys the data folder can hold (same rule as the main process). */
+      function isFolderDatasetKey(key) {
+        return typeof key === 'string' && key.length <= 128 && /^(nested_cards_|cards_)[A-Za-z0-9_-]+$/.test(key);
+      }
+
+      /** Files are pretty-printed; the cache keeps the compact form the app writes. */
+      function compactDatasetPayload(text) {
+        try {
+          return JSON.stringify(JSON.parse(text));
+        } catch (_err) {
+          return text;
+        }
+      }
+
+      function readDesktopUnsynced() {
+        try {
+          const list = JSON.parse(localStorage.getItem(DESKTOP_UNSYNCED_KEY) || '[]');
+          return Array.isArray(list) ? list.filter(isFolderDatasetKey) : [];
+        } catch (_err) {
+          return [];
+        }
+      }
+
+      function setDesktopUnsynced(key, unsynced) {
+        const list = readDesktopUnsynced().filter(k => k !== key);
+        if (unsynced) list.push(key);
+        try {
+          if (list.length) localStorage.setItem(DESKTOP_UNSYNCED_KEY, JSON.stringify(list));
+          else localStorage.removeItem(DESKTOP_UNSYNCED_KEY);
+        } catch (_err) { /* best effort */ }
+      }
+
+      /** Tell the desktop shell which dataset is open (the CLI's default). */
+      function reportDesktopActiveDataset() {
+        const key = instanceKey || 'nested_cards_store';
+        if (!desktopFolder || key === desktopReportedActiveKey || !isFolderDatasetKey(key)) return;
+        desktopReportedActiveKey = key;
+        Promise.resolve(desktopFolder.api.setActive(key)).catch(() => { desktopReportedActiveKey = null; });
+      }
+
+      /**
+       * Write one dataset payload to its file. Never throws: the cache
+       * already holds the payload, so a folder failure is a warning and the
+       * key is retried later.
+       * @returns {Promise<{ conflict: boolean }>} conflict: the file changed
+       *   outside the app since it was last seen, so it was NOT overwritten;
+       *   the user is asked which version to keep.
+       */
+      async function writeDatasetToDesktopFolder(key, payload) {
+        if (!desktopFolder || !isFolderDatasetKey(key)) return { conflict: false };
+        try {
+          const result = await desktopFolder.api.write(key, payload);
+          if (result && result.conflict) {
+            queueDesktopDatasetChange({ key, text: result.text, conflict: true });
+            return { conflict: true };
+          }
+          if (readDesktopUnsynced().includes(key)) setDesktopUnsynced(key, false);
+          if (key === (instanceKey || 'nested_cards_store')) reportDesktopActiveDataset();
+        } catch (err) {
+          setDesktopUnsynced(key, true);
+          console.error('[Data Folder] Write failed:', err);
+          if (Date.now() - desktopLastWriteWarning > 30000) {
+            desktopLastWriteWarning = Date.now();
+            showToast('Could not save to the data folder (' + (err && err.message) +
+              '). Your changes are kept in CardSpoke and will be written when the folder is available.', 'warning', 8000);
+          }
+        }
+        return { conflict: false };
+      }
+
+      /** Move a deleted dataset's file to the folder's .trash/. */
+      async function removeDatasetFromDesktopFolder(key) {
+        if (!desktopFolder || !isFolderDatasetKey(key)) return;
+        setDesktopUnsynced(key, false);
+        try {
+          await desktopFolder.api.remove(key);
+        } catch (err) {
+          console.warn('[Data Folder] Could not remove dataset file for', key, err);
+        }
+      }
+
+      function shortDesktopId() {
+        return Date.now().toString(36).slice(-4) + Math.random().toString(36).slice(2, 4);
+      }
+
+      /**
+       * Boot step (desktop only, before load()): make the LocalStorage cache
+       * match the data folder. Never deletes the only copy of a dataset.
+       */
+      async function hydrateFromDesktopFolder() {
+        const api = getDesktopStorageApi();
+        if (!api) return;
+        let snapshot;
+        try {
+          snapshot = await api.readAll();
+        } catch (err) {
+          snapshot = { available: false, error: err && err.message };
+        }
+        if (!snapshot || !snapshot.available) {
+          // Keep working from the cache; edits are pushed once it returns.
+          desktopFolder = null;
+          showToast('Data folder unavailable' + (snapshot && snapshot.folder ? ' (' + snapshot.folder + ')' : '') +
+            '. CardSpoke is using its saved copy; changes are written to the folder when it is available again.',
+            'warning', 10000);
+          return;
+        }
+
+        const files = new Map();
+        for (const item of snapshot.datasets || []) {
+          if (item && isFolderDatasetKey(item.key) && typeof item.text === 'string') files.set(item.key, item.text);
+        }
+        const cachedKeys = getAllDatasetKeys().filter(isFolderDatasetKey);
+        const marker = localStorage.getItem(DESKTOP_FOLDER_MARKER_KEY);
+        const pushToFolder = async (key, payload) => {
+          const result = await api.write(key, payload);
+          if (result && result.conflict) {
+            // Changed on disk meanwhile: keep both versions.
+            key = (key + '_local_' + shortDesktopId()).slice(0, 128);
+            await api.write(key, payload);
+          }
+          files.set(key, payload);
+        };
+
+        try {
+          if (marker === null) {
+            // First launch with a data folder: copy existing datasets in.
+            // If the folder already has a different dataset under the same
+            // key, the cached copy is kept beside it under a new key.
+            for (const key of cachedKeys) {
+              const payload = localStorage.getItem(key);
+              if (!files.has(key)) {
+                await pushToFolder(key, payload);
+              } else if (compactDatasetPayload(files.get(key)) !== compactDatasetPayload(payload)) {
+                await pushToFolder((key + '_local_' + shortDesktopId()).slice(0, 128), payload);
+              }
+            }
+          } else if (marker === snapshot.folder) {
+            // Edits made while the folder was unavailable win over the file.
+            for (const key of readDesktopUnsynced()) {
+              const payload = localStorage.getItem(key);
+              if (payload !== null) await pushToFolder(key, payload);
+            }
+          } else {
+            // A different folder: its files win, but edits that never
+            // reached the old folder are kept (beside any same-key file).
+            for (const key of readDesktopUnsynced()) {
+              const payload = localStorage.getItem(key);
+              if (payload === null) continue;
+              if (!files.has(key)) await pushToFolder(key, payload);
+              else if (compactDatasetPayload(files.get(key)) !== compactDatasetPayload(payload)) {
+                await pushToFolder((key + '_local_' + shortDesktopId()).slice(0, 128), payload);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[Data Folder] Could not copy datasets into the folder:', err);
+          showToast('Could not copy datasets into the data folder: ' + (err && err.message), 'error', 10000);
+          return; // Leave the cache untouched; nothing has been removed.
+        }
+
+        // The folder is the source of truth from here on.
+        for (const key of cachedKeys) {
+          if (!files.has(key)) localStorage.removeItem(key);
+        }
+        for (const [key, text] of files) {
+          const payload = compactDatasetPayload(text);
+          if (localStorage.getItem(key) === payload) continue;
+          try {
+            localStorage.setItem(key, payload);
+          } catch (err) {
+            console.error('[Data Folder] Could not cache dataset', key, err);
+            showToast('Dataset "' + key + '" is too large to open in this version of CardSpoke.', 'error', 10000);
+          }
+        }
+        localStorage.setItem(DESKTOP_FOLDER_MARKER_KEY, snapshot.folder);
+        try { localStorage.removeItem(DESKTOP_UNSYNCED_KEY); } catch (_err) { /* best effort */ }
+
+        // Keep the active dataset pointing at a dataset that exists.
+        const activeKey = instanceKey || 'nested_cards_store';
+        if (!files.has(activeKey) && files.size) {
+          const next = files.has('nested_cards_store') ? 'nested_cards_store' : Array.from(files.keys()).sort()[0];
+          localStorage.setItem('activeInstance', next);
+          setInstanceKey(next);
+        }
+
+        desktopFolder = { api, folder: snapshot.folder, canChange: snapshot.canChange !== false };
+        if (typeof api.onChange === 'function') api.onChange(queueDesktopDatasetChange);
+        if (typeof api.onChangeFolderRequest === 'function') api.onChangeFolderRequest(() => { changeDesktopDataFolder(); });
+      }
+
+      /** Coalesce change events per key and apply them one at a time. */
+      function queueDesktopDatasetChange(change) {
+        if (!change || !isFolderDatasetKey(change.key)) return;
+        const previous = desktopPendingChanges.get(change.key);
+        desktopPendingChanges.set(change.key, {
+          text: change.text === null || change.text === undefined ? null : String(change.text),
+          // A refused save stays a conflict even if a later event coalesces.
+          conflict: !!change.conflict || !!(previous && previous.conflict)
+        });
+        if (desktopChangeRunner) return;
+        desktopChangeRunner = (async () => {
+          while (desktopPendingChanges.size) {
+            const [key, { text, conflict }] = desktopPendingChanges.entries().next().value;
+            desktopPendingChanges.delete(key);
+            try {
+              await applyDesktopDatasetChange(key, text, conflict);
+            } catch (err) {
+              console.error('[Data Folder] Could not apply outside change to', key, err);
+            }
+          }
+          desktopChangeRunner = null;
+        })();
+      }
+
+      async function reloadActiveDataset() {
+        await load();
+        if (typeof reconcilePluginsAfterDatasetSwitch === 'function') await reconcilePluginsAfterDatasetSwitch();
+        if (typeof updateDatasetSelector === 'function') updateDatasetSelector();
+        render();
+      }
+
+      /**
+       * A dataset file was changed (text) or deleted (null) outside the app.
+       * conflict: a save of this dataset was refused because of the change.
+       */
+      async function applyDesktopDatasetChange(key, text, conflict = false) {
+        if (!desktopFolder) return;
+        const activeKey = instanceKey || 'nested_cards_store';
+        const refreshList = () => { if (typeof updateDatasetSelector === 'function') updateDatasetSelector(); };
+
+        if (text === null) {
+          if (key === activeKey) {
+            // Never drop the open dataset: write it back out.
+            showToast('The open dataset’s file was removed outside CardSpoke. It has been saved again.', 'warning', 8000);
+            save(true);
+            return;
+          }
+          localStorage.removeItem(key);
+          refreshList();
+          return;
+        }
+
+        const payload = compactDatasetPayload(text);
+        if (localStorage.getItem(key) === payload && !conflict) return;
+        if (key !== activeKey) {
+          try {
+            localStorage.setItem(key, payload);
+          } catch (err) {
+            console.error('[Data Folder] Could not cache dataset', key, err);
+          }
+          refreshList();
+          return;
+        }
+
+        if ((savePending || conflict) && !storageWriteLock) {
+          const choice = await showChoiceDialog(
+            'This dataset was changed outside CardSpoke (for example by the command-line tool) ' +
+            'while you have changes that are not saved yet.',
+            {
+              title: 'Dataset Changed on Disk',
+              dismissValue: 'keep',
+              actions: [
+                { label: 'Keep My Version', value: 'keep', className: 'btn' },
+                { label: 'Load File Version', value: 'reload', className: 'btn btn-primary', autoFocus: true }
+              ]
+            }
+          );
+          if (choice !== 'reload') {
+            save(true); // Overwrites the file with the open version.
+            return;
+          }
+          cancelPendingSave();
+        }
+
+        localStorage.setItem(key, payload);
+        await reloadActiveDataset();
+        showToast('Reloaded: this dataset was changed outside CardSpoke', 'info');
+      }
+
+      /** Desktop: pick a new data folder, then restart the page on it. */
+      async function changeDesktopDataFolder() {
+        const api = getDesktopStorageApi();
+        if (!api || typeof api.chooseFolder !== 'function') return false;
+        try {
+          await flushPendingSave();
+        } catch (_err) {
+          return false; // flushPendingSave already reported the failure.
+        }
+        let result;
+        try {
+          result = await api.chooseFolder();
+        } catch (err) {
+          showToast('Could not change the data folder: ' + (err && err.message), 'error', 8000);
+          return false;
+        }
+        if (!result || !result.changed) return false;
+        // Nothing may write the old cache while the page restarts on the
+        // new folder (hydrateFromDesktopFolder rebuilds it).
+        cancelPendingSave();
+        storageWriteLock = true;
+        showToast('Data folder changed to ' + result.folder + '. Reloading…', 'success');
+        setTimeout(() => location.reload(), 600);
+        return true;
+      }
+
+      async function openDesktopDataFolder() {
+        const api = getDesktopStorageApi();
+        if (!api || typeof api.openFolder !== 'function') return;
+        try {
+          await api.openFolder();
+        } catch (err) {
+          showToast('Could not open the data folder: ' + (err && err.message), 'error');
+        }
+      }
+
+
 
 
       // =============================================================
@@ -1062,6 +1415,11 @@ import {
           const finalPayload = activePin ? await encryptStorePayload(payload, activePin) : payload;
           if (epoch !== saveEpoch) return;
           localStorage.setItem(key, finalPayload);
+          // Desktop: the data folder file is the durable copy.
+          let folderConflict = false;
+          if (typeof getDesktopDataFolder === 'function' && getDesktopDataFolder()) {
+            folderConflict = (await writeDatasetToDesktopFolder(key, finalPayload)).conflict;
+          }
           if (storageType === 'indexeddb') {
             const driver = await getIndexedDbMirrorDriver();
             await driver.set(key, finalPayload);
@@ -1074,7 +1432,8 @@ import {
             await writable.close();
           }
           lastSaveTime = Date.now();
-          if (revision === saveRevision && epoch === saveEpoch) {
+          // A refused folder write is not saved: the user picks a version.
+          if (revision === saveRevision && epoch === saveEpoch && !folderConflict) {
             savePending = false;
             if (typeof setDirty === 'function') setDirty(false);
           }
@@ -1233,7 +1592,10 @@ import {
       }
 
       async function clearAllData() {
-        if (!await showConfirmDialog('WARNING: This will DELETE ALL instances and data from localStorage.\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?', {
+        const folderNote = typeof getDesktopDataFolder === 'function' && getDesktopDataFolder()
+          ? '\n\nDataset files in your data folder are moved to its .trash folder.'
+          : '';
+        if (!await showConfirmDialog('WARNING: This will DELETE ALL instances and data from localStorage.' + folderNote + '\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?', {
           title: 'Delete All Data',
           confirmLabel: 'Continue',
           cancelLabel: 'Cancel',
@@ -1263,6 +1625,12 @@ import {
           // and keep further saves off until the reload.
           cancelPendingSave();
           storageWriteLock = true;
+
+          // Desktop: the dataset files are the real data. They are moved to
+          // the data folder's .trash/ rather than destroyed.
+          if (typeof getDesktopDataFolder === 'function' && getDesktopDataFolder()) {
+            for (const key of getAllDatasetKeys()) await removeDatasetFromDesktopFolder(key);
+          }
 
           // Clear everything
           localStorage.clear();
@@ -1509,7 +1877,9 @@ import {
        * @param {string} key - Dataset key
        */
       async function removeDatasetMirrors(key) {
-        if (!key || typeof indexedDB === 'undefined') return;
+        if (!key) return;
+        if (typeof removeDatasetFromDesktopFolder === 'function') await removeDatasetFromDesktopFolder(key);
+        if (typeof indexedDB === 'undefined') return;
         try {
           const driver = await getIndexedDbMirrorDriver();
           await driver.remove(key);
@@ -1583,6 +1953,7 @@ import {
       async function load() {
         const key = instanceKey || 'nested_cards_store';
         let raw = localStorage.getItem(key);
+        if (typeof reportDesktopActiveDataset === 'function') reportDesktopActiveDataset();
 
         // A fresh load re-decides the lock state for the (possibly new)
         // active dataset and must not inherit the previous dataset's undo

@@ -10,6 +10,24 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Added
 
+- **Desktop data folder.** The desktop app saves every dataset as a plain
+  JSON file in a folder you choose (default `Documents/CardSpoke`), set in
+  Dataset Manager → Data Folder or File → Change Data Folder…. The folder is
+  the source of truth. Existing datasets are copied in on first launch. Files
+  changed outside the app are reloaded, with a prompt if there are unsaved
+  edits. Deleted datasets are moved to the folder's `.trash/`. If the folder
+  is unavailable, the app keeps working from its internal copy and writes
+  the changes once the folder is back. `CARDSPOKE_DATA_DIR` pins the folder.
+  See the [Desktop guide](docs/guides/DESKTOP.md#where-data-lives).
+- The CLI works directly on the desktop data folder: `datasets`,
+  `init --dataset NAME`, `--dataset`/`-d`, `--data-dir`, and it defaults to
+  the dataset open in the desktop app.
+- A command-line interface (`cli/cardspoke.js`, `npm run cli`, `cardspoke`
+  bin) for scripts and AI agents. It creates, shows, updates, moves,
+  duplicates, deletes, tags, bookmarks, searches, imports, exports and
+  validates cards in CardSpoke JSON files (app backups or local-file
+  datasets, including PIN-encrypted ones). Every command can print JSON. See
+  the [CLI guide](docs/guides/CLI.md).
 - Nine advanced plugins (three themes, three features, three app workflows),
   reproducible source-to-JSON packaging, and real-worker browser acceptance tests.
 - A standalone plugin authoring guide for humans and AI agents, with three
@@ -38,6 +56,11 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Security
 
+- `desktop/osv-scanner.toml` records a time-limited OSV ignore (until
+  2027-01-03) for GHSA-ch52-4w7c-c8xp in `http-cache-semantics`. No fixed
+  version exists yet, and the package is reached only through
+  electron-builder's build-time Electron download, which is not shipped and
+  uses a single-user cache.
 - Plugin permission grants are bound to a fingerprint of the plugin's code
   and requested permissions, so a same-id plugin with different code (for
   example from an imported dataset) needs fresh consent. Grants saved by
