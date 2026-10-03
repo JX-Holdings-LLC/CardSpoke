@@ -10,6 +10,12 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Added
 
+- A command-line interface (`cli/cardspoke.js`, `npm run cli`, `cardspoke`
+  bin) for scripts and AI agents. It creates, shows, updates, moves,
+  duplicates, deletes, tags, bookmarks, searches, imports, exports and
+  validates cards in CardSpoke JSON files (app backups or local-file
+  datasets, including PIN-encrypted ones). Every command can print JSON. See
+  the [CLI guide](docs/guides/CLI.md).
 - Nine advanced plugins (three themes, three features, three app workflows),
   reproducible source-to-JSON packaging, and real-worker browser acceptance tests.
 - A standalone plugin authoring guide for humans and AI agents, with three

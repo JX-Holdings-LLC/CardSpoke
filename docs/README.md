@@ -9,6 +9,7 @@ CardSpoke is a local-first, card-based knowledge app. This documentation describ
 | Using CardSpoke | [Feature Catalog](./guides/FEATURES.md), then [Storage & Privacy](./policies/STORAGE_AND_PRIVACY.md) |
 | Setting up a development environment | [Developer Guide](./guides/DEVELOPER_GUIDE.md) |
 | Building a plugin | [Standalone Authoring Guide](./guides/PLUGIN_AUTHORING_GUIDE.md), then [Advanced Examples](../sample-plugins/advanced/README.md) |
+| Scripting CardSpoke or driving it from an AI agent | [CLI guide](./guides/CLI.md) |
 | Reviewing a change with an AI agent or as a maintainer | [AI & Contributor Context](./AI_CONTEXT.md) |
 | Preparing a release | [Release & Versioning](./policies/RELEASE_AND_VERSIONING.md) and [CHANGELOG](../CHANGELOG.md) |
 

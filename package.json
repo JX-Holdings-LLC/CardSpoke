@@ -2,7 +2,11 @@
   "name": "cardspoke",
   "version": "0.21.1",
   "description": "A lightweight, local-first card-based knowledge app",
+  "bin": {
+    "cardspoke": "cli/cardspoke.js"
+  },
   "scripts": {
+    "cli": "node cli/cardspoke.js",
     "test": "uvu tests -i helpers",
     "test:watch": "uvu tests -i helpers --watch",
     "build": "node scripts/build-plugin-worker.mjs && vite build",

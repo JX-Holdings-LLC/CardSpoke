@@ -140,6 +140,21 @@ The plugin runtime includes consent prompts, risk labels, safe mode, resource cl
    it once with `npx playwright install --with-deps chromium`, or point
    `CHROMIUM_PATH` at an existing Chromium/Chrome binary.
 
+## Command-Line Interface
+
+`cli/cardspoke.js` reads and edits CardSpoke JSON files (app backups or
+local-file datasets) from a terminal. It is built for scripts and AI agents:
+every command can print JSON, and it never uses the network.
+
+```bash
+npm run cli -- init --file notes.json
+npm run cli -- create "Projects" --tag work --file notes.json
+npm run cli -- tree --file notes.json --json
+```
+
+See the [CLI guide](./docs/guides/CLI.md) for every command and the
+export → edit → import workflow.
+
 ## Desktop and Mobile Packaging
 
 The public product focus is:
@@ -189,6 +204,7 @@ Mobile builds should be treated as experimental until platform-specific security
 - `www/` - Web assets consumed by the app and Capacitor shells.
 - `www/src/` - Source slices compiled by Vite into `www/app.js`.
 - `www/src/core/` - Plugin runtime modules used by the main CardSpoke app.
+- `cli/` - Command-line interface for editing CardSpoke JSON files.
 - `desktop/` - Electron desktop shell and installer configuration.
 - `tests/` - Automated uvu tests.
 - `docs/` - User, developer, API, policy, and release documentation.
