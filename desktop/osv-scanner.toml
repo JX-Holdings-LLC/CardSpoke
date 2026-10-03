@@ -1,0 +1,17 @@
+# OSV-Scanner configuration for desktop/package-lock.json
+# (used by .github/workflows/dependency-vulnerability-scan.yml).
+#
+# Every entry needs a reason and an ignoreUntil date so it is re-checked.
+
+[[IgnoredVulns]]
+# http-cache-semantics <=4.2.0: max-stale handling can disclose cross-user
+# cached responses. No fixed version exists yet (4.2.0 is the latest).
+# Only reached through electron-builder > @electron/get > got >
+# cacheable-request, a build-time dev dependency that downloads the Electron
+# binary into a single-user local cache. It is not shipped in the app and no
+# shared cache serves multiple users, so the issue is not reachable here.
+# Remove this entry once a fixed http-cache-semantics (or a got/cacheable-
+# request that drops it) is available.
+id = "GHSA-ch52-4w7c-c8xp"
+ignoreUntil = 2027-01-03T00:00:00Z
+reason = "Build-time-only dev dependency (electron-builder > @electron/get > got > cacheable-request); single-user download cache, not shipped; no fixed version available."

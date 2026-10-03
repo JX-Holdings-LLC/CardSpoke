@@ -56,6 +56,11 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Security
 
+- `desktop/osv-scanner.toml` records a time-limited OSV ignore (until
+  2027-01-03) for GHSA-ch52-4w7c-c8xp in `http-cache-semantics`. No fixed
+  version exists yet, and the package is reached only through
+  electron-builder's build-time Electron download, which is not shipped and
+  uses a single-user cache.
 - Plugin permission grants are bound to a fingerprint of the plugin's code
   and requested permissions, so a same-id plugin with different code (for
   example from an imported dataset) needs fresh consent. Grants saved by
