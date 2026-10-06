@@ -1,0 +1,242 @@
+<title>CardSpoke Logo Explorations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a review sheet. Four rounds top to bottom; each logo is a specimen board with its brief beside it. */
+:root {
+  --bg: #f3f4f1;
+  --surface: #ffffff;
+  --fg: #16213a;
+  --muted: #5b6273;
+  --line: #d9dcd6;
+  --accent: #d9431f;
+  --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151f; --surface: #1a2030; --fg: #eceee8; --muted: #a2a8b6; --line: #2c3446; --accent: #ff7a57;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151f; --surface: #1a2030; --fg: #eceee8; --muted: #a2a8b6; --line: #2c3446; --accent: #ff7a57;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--display); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; }
+header { display: grid; gap: 14px; padding-bottom: 28px; border-bottom: 2px solid var(--fg); }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1.02; letter-spacing: -.02em; margin: 0; font-weight: 800; text-wrap: balance; }
+.lede { max-width: 66ch; color: var(--muted); margin: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; font: 13px/1.4 var(--mono); color: var(--muted); }
+.legend a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
+.legend a:hover, .legend a:focus-visible { border-color: var(--accent); outline: none; }
+section { padding-top: 52px; display: grid; gap: 22px; }
+.round-head { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; align-items: baseline; }
+.round-head .tag { font: 500 13px/1 var(--mono); color: var(--accent); grid-row: span 2; padding-top: 10px; }
+h2 { margin: 0; font-size: clamp(24px, 3.4vw, 34px); letter-spacing: -.01em; line-height: 1.1; text-wrap: balance; }
+.round-head p { margin: 0; color: var(--muted); max-width: 70ch; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.grid.one { grid-template-columns: minmax(0, 1fr); }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+figure img { display: block; width: 100%; height: auto; border-bottom: 1px solid var(--line); }
+figure .square { background: var(--line); display: grid; place-items: center; }
+figure .square img { max-width: 62%; border: 0; }
+figcaption { padding: 16px 18px 18px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.name { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.name b { font-size: 18px; font-weight: 600; }
+.file { font: 12px/1.3 var(--mono); color: var(--muted); }
+.brief { font-size: 15px; margin: 0; }
+.brief em { font-style: normal; color: var(--accent); font-weight: 600; }
+.meta { font: 12px/1.5 var(--mono); color: var(--muted); margin: 0; }
+.compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border-bottom: 1px solid var(--line); }
+.compare div { position: relative; min-width: 0; }
+.compare div + div { border-left: 1px solid var(--line); }
+.compare img { border: 0; }
+.compare span { position: absolute; left: 10px; top: 10px; font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; background: var(--fg); color: var(--surface); padding: 5px 7px; }
+.sizes { display: flex; align-items: end; gap: 18px; padding: 18px; background: var(--surface); border: 1px solid var(--line); flex-wrap: wrap; }
+.sizes img { display: block; }
+.sizes .sz { display: grid; gap: 6px; justify-items: center; font: 11px/1 var(--mono); color: var(--muted); }
+.fixes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 15px; display: grid; gap: 4px; max-width: 80ch; }
+footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); font: 13px/1.6 var(--mono); color: var(--muted); }
+code { font: 13px var(--mono); }
+@media (max-width: 760px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .compare { grid-template-columns: minmax(0, 1fr); }
+  .compare div + div { border-left: 0; border-top: 1px solid var(--line); }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">CardSpoke · identity explorations · built in Vixl 0.21</div>
+    <h1>Thirteen ways to draw a card on a spoke</h1>
+    <p class="lede">Every logo below is an editable Vixl document: text stays text, cards are shapes, wires are paths. Each was laid out by a script, run through <code>vixl check</code>, rendered, and reviewed before it made this page.</p>
+    <nav class="legend" aria-label="Rounds">
+      <a href="#recreation">Recreation</a>
+      <a href="#refined">Refined</a>
+      <a href="#reinterpreted">Same vibe, new brief</a>
+      <a href="#radical">Radical</a>
+    </nav>
+  </header>
+
+  <section id="recreation">
+    <div class="round-head">
+      <span class="tag">R1</span>
+      <h2>Recreation</h2>
+      <p>The original SVG imported into Vixl, then rebuilt from scratch as layers and overlaid on it until the two matched. The type is Arimo, which shares Arial's metrics, at 164 px with 16 px tracking and 7 px strokes, all measured from the original.</p>
+    </div>
+    <div class="grid one">
+      <figure>
+        <div class="compare">
+          <div><span>Original</span><img src="00-original.png" alt="Original CardSpoke logo: outlined boxes wired to framed C and S letters" width="1500" height="1500" style="aspect-ratio:1320/360;object-fit:cover;object-position:50% 46%"></div>
+          <div><span>Vixl rebuild</span><img src="01-recreation.png" alt="Vixl recreation of the same logo" width="1500" height="1500" style="aspect-ratio:1320/360;object-fit:cover;object-position:50% 46%"></div>
+        </div>
+        <figcaption>
+          <div class="name"><b>01 · Recreation</b><span class="file">01-recreation.vixl · .svg · .png</span></div>
+          <p class="brief">Faithful to the original: two loose cards on the left, wired into framed initials. The wire to the S frame now ends at the frame's centre.</p>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="refined">
+    <div class="round-head">
+      <span class="tag">R2</span>
+      <h2>Refined</h2>
+      <p>Same concept, fewer accidents.</p>
+    </div>
+    <ul class="fixes">
+      <li>Both loose cards use playing-card proportions (5:7) instead of two unrelated boxes.</li>
+      <li>Strokes are one weight throughout. Corners and wire bends share one radius.</li>
+      <li>Wires route on a grid with even clearance. Small ports mark where they plug into the C and S.</li>
+      <li>Inter Medium, tracked so each frame clears its neighbours. The lockup is tighter, and the mark can now stand alone as an app icon.</li>
+    </ul>
+    <div class="grid">
+      <figure>
+        <img src="02a-refined.png" alt="Refined logo in black ink" width="1700" height="640">
+        <figcaption>
+          <div class="name"><b>02a · Refined, ink</b><span class="file">02a-refined</span></div>
+          <p class="brief">The one-colour master for print, favicons and stamps.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="02b-refined-accent.png" alt="Refined logo in navy with orange letter frames" width="1700" height="640">
+        <figcaption>
+          <div class="name"><b>02b · Refined, accent</b><span class="file">02b-refined-accent</span></div>
+          <p class="brief">Navy ink with signal orange on the frames. The orange points to the two letters that name the product.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="02c-refined-reverse.png" alt="Refined logo reversed on navy with amber frames" width="1700" height="640">
+        <figcaption>
+          <div class="name"><b>02c · Refined, reverse</b><span class="file">02c-refined-reverse</span></div>
+          <p class="brief">For dark UI: warm paper ink, amber frames. The cards are filled with the background so wires pass behind them.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="square"><img src="02d-refined-mark.png" alt="App icon: an outlined card wired to a filled amber card on a navy tile" width="512" height="512"></div>
+        <figcaption>
+          <div class="name"><b>02d · App mark</b><span class="file">02d-refined-mark</span></div>
+          <p class="brief">The lockup reduced to one card, one wire, one card.</p>
+          <div class="sizes" aria-label="App mark at small sizes">
+            <div class="sz"><img src="02d-refined-mark.png" alt="" width="64" height="64">64</div>
+            <div class="sz"><img src="02d-refined-mark.png" alt="" width="32" height="32">32</div>
+            <div class="sz"><img src="02d-refined-mark.png" alt="" width="16" height="16">16</div>
+          </div>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="reinterpreted">
+    <div class="round-head">
+      <span class="tag">R3</span>
+      <h2>Same vibe, different brief</h2>
+      <p>Still monoline cards, wiring and framed letters, but each one guesses at a different brief behind the original.</p>
+    </div>
+    <div class="grid">
+      <figure>
+        <img src="03-card-tree.png" alt="A parent card branching into three child cards, beside the CardSpoke wordmark" width="1700" height="640">
+        <figcaption>
+          <div class="name"><b>03 · Card tree</b><span class="file">03-card-tree</span></div>
+          <p class="brief">Brief: <em>“show the hierarchy.”</em> CardSpoke's core idea is cards nested in cards, so the mark is a parent card branching to three children, with the open one filled.</p>
+          <p class="meta">Space Grotesk 600</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="04-nested-local.png" alt="Three nested cards with a green dot at the centre, beside a monospaced lowercase wordmark and a green cursor" width="1700" height="640">
+        <figcaption>
+          <div class="name"><b>04 · Nested, local-first</b><span class="file">04-nested-local</span></div>
+          <p class="brief">Brief: <em>“your data stays with you.”</em> Cards inside cards, with the data (the green dot) at the centre. The terminal-style wordmark and cursor suit a lightweight, plugin-friendly tool.</p>
+          <p class="meta">JetBrains Mono 600</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="05-hub-spokes.png" alt="Six cards on spokes around a hub, beside the CardSpoke wordmark" width="1700" height="640">
+        <figcaption>
+          <div class="name"><b>05 · Hub and spokes</b><span class="file">05-hub-spokes</span></div>
+          <p class="brief">Brief: <em>“one place for everything.”</em> Takes “spoke” at its word: six cards around a hub. Built from one spoke and Vixl's <code>radial-repeat</code>.</p>
+          <p class="meta">DM Sans 500</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="06-cs-cards.png" alt="An outlined C card overlapping a filled S card joined by a wire, beside the wordmark and the tagline Cards, connected" width="1700" height="640">
+        <figcaption>
+          <div class="name"><b>06 · CS cards</b><span class="file">06-cs-cards</span></div>
+          <p class="brief">Brief: <em>“a monogram we can stamp anywhere.”</em> The framed C and S become two overlapping cards joined by the original's wire.</p>
+          <p class="meta">Inter 500 / 600</p>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="radical">
+    <div class="round-head">
+      <span class="tag">R4</span>
+      <h2>Radical</h2>
+      <p>No monoline wiring. Colour, rotation, other typefaces and other shapes, to test how far the name can stretch.</p>
+    </div>
+    <div class="grid">
+      <figure>
+        <div class="square" style="background:#0f1222"><img src="07-card-wheel.png" alt="A bicycle wheel whose spokes carry eight brightly coloured cards, above the CardSpoke wordmark" width="1200" height="1200" style="max-width:100%"></div>
+        <figcaption>
+          <div class="name"><b>07 · Card wheel</b><span class="file">07-card-wheel</span></div>
+          <p class="brief">Brief: <em>“make it fun to open.”</em> A literal spoked wheel with eight coloured cards around the hub. Bright, toy-like and easy to animate.</p>
+          <p class="meta">Unbounded 700</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="square" style="background:#e8ff3a"><img src="10-brutalist.png" alt="CARD in huge black type above SPOKE in a white slab with a hard shadow, on acid yellow" width="1200" height="1200" style="max-width:100%"></div>
+        <figcaption>
+          <div class="name"><b>10 · Brutalist slab</b><span class="file">10-brutalist</span></div>
+          <p class="brief">Brief: <em>“loud, for a launch poster.”</em> Stacked heavy type, with SPOKE on a white card slab casting a hard shadow.</p>
+          <p class="meta">Syne 800</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="08-hand-of-cards.png" alt="A fanned hand of five cards, the front one clay red with a serif C, beside a serif wordmark" width="1700" height="640">
+        <figcaption>
+          <div class="name"><b>08 · Hand of cards</b><span class="file">08-hand-of-cards</span></div>
+          <p class="brief">Brief: <em>“a home for notes and ideas.”</em> Warm and literary: a fanned hand of index cards, with the C on the front card.</p>
+          <p class="meta">Fraunces 700</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="09-index-tab.png" alt="A mint index card with a tab and two cards behind it, with cardspoke written on the front card" width="1700" height="640">
+        <figcaption>
+          <div class="name"><b>09 · Index tab</b><span class="file">09-index-tab</span></div>
+          <p class="brief">Brief: <em>“friendly and calm.”</em> The name sits on a soft tabbed index card, with two cards stacked behind it (built with Vixl's <code>pathfinder</code>).</p>
+          <p class="meta">DM Sans 500</p>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <footer>
+    Masters (<code>.vixl</code>), vector exports (<code>.svg</code>, text as outlines) and the build scripts live in <code>logo-explorations/</code> in the CardSpoke repository. Rebuild any logo with <code>python build/NN_*.py</code> and Vixl on your PATH.
+  </footer>
+</div>
