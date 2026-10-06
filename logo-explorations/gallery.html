@@ -57,6 +57,14 @@ figcaption { padding: 16px 18px 18px; display: grid; gap: 6px; align-content: st
 .compare div + div { border-left: 1px solid var(--line); }
 .compare img { border: 0; }
 .compare span { position: absolute; left: 10px; top: 10px; font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; background: var(--fg); color: var(--surface); padding: 5px 7px; }
+.pick { font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--surface); background: var(--accent); padding: 4px 6px; }
+.pair { display: grid; grid-template-columns: minmax(0, 3.3fr) minmax(0, 1fr); border-bottom: 1px solid var(--line); background: var(--line); gap: 1px; }
+.pair img { border: 0; }
+.pair .icon { background: var(--surface); display: grid; place-items: center; padding: 12px; }
+.pair .icon img { max-width: 100%; }
+.from { font: 12px/1.5 var(--mono); color: var(--muted); margin: 0; }
+.from b { color: var(--fg); font-weight: 500; }
+@media (max-width: 760px) { .pair { grid-template-columns: minmax(0, 1fr); } .pair .icon img { max-width: 40%; } }
 .sizes { display: flex; align-items: end; gap: 18px; padding: 18px; background: var(--surface); border: 1px solid var(--line); flex-wrap: wrap; }
 .sizes img { display: block; }
 .sizes .sz { display: grid; gap: 6px; justify-items: center; font: 11px/1 var(--mono); color: var(--muted); }
@@ -73,15 +81,59 @@ code { font: 13px var(--mono); }
 <div class="wrap">
   <header>
     <div class="eyebrow">CardSpoke · identity explorations · built in Vixl 0.21</div>
-    <h1>Thirteen ways to draw a card on a spoke</h1>
+    <h1>Sixteen ways to draw a card on a spoke</h1>
     <p class="lede">Every logo below is an editable Vixl document: text stays text, cards are shapes, wires are paths. Each was laid out by a script, run through <code>vixl check</code>, rendered, and reviewed before it made this page.</p>
     <nav class="legend" aria-label="Rounds">
+      <a href="#round-two">Round two</a>
       <a href="#recreation">Recreation</a>
       <a href="#refined">Refined</a>
       <a href="#reinterpreted">Same vibe, new brief</a>
       <a href="#radical">Radical</a>
     </nav>
   </header>
+
+  <section id="round-two">
+    <div class="round-head">
+      <span class="tag">R5</span>
+      <h2>Round two, from the shortlist</h2>
+      <p>The shortlist was 02c, 02d, 03, 06 and 09. What they share: rounded cards, one wire joining them, an outlined card beside a filled one, the navy and amber palette, the tabbed index card and the tree. Each new direction crosses two or three of those and ships with its own app icon.</p>
+    </div>
+    <div class="grid one">
+      <figure>
+        <div class="pair">
+          <img src="11-tree-wired.png" alt="The card tree in cream and amber on navy, its bus running into a framed C and a wire running to a framed S" width="1700" height="640">
+          <div class="icon"><img src="11-tree-wired-mark.png" alt="App icon: a parent card branching to three children, the middle one amber, on navy" width="512" height="512"></div>
+        </div>
+        <figcaption>
+          <div class="name"><b>11 · Wired tree</b><span class="file">11-tree-wired · 11-tree-wired-mark</span></div>
+          <p class="brief">The card tree now <em>is</em> the wiring. Its bus runs straight into the framed C, and the right-hand child wires round to the framed S. The icon is just the tree.</p>
+          <p class="from">Built from <b>03 card tree + 02c reverse + 02d</b> · Inter 500</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="pair">
+          <img src="12-tabbed-cs.png" alt="Two tabbed index cards, an outlined C and a filled S joined by a wire, beside a lowercase wordmark and the tagline Cards, connected" width="1700" height="640">
+          <div class="icon"><img src="12-tabbed-cs-mark.png" alt="App icon: the two tabbed C and S cards on a mint tile" width="512" height="512"></div>
+        </div>
+        <figcaption>
+          <div class="name"><b>12 · Tabbed CS</b><span class="file">12-tabbed-cs · 12-tabbed-cs-mark</span></div>
+          <p class="brief">The C and S cards from 06, recut as the tabbed index cards from 09 in its mint and deep green. Matching tabs make them read as one stack of cards.</p>
+          <p class="from">Built from <b>06 CS cards + 09 index tab</b> · DM Sans 500 / 700</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="pair">
+          <img src="13-name-card-tree.png" alt="The name CardSpoke on a navy tabbed card that branches into three child cards, the middle one amber" width="1700" height="640">
+          <div class="icon"><img src="13-name-card-tree-mark.png" alt="App icon: a navy tabbed card wired to three small cards, on a paper tile" width="512" height="512"></div>
+        </div>
+        <figcaption>
+          <div class="name"><b>13 · Name card tree</b><span class="file">13-name-card-tree · 13-name-card-tree-mark</span></div>
+          <p class="brief">The name sits on a navy index card (09) whose right edge branches into child cards (03). One amber card marks the one that is open. The icon keeps the same structure with the name replaced by lines of text.</p>
+          <p class="from">Built from <b>09 index tab + 03 card tree + 02 palette</b> · Inter 500</p>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
 
   <section id="recreation">
     <div class="round-head">
@@ -133,14 +185,14 @@ code { font: 13px var(--mono); }
       <figure>
         <img src="02c-refined-reverse.png" alt="Refined logo reversed on navy with amber frames" width="1700" height="640">
         <figcaption>
-          <div class="name"><b>02c · Refined, reverse</b><span class="file">02c-refined-reverse</span></div>
+          <div class="name"><b>02c · Refined, reverse</b><span class="pick">Shortlist</span><span class="file">02c-refined-reverse</span></div>
           <p class="brief">For dark UI: warm paper ink, amber frames. The cards are filled with the background so wires pass behind them.</p>
         </figcaption>
       </figure>
       <figure>
         <div class="square"><img src="02d-refined-mark.png" alt="App icon: an outlined card wired to a filled amber card on a navy tile" width="512" height="512"></div>
         <figcaption>
-          <div class="name"><b>02d · App mark</b><span class="file">02d-refined-mark</span></div>
+          <div class="name"><b>02d · App mark</b><span class="pick">Shortlist</span><span class="file">02d-refined-mark</span></div>
           <p class="brief">The lockup reduced to one card, one wire, one card.</p>
           <div class="sizes" aria-label="App mark at small sizes">
             <div class="sz"><img src="02d-refined-mark.png" alt="" width="64" height="64">64</div>
@@ -162,7 +214,7 @@ code { font: 13px var(--mono); }
       <figure>
         <img src="03-card-tree.png" alt="A parent card branching into three child cards, beside the CardSpoke wordmark" width="1700" height="640">
         <figcaption>
-          <div class="name"><b>03 · Card tree</b><span class="file">03-card-tree</span></div>
+          <div class="name"><b>03 · Card tree</b><span class="pick">Shortlist</span><span class="file">03-card-tree</span></div>
           <p class="brief">Brief: <em>“show the hierarchy.”</em> CardSpoke's core idea is cards nested in cards, so the mark is a parent card branching to three children, with the open one filled.</p>
           <p class="meta">Space Grotesk 600</p>
         </figcaption>
@@ -186,7 +238,7 @@ code { font: 13px var(--mono); }
       <figure>
         <img src="06-cs-cards.png" alt="An outlined C card overlapping a filled S card joined by a wire, beside the wordmark and the tagline Cards, connected" width="1700" height="640">
         <figcaption>
-          <div class="name"><b>06 · CS cards</b><span class="file">06-cs-cards</span></div>
+          <div class="name"><b>06 · CS cards</b><span class="pick">Shortlist</span><span class="file">06-cs-cards</span></div>
           <p class="brief">Brief: <em>“a monogram we can stamp anywhere.”</em> The framed C and S become two overlapping cards joined by the original's wire.</p>
           <p class="meta">Inter 500 / 600</p>
         </figcaption>
@@ -228,7 +280,7 @@ code { font: 13px var(--mono); }
       <figure>
         <img src="09-index-tab.png" alt="A mint index card with a tab and two cards behind it, with cardspoke written on the front card" width="1700" height="640">
         <figcaption>
-          <div class="name"><b>09 · Index tab</b><span class="file">09-index-tab</span></div>
+          <div class="name"><b>09 · Index tab</b><span class="pick">Shortlist</span><span class="file">09-index-tab</span></div>
           <p class="brief">Brief: <em>“friendly and calm.”</em> The name sits on a soft tabbed index card, with two cards stacked behind it (built with Vixl's <code>pathfinder</code>).</p>
           <p class="meta">DM Sans 500</p>
         </figcaption>

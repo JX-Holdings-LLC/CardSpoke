@@ -18,6 +18,11 @@ Open `gallery.html` to see them all side by side with the brief each one answers
 | `08-hand-of-cards` | Radical | A fanned hand of index cards with a serif wordmark |
 | `09-index-tab` | Radical | The name on a soft tabbed index card |
 | `10-brutalist` | Radical | Stacked heavy type with a hard-shadowed card slab |
+| `11-tree-wired` (+ `-mark`) | Round two | Card tree in navy and amber, wired into the framed C and S (03 × 02c/d) |
+| `12-tabbed-cs` (+ `-mark`) | Round two | C and S as tabbed index cards in mint (06 × 09) |
+| `13-name-card-tree` (+ `-mark`) | Round two | The name on a navy tabbed card that branches into child cards (09 × 03 × 02) |
+
+Shortlisted after round one: 02c, 02d, 03, 06 and 09.
 
 ## Rebuilding
 
@@ -32,6 +37,7 @@ python 01_recreation.py
 python 02_refined.py
 python 03_reinterpretations.py
 python 04_radical.py
+python 05_shortlist.py
 ```
 
 To edit a logo by hand, use the master: for example

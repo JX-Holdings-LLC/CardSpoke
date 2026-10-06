@@ -131,3 +131,27 @@ def wire_d(points, r=0):
 def dot(name, cx, cy, r, fill, **extra):
     return {"type": "shape", "shape": "ellipse", "name": name, "x": round(cx - r), "y": round(cy - r),
             "width": round(2 * r), "height": round(2 * r), "fill": fill, **extra}
+
+
+def tabcard_d(x, y, w, h, tab_x, tab_w, tab_h, r):
+    """Closed SVG path of an index card with a tab on its top edge.
+
+    (x, y, w, h) is the whole outline including the tab; the tab spans tab_x..tab_x+tab_w
+    and rises tab_h above the card body. Corners have radius r; the tab's corners are capped
+    at tab_h / 2, because a path that doubles back on itself strokes as a runaway spike.
+    """
+    yb = y + tab_h
+    tr = tab_x + tab_w
+    t = min(r, tab_h / 2)
+    if tr + t > x + w - r:
+        raise ValueError("tab must end at least one corner radius inside the card's right edge")
+    d = []
+    if tab_x - x < r + t:   # tab flush with the left edge
+        d += [f"M{x} {y + t}", f"Q{x} {y} {x + t} {y}"]
+    else:
+        d += [f"M{x} {yb + r}", f"Q{x} {yb} {x + r} {yb}", f"L{tab_x - t} {yb}",
+              f"Q{tab_x} {yb} {tab_x} {yb - t}", f"L{tab_x} {y + t}", f"Q{tab_x} {y} {tab_x + t} {y}"]
+    d += [f"L{tr - t} {y}", f"Q{tr} {y} {tr} {y + t}", f"L{tr} {yb - t}", f"Q{tr} {yb} {tr + t} {yb}",
+          f"L{x + w - r} {yb}", f"Q{x + w} {yb} {x + w} {yb + r}", f"L{x + w} {y + h - r}",
+          f"Q{x + w} {y + h} {x + w - r} {y + h}", f"L{x + r} {y + h}", f"Q{x} {y + h} {x} {y + h - r}", "Z"]
+    return " ".join(d)
