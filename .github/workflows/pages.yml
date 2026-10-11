@@ -60,8 +60,16 @@ jobs:
       # protection, corrupt-store quarantine, backup round trip, plugin
       # consent, dataset switching, XSS, dialogs, mobile overflow) is a
       # required deployment gate, not an advisory local script.
+      # The self-hosted runner has no passwordless sudo, so --with-deps (which
+      # apt-installs Chromium's system libraries) only runs where sudo works.
+      # Elsewhere those libraries must already be installed on the runner.
       - name: Install QA browser
-        run: npx playwright install --with-deps chromium
+        run: |
+          if sudo -n true 2>/dev/null; then
+            npx playwright install --with-deps chromium
+          else
+            npx playwright install chromium
+          fi
 
       - name: Browser release QA
         run: npm run qa:browser
