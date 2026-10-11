@@ -51,8 +51,8 @@ def main():
         "version": 1, "width": W, "height": H, "fps": FPS,
         "shots": [],
         "audio": [
-            {"source": "audio/music.wav", "start": 0, "volume": 0.7},
-            {"source": "audio/effects.wav", "start": 0, "volume": 0.5},
+            {"source": "audio/music.wav", "start": 0, "volume": 1.1},
+            {"source": "audio/effects.wav", "start": 0, "volume": 0.8},
         ],
     }
     for i, s in enumerate(scenes):

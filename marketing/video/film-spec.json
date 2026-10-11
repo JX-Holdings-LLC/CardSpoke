@@ -60,12 +60,12 @@
       {
         "source": "audio/music.wav",
         "start": 0,
-        "volume": 0.7
+        "volume": 1.1
       },
       {
         "source": "audio/effects.wav",
         "start": 0,
-        "volume": 0.5
+        "volume": 0.8
       }
     ]
   }

@@ -6,3 +6,4 @@ render.log
 .vixl-cache.usage.json
 .vixl-jobs/
 __pycache__/
+.vixl-cache.seen
