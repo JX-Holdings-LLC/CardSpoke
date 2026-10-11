@@ -38,6 +38,8 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 - The edit view opens again for cards with tags. It failed with "Render
   failed: Failed to execute 'insertBefore'" because the tag editor drew its
   chips before its input was attached.
+- Capacitor (core, Android, iOS) updated to 7.6.9 for GHSA-rvm3-566m-v7fv,
+  and the dev dependency source-map-js to 1.2.2 for GHSA-68fv-2mgg-jv7q.
 - First-batch and child-card plugin decorations no longer run before their
   tiles are attached. Rendering requests fresh output instead of reusing
   state-dependent results and callback handles from old worker instances.
