@@ -2768,8 +2768,10 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         });
         input.addEventListener('blur', () => addTagsFromInput(input.value));
 
-        renderChips();
+        // renderChips() inserts chips before the input, so the input must
+        // already be a child of the wrapper.
         wrapper.appendChild(input);
+        renderChips();
         wrapper.getTags = () => Array.from(tagSet);
         wrapper.focusInput = () => input.focus();
         return wrapper;

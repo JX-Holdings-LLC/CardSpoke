@@ -8153,8 +8153,8 @@ This action cannot be undone!`, {
       }
     });
     input.addEventListener("blur", () => addTagsFromInput(input.value));
-    renderChips();
     wrapper.appendChild(input);
+    renderChips();
     wrapper.getTags = () => Array.from(tagSet);
     wrapper.focusInput = () => input.focus();
     return wrapper;
