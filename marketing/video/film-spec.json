@@ -1,0 +1,72 @@
+{
+  "output": "cardspoke-promo.mp4",
+  "spec": {
+    "version": 1,
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "shots": [
+      {
+        "source": "scenes/01-intro.vixl",
+        "duration": 5000
+      },
+      {
+        "source": "scenes/02-shape.vixl",
+        "duration": 6500,
+        "transition": 400
+      },
+      {
+        "source": "scenes/03-cards.vixl",
+        "duration": 8000,
+        "transition": 400
+      },
+      {
+        "source": "scenes/04-links.vixl",
+        "duration": 6500,
+        "transition": 400
+      },
+      {
+        "source": "scenes/05-search.vixl",
+        "duration": 6000,
+        "transition": 400
+      },
+      {
+        "source": "scenes/06-themes.vixl",
+        "duration": 7000,
+        "transition": 400
+      },
+      {
+        "source": "scenes/07-local.vixl",
+        "duration": 7000,
+        "transition": 400
+      },
+      {
+        "source": "scenes/08-plugins.vixl",
+        "duration": 6500,
+        "transition": 400
+      },
+      {
+        "source": "scenes/09-everywhere.vixl",
+        "duration": 6000,
+        "transition": 400
+      },
+      {
+        "source": "scenes/10-end.vixl",
+        "duration": 6000,
+        "transition": 400
+      }
+    ],
+    "audio": [
+      {
+        "source": "audio/music.wav",
+        "start": 0,
+        "volume": 0.7
+      },
+      {
+        "source": "audio/effects.wav",
+        "start": 0,
+        "volume": 0.5
+      }
+    ]
+  }
+}
