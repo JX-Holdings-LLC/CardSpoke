@@ -33,6 +33,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** A PhD candidate using CardSpoke for literature notes, reading summaries, and thesis outlines, tagged by theme/method and cross-linked to trace citation networks.
 
 **Works well:**
+
 - Hierarchical cards + breadcrumb nav suit an outline-then-drill-down thesis structure.
 - Tag Manager supports global rename/merge/delete (`tests/tag-management.test.js`) — safe recategorization as themes evolve.
 - Fuzzy, typo-tolerant search (`fuzzySearchCards`, `www/src/metadata.js`) with tiered exact/approximate scoring.
@@ -40,6 +41,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 - Markdown/CSV/JSON/TXT export out of the box.
 
 **Gaps:**
+
 - **Critical** — `[[Card Title]]` links resolve by title text, not stable ID; no rename-propagation exists in `data.js`/`metadata.js`. Renaming a source card silently orphans every reference to it across the corpus.
 - **High** — LocalStorage has a ~5MB practical ceiling (`www/src/data.js:1424`) with no proactive warning; a large literature review could approach it with no cloud safety net.
 - **High** — CSV export is flat: no link graph, no ancestor/hierarchy path — weak for reference-manager round-tripping.
@@ -55,6 +57,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** Structures a manuscript as Book → Chapter → Scene, plus Character/Location/Plot-thread trees that constantly cross-reference each other.
 
 **Works well:**
+
 - Reparent guards against dropping a card into its own subtree (`www/src/kernel.js:370-374`).
 - `[[Card Title]]` linking is simple, case/whitespace-normalized (`tests/card-links.test.js`) — fast to type mid-draft.
 - Real "duplicate with children" (`duplicateHierarchy`, `www/src/data.js:336`) and `duplicateCardAsChild` — exactly what a character-sheet template needs.
@@ -62,6 +65,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 - Markdown mode, formatting toolbar, undo/redo, trash recovery cover the basic drafting loop.
 
 **Gaps:**
+
 - **High** — Markdown/TXT export flattens every card to the same heading level regardless of nesting (`www/src/systems.js:822-841`) — a Book→Chapter→Scene tree exports as a wall of same-level blocks, losing manuscript structure.
 - **Medium** — `[[links]]` are exact-name matching only; no alias support, no picker for not-yet-existing names, and renaming a character silently breaks every existing reference in prose.
 - **Medium** — No batch reorder beyond drag-and-drop reparent; could get tedious for a 30-chapter novel.
@@ -76,6 +80,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** Tracks sources, interview notes, and leads on deadline, often on a phone in the field; needs source confidentiality guaranteed by architecture, not policy.
 
 **Works well:**
+
 - Fuzzy + exact search with tag/body/title scoring (`fuzzySearchCards`, `metadata.js:897`) surfaces misspelled names fast.
 - Cross-dataset search (`fuzzySearchMultiDataset`) lets separate per-story vaults be searched individually or together, capped at 100 results for speed.
 - Genuinely local-first: no telemetry, one documented (opt-in, gated) outbound call (`docs/policies/STORAGE_AND_PRIVACY.md`, `tests/offline-first.test.js`).
@@ -83,6 +88,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 - Phone-tuned CSS breakpoints (390px) and 44px touch targets — evidence of real mobile testing.
 
 **Gaps:**
+
 - **High** — Exports are always plaintext, even from a PIN-protected dataset. Filing a story by exporting/emailing a JSON/MD file defeats the at-rest encryption entirely.
 - **Medium** — Once a plugin is granted `network` permission, the sandbox no longer prevents exfiltration of card content — easy to fumble on a rushed day.
 - **Medium** — README explicitly lists "production-ready mobile security hardening" as out of scope; the Capacitor security checklist (biometric auth, ProGuard, Keystore) is an unchecked TODO, not implemented state.
@@ -97,6 +103,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** Wants to build a private theme/feature/app-layer plugin for their team, cares about API clarity, permission model, and dev-loop speed.
 
 **Works well:**
+
 - `docs/architecture/PLUGIN_SYSTEM.md` is genuinely strong: 5-minute quickstart, full manifest reference, lifecycle diagram, real troubleshooting table mapped to actual error strings.
 - `sample-plugins/apps/kanban-board.json` is a solid non-trivial worked example.
 - Permission model is isolation-based, not cooperative: `plugin-worker-bootstrap.js` strips `window`/`document`/`fetch`/`localStorage` before compiling plugin JS — a denied permission is unreachable, not just undocumented.
@@ -104,6 +111,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 - `card.render` middleware has an explicit ~80ms per-batch deadline so a buggy plugin can't stutter scrolling (`PLUGIN_INVARIANTS.md` §7).
 
 **Gaps:**
+
 - **Medium** — No hot-reload dev loop for sandboxed JS plugins; iterating means re-upload via Plugin Manager each time.
 - **Medium** — Header/Sidebar/SearchBar component overrides only apply at boot — testing one requires a full reload each iteration.
 - **Low** — `PluginSandbox`/`createFunction` naming is a documented-but-still-confusing leftover from the pre-sandbox architecture.
@@ -118,12 +126,14 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** Keeps confidential client notes on a personal laptop; needs data to never leave the device without an explicit, informed action, and full transparency on plugin access.
 
 **Works well:**
+
 - Real encryption at rest: PIN-protected datasets use AES-GCM with 250,000-iteration PBKDF2; PIN never stored (`www/src/core/dataset-crypto.js`).
 - Plugin sandbox is enforced by construction — a dedicated Web Worker with no `window`/`localStorage`/`fetch`/`indexedDB`, every capability gated behind explicit per-permission consent (`www/src/core/permissions.js`).
 - Only one outbound network destination in the entire app (the opt-in plugin gallery), locked down by CSP; exports are local Blob downloads, never uploaded.
 - High-risk plugins install suspended and require manual enable; Safe Mode boots with zero plugin code running.
 
 **Gaps:**
+
 - **High** — Exports are always plaintext even for a PIN-protected dataset — a backup/export of client notes sits unencrypted on disk with no built-in protection option.
 - **Medium** — A PIN protects data at rest but not an unlocked, unattended session — no session lock/timeout, no biometric gate for the web app.
 - **Medium** — Sandboxing limits what a plugin's code can *reach*, not what it can *do* with a granted capability — `data-modify` can still delete every card, `network` can send data anywhere once approved.
@@ -138,6 +148,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** Never uses a mouse; needs every control keyboard-reachable, every state change announced, every modal to trap and correctly return focus.
 
 **Works well:**
+
 - Real focus-trap utility (`trapFocus`, `metadata.js:174`) and a shared `enhanceModalA11y` enhancer applied to the menu, Plugin Manager, and other overlays — adds `role="dialog"`, `aria-modal`, `aria-labelledby`, trapping, and focus restoration.
 - `tests/ui-regressions.test.js` actually asserts dialog semantics ship in markup and that every menu-close path funnels through one function so the trap can't be left dangling.
 - Form labels are programmatically associated (`<label for>`, explicit `aria-label`s); a previously-unlabeled PIN input was fixed in v0.18.2.
@@ -145,6 +156,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 - Native `confirm()`/`prompt()` are banned by test — all confirmations go through in-app, presumably screen-reader-friendlier dialogs.
 
 **Gaps:**
+
 - **High** — No skip link anywhere in `www/index.html` — every page load requires tabbing through the full header/toolbar to reach card content.
 - **High** — Accessibility verification is entirely static/textual. The project's own audit (`docs/reports/AUDIT_QA_2026-07-10.md`) states full automated accessibility testing and assistive-tech validation (axe-core, NVDA/VoiceOver) is absent.
 - **Medium** — ARIA usage is uneven: `kernel.js`, `main.js`, `state.js` have zero `aria-*` usage; storage/PIN dialogs — arguably the highest-stakes flows — are comparatively under-annotated.
@@ -160,6 +172,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** Wants a simple digital notebook for personal notes/recipes/reminders; doesn't want to configure anything or read a manual, and is anxious about "breaking" something or losing notes.
 
 **Works well:**
+
 - The "Getting Started" panel walks through what "Cards" are in plain words with a clear "Create Your First Card" button.
 - Typing a title and text and clicking "Save" is simple, with an immediate "SAVED LOCALLY" confirmation badge.
 - Searching by partial title found the note instantly.
@@ -167,6 +180,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 - Undo actually works and is visible: deleting a card produced an Undo button that restored it with a status message.
 
 **Gaps:**
+
 - **Medium** — The word "children" for sub-cards is momentarily alarming out of context, before the user re-parses it as "smaller notes inside a bigger one."
 - **Medium** — The hamburger menu (☰) is small and unlabeled until clicked — easy to miss despite being called out in onboarding text.
 - **Low** — Technical vocabulary ("local-first," "schema," "plugin," "middleware") appears in the README a curious user might read, even though none of it is needed to make a note.
@@ -181,12 +195,14 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** Rarely at a desktop; wants CardSpoke, wrapped via Capacitor, to feel like a real native Android/iOS app — fast, reliable offline, comfortable to use with touch.
 
 **Works well:**
+
 - Primary toolbar buttons measured exactly 44×44px at both 390×844 and 768×1024 viewports — meets the standard mobile touch-target minimum.
 - Card action buttons (Edit/Bookmark/Duplicate/Share/Add Child/Delete) are full-width, easily tappable rows.
 - Offline is engineered, not just claimed: `tests/service-worker.test.js` verifies cache-namespace versioning tied to `package.json`, stale-while-revalidate for shell assets, and offline navigation fallback; `tests/offline-first.test.js` enforces "local saves are authoritative" with an explicit save-status indicator.
 - `www/src/storage.js` explicitly branches on `Capacitor.isNativePlatform()` to use the native Filesystem API rather than a lazy web wrapper.
 
 **Gaps:**
+
 - **High** — README states outright: "Mobile builds should be treated as experimental until platform-specific security hardening is completed" — a direct warning against daily reliance with real data.
 - **Medium** — `www/capacitor.js` only logs platform detection; no visible UI fallback if a native plugin (Filesystem, Preferences) is unavailable on a given device — could fail silently with no desktop devtools to debug it.
 - **Medium** — Tablet layout (768px) is the phone layout stretched wide: large unused whitespace, single-column full-width slide-out menu — not a tablet-native layout.
@@ -201,12 +217,14 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** Leads a 5-10 person team and is evaluating CardSpoke as a shared knowledge base — wants multiple people to read/contribute with at least basic access control.
 
 **Works well (for a single contributor on the team):**
+
 - Card hierarchy, links, backlinks, and tags give a genuinely good single-writer knowledge structure.
 - Export options are broad and portable (JSON full-fidelity, Markdown readable, CSV, TXT).
 - The plugin system could let the team customize workflows later without forking the app.
 - Local-first storage with no telemetry is good for sensitive internal notes.
 
 **Gaps:**
+
 - **Critical** — No multi-user collaboration at all. The README's "What Is Not In This Public Version" and `docs/specifications/FIRST_PUBLIC_SCOPE.md` explicitly list real-time collaboration, hosted sync, and cloud storage drivers as out of scope, with no timeline.
 - **Critical** — No accounts, no roles, no permissions for *people* — the only permission system in the app governs plugins, not team members.
 - **High** — The "Share" button (`showShareCard`, `www/src/systems.js`) exports a card as text to copy elsewhere — it is not live sharing or collaboration.
@@ -222,6 +240,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 **Persona:** Evaluating whether CardSpoke can be approved for org-wide employee use — data egress, dependency risk, plugin trust boundary, and whether CI actually gates releases on security checks.
 
 **Works well:**
+
 - Local-first, no telemetry: the only outbound call is an opt-in fetch to the plugin gallery, gated behind the user opening that tab.
 - Real plugin sandboxing (v0.21.0): JS plugins run in a dedicated Web Worker with `window`/`document`/`localStorage`/`fetch`/`indexedDB` all stripped; the only egress is a permission-checked RPC channel.
 - Enforced CSP with a real gate: `www/index.html` ships a restrictive CSP, and `npm run smoke` asserts its presence; CI fails the deploy if it doesn't pass.
@@ -229,6 +248,7 @@ Each persona reviewed CardSpoke through the lens of what *they* need, not a gene
 - Encryption at rest available (AES-GCM + PBKDF2, 250k iterations, PIN never persisted).
 
 **Gaps:**
+
 - **Medium** — `README.md` (as of this review) still describes the *old* plugin trust model ("no sandbox... declared permissions scope the API rather than enforce a boundary") and an older version number, while `SECURITY_AND_SAFETY.md` and the actual code describe a resolved, real worker-based sandbox. A security-relevant doc contradicting shipped code is a trust problem on its own.
 - **Medium** — A legacy unsandboxed plugin-registration path still exists in `www/src/core/plugin-api.js` (`createLegacyPluginContext`) for programmatically-registered plugins, bypassing the worker sandbox — needs a documented answer on who can use this path.
 - **Medium** — `npm audit` currently surfaces high-severity transitive advisories in dev/build tooling; whether CI's `--audit-level=high` gate is currently green or these are excluded as dev-only is undocumented.

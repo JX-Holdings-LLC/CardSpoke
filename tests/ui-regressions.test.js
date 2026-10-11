@@ -155,4 +155,17 @@ test('fuzzy search requires stronger approximate matches', () => {
   );
 });
 
+test('focus outlines appear instantly instead of animating with transition: all', () => {
+  // `transition: all` would animate the focus outline in from 0px, leaving
+  // keyboard users without a visible ring for the first frames after Tab.
+  const transitions = styles.match(/transition:\s*all\b[^;]*;/g) || [];
+  assert.ok(transitions.length > 0, 'Expected app controls to use transition: all');
+  for (const rule of transitions) {
+    assert.ok(
+      /\boutline 0s\b/.test(rule) && /\boutline-offset 0s\b/.test(rule),
+      `"${rule}" must exempt outline and outline-offset (append ", outline 0s, outline-offset 0s")`
+    );
+  }
+});
+
 test.run();

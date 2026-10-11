@@ -116,6 +116,23 @@ jobs:
         run: npm test
         working-directory: desktop
 
+  markdown-lint:
+    name: Markdown lint
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Rules come from .markdownlint.jsonc. Most fixes are automatic:
+      # npx markdownlint-cli2@0.23.3 --fix "**/*.md" "#node_modules" "#desktop/node_modules"
+      - name: Lint Markdown
+        run: npx --yes markdownlint-cli2@0.23.3 "**/*.md" "#node_modules" "#desktop/node_modules"
+
   browser-qa:
     name: Browser release QA
     needs: build
@@ -154,10 +171,6 @@ jobs:
     name: Advanced plugin browser QA
     needs: build
     runs-on: [self-hosted, Linux, X64]
-    # Non-blocking for now: 6 of the 21 scenarios fail on main ("Plugin
-    # controls show keyboard focus" in the lab-* lifecycle scenarios). Drop
-    # this line once those pass so the suite gates merges.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:

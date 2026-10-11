@@ -32,9 +32,18 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
   reproducible source-to-JSON packaging, and real-worker browser acceptance tests.
 - A standalone plugin authoring guide for humans and AI agents, with three
   complete packages tested directly from its JSON examples.
+- A CI workflow that runs on every pull request: unit tests on Node 20, 22
+  and 24, the build with a check that committed `www/` output matches the
+  source, smoke and plugin source checks, a type-check of the plugin types,
+  desktop unit tests, Markdown lint, and both Playwright browser QA suites.
+  Previously these ran only in the Pages deploy, after merge.
 
 ### Fixed
 
+- Keyboard focus rings appear immediately. Buttons and other controls used
+  `transition: all`, which faded the focus outline in from zero width.
+- The `ctx.config` row of the plugin authoring guide's context table renders
+  correctly; an unescaped `||` split it into extra columns.
 - The edit view opens again for cards with tags. It failed with "Render
   failed: Failed to execute 'insertBefore'" because the tag editor drew its
   chips before its input was attached.

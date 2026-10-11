@@ -7,6 +7,7 @@ the workgroup brief below states the fix as you specified it, not as the origina
 one-line finding.
 
 **Suggested model tiers**, mapped to what's available in this environment:
+
 - **HIGH** — Opus 5 (or Sonnet 5 at high/xhigh effort). Reach for this where a wrong
   call risks data loss, a security regression, or a design decision that's expensive
   to unwind later.
@@ -33,6 +34,7 @@ indexing. Everything else in later sessions reads or writes through this layer, 
 it goes first and should be fully merged before Session 2 starts.
 
 ### WG 1.A — Persistence & Quota (HIGH tier)
+
 **Closes:** H11, H12
 **Goal:** Replace the blocking full-dataset `JSON.stringify` + single
 `localStorage.setItem` on every save with incremental persistence (per-card writes
@@ -48,6 +50,7 @@ persistence strategy you land on, it needs its own test pass beyond what's in th
 existing suite — don't let this one ship on "looks right."
 
 ### WG 1.B — Dataset Identity & Import Merge (HIGH tier)
+
 **Closes:** H13, H14
 **Goal (as you specified it):** Give each dataset its own ID and a last-saved
 timestamp. When an import encounters a dataset ID that already exists locally but
@@ -65,6 +68,7 @@ card) is a reasonable default, but write it down as a spec first so the conflict
 dialog's three choices map to something deterministic.
 
 ### WG 1.C — Search Indexing (MID tier)
+
 **Closes:** M18
 **Goal:** Replace the unindexed linear Levenshtein scan with a real index (inverted
 index or trie) built incrementally as cards change, so fuzzy search stops being
@@ -75,6 +79,7 @@ once, not per query.
 **Depends on:** nothing; can run in parallel with 1.A/1.B (different file).
 
 ### WG 1.D — Scale Tests & Documented Limits (CHEAP–MID tier)
+
 **Closes:** L12, L13
 **Goal:** Add tests that exercise a realistically large/deep card tree (not the
 4-card mock currently in `multi-dataset-search.test.js`) against the cycle guard and
@@ -92,6 +97,7 @@ numbers you document are the real post-fix numbers, not the old ones.
 The content-fidelity session. This is where the biggest net-new design happens.
 
 ### WG 2.A — CardSpoke Outline Language: spec + parser/serializer (HIGH tier)
+
 **Closes:** M20
 **Goal (as you specified it):** Design a lightweight plain-text markup language that
 represents nested cards — children, sub-children, and so on — so a user can fast-type
@@ -106,6 +112,7 @@ WG 2.B and the export half of WG 2.D both build directly on it.
 **Depends on:** nothing; this is the first thing Session 2 should produce.
 
 ### WG 2.B — Markdown-aware Import (HIGH–MID tier)
+
 **Closes:** H5
 **Goal:** Replace `importTXT`'s line-splitter default with an importer that
 understands the outline language from 2.A, and falls back sensibly for genuinely
@@ -116,6 +123,7 @@ card per line).
 **Depends on:** WG 2.A must be merged first.
 
 ### WG 2.C — Wikilinks & Link Resolution Rewrite (HIGH tier)
+
 **Closes:** H6, M11
 **Goal:** Make `[[Card Title]]` links render live in Rich Text mode (currently only
 the plain-text renderer does this). Replace the exact-title linear-scan resolver
@@ -129,6 +137,7 @@ touches the same rich-text rendering function — Session 3 should run after thi
 lands.
 
 ### WG 2.D — Export Completeness (MID tier, with a CHEAP sub-task)
+
 **Closes:** M12, L6, L7
 **Goal:** Stop TXT/MD/CSV exports from silently dropping tags, the rich-text flag,
 and plugin data — either carry them through where the format allows, or show an
@@ -148,6 +157,7 @@ in two for cost reasons.
 ## Session 3 — Plugin Trust, Safety & Security
 
 ### WG 3.A — Plugin Trust UX (MID–HIGH tier)
+
 **Closes:** H7, H8, H9, M15, L10
 **Goal:** Fix the stale risk-badge tooltip so it describes the real Worker sandbox
 instead of the pre-sandbox model. Add a confirmation dialog **before** any plugin
@@ -165,6 +175,7 @@ lands since it touches some of the same plugin-adjacent UI surface as later
 sessions touch elsewhere — low actual risk of conflict, sequencing is precautionary.
 
 ### WG 3.B — Plugin Validator Hardening (MID tier)
+
 **Closes:** M13, L8, L9
 **Goal:** Make `validateManifest` actually check the fields it currently silently
 skips — `overrides`, `dependencies`, `config`, `compatibility`. Promote malformed
@@ -179,6 +190,7 @@ land in the plugin system so a quick integration check after both merge is worth
 the five minutes.
 
 ### WG 3.C — Example Loader Cleanup (CHEAP tier)
+
 **Closes:** M14
 **Goal:** Fix or annotate `dynamic-plugin-loader.js` so it stops contradicting the
 security invariants doc — either remove the `window.CardSpoke` reassignment
@@ -189,6 +201,7 @@ it unsandboxed/example-only and matching `PLUGIN_INVARIANTS.md`'s frozen-root ru
 spare capacity.
 
 ### WG 3.D — Encrypted Export & Legacy PIN Advisory (HIGH tier)
+
 **Closes:** H10, L11
 **Goal:** Extend the existing AES-GCM-256/PBKDF2 dataset encryption so a
 PIN-protected dataset's export can also be encrypted (today every export format is
@@ -201,6 +214,7 @@ them to rotate their PIN.
 3.A/3.B — don't let UI work and crypto work land in the same review pass.
 
 ### WG 3.E — CSP & Rendering Hardening Review (MID–HIGH tier)
+
 **Closes:** M16, M17
 **Goal:** Review whether `unsafe-eval` in `script-src` can be narrowed further now
 that plugin compilation runs in a stripped Worker (it may simply be an accepted,
@@ -220,6 +234,7 @@ undoing the other's fix.
 ## Session 4 — Accessibility, Keyboard & UI Clarity
 
 ### WG 4.A — Keyboard Shortcuts (MID tier)
+
 **Closes:** H3, H4, M6, M7, M8, L4
 **Goal:** Add a sibling-navigation shortcut (next/previous sibling card — the gap
 next to the existing parent/first-child bindings). Remap or reassign the bindings
@@ -237,6 +252,7 @@ Alt-prefixed ones it currently omits.
 labels the final shortcut set this WG produces.
 
 ### WG 4.B — Screen-Reader ARIA & Real Accessibility Tests (MID–HIGH tier)
+
 **Closes:** H1, M3, L3
 **Goal:** Add `aria-keyshortcuts` to every control that has a keyboard binding
 (reference the finalized set from 4.A). Put the search result count in an
@@ -248,6 +264,7 @@ method names exist as strings.
 **Depends on:** WG 4.A (needs the final shortcut list to label correctly).
 
 ### WG 4.C — UI Copy & Affordances (CHEAP tier)
+
 **Closes:** M1, M2, M21, L1
 **Goal:** Keep an add-card affordance visible even once a list has cards (not just
 in the empty state). Replace "dataset"-flavored internal vocabulary in
@@ -259,6 +276,7 @@ multi-dataset/vault language so it can't be mistaken for a team-workspace featur
 **Depends on:** nothing; good cheap-tier task, fully independent of 4.A/4.B.
 
 ### WG 4.D — Storage-Driver Registry Decision (MID–HIGH tier)
+
 **Closes:** M22
 **Goal:** This one's a judgment call, not a mechanical fix: either wire the host
 app's actual storage construction in `storage.js` through the existing
@@ -279,6 +297,7 @@ This session closes last because WG 5.C documents the end state of everything
 built in Sessions 1–4 — it needs the finished feature set as its input.
 
 ### WG 5.A — Typography & Visual Accessibility (CHEAP tier)
+
 **Closes:** H2, M4, M5
 **Goal:** Bundle an actual OpenDyslexic (or similarly credible open dyslexia-friendly
 typeface) font file via `@font-face` so the "dyslexia-friendly" preset delivers what
@@ -292,6 +311,7 @@ of running sessions strictly in order, this is the safe one to peel off and run
 anytime.
 
 ### WG 5.B — Mobile Storage & True Offline-First (MID tier)
+
 **Closes:** M9, M10, L5, L14
 **Goal:** Validate (or add a safe fallback for) the native Filesystem driver's
 `Directory.Documents` assumption against Android scoped-storage rules. Since the
@@ -309,6 +329,7 @@ successful online visit, and add a cold-start-offline test for both.
 **Depends on:** nothing from earlier sessions; independent of 5.A.
 
 ### WG 5.C — Onboarding & Help Overhaul (CHEAP–MID tier)
+
 **Closes:** L2
 **Goal (as you specified it):** Bring all in-app material up to date and make it
 extensive: the first-run onboarding flow, an optional walkthrough dataset a new
