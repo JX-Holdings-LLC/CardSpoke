@@ -32,6 +32,7 @@
  *  10. 360px mobile layout has no horizontal overflow
  *  11. header/menu/upload-modal a11y: theme label, Option+T, focus return,
  *      tab semantics, keyboard + drag-and-drop upload, scroll unlock
+ *  12. the edit view opens for a card with tags
  *
  * Requirements (CS-102 — reproducible from a clean checkout):
  *   npm ci                                   (playwright is a pinned devDependency)
@@ -1061,6 +1062,39 @@ await scenario('thousand-card-search', async () => {
   await page.waitForSelector('#searchResultGrid');
   check('search returns target card', await page.locator('#searchResultGrid').innerText().then(text => text.includes('Research topic 999')), 'Search time ' + (Date.now()-searchStart) + ' ms');
   writeFileSync(join(ART_DIR, 'scale-timing.json'), JSON.stringify({ loadAndSearchTotalMs: Date.now()-start, searchMs: Date.now()-searchStart, cards: 1000 }));
+  await context.close();
+});
+
+await scenario('edit-tagged-card', async () => {
+  // The tag editor rendered its chips before its input was attached, so the
+  // edit view of any card with tags failed with an insertBefore error.
+  const errors = [];
+  const { context, page } = await freshPage(errors);
+  await page.goto(BASE);
+  await page.waitForSelector('#main');
+  await openMenu(page);
+  await page.click('#menuNewCard');
+  await page.waitForSelector('#cardTitle');
+  await page.fill('#cardTitle', 'Plain');
+  await page.fill('.tag-editor-input', 'alpha, beta');
+  await page.click('form button[type=submit]');
+  await page.waitForFunction(
+    () => Object.values(window.store.cards).some(c => c.title === 'Plain' && c.tags?.length === 2),
+    null, { timeout: 8000 });
+  await waitSaved(page);
+
+  await page.click('.card-detail-actions .btn-primary', { force: true });
+  await page.waitForSelector('#cardTitle', { timeout: 8000 });
+  const view = await page.evaluate(() => ({
+    title: document.getElementById('cardTitle')?.value,
+    chips: Array.from(document.querySelectorAll('.tag-editor .tag-chip-text')).map(c => c.textContent),
+    inputLast: document.querySelector('.tag-editor')?.lastElementChild?.classList.contains('tag-editor-input'),
+    renderFailed: /Render failed/.test(document.getElementById('main')?.textContent || '')
+  }));
+  check('edit view renders for a tagged card', !view.renderFailed && view.title === 'Plain');
+  check('existing tags show as chips', view.chips.join(',') === 'alpha,beta', view.chips.join(','));
+  check('tag input stays after the chips', view.inputLast === true);
+  check('no console/page errors', errors.length === 0, errors.join(' | '));
   await context.close();
 });
 
