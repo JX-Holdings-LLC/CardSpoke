@@ -20,6 +20,13 @@ jobs:
   # checks all pass. A red QA job means nothing is deployed.
   qa:
     runs-on: [self-hosted, Linux, X64]
+    # The self-hosted runner lacks Chromium's system libraries and has no
+    # passwordless sudo to install them, so browser QA runs in Playwright's
+    # image, which ships both. Keep the tag equal to the playwright version
+    # in package.json (tests/ci-workflows.test.js checks this).
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
     steps:
       - uses: actions/checkout@v4
 
@@ -60,9 +67,6 @@ jobs:
       # protection, corrupt-store quarantine, backup round trip, plugin
       # consent, dataset switching, XSS, dialogs, mobile overflow) is a
       # required deployment gate, not an advisory local script.
-      - name: Install QA browser
-        run: npx playwright install --with-deps chromium
-
       - name: Browser release QA
         run: npm run qa:browser
 

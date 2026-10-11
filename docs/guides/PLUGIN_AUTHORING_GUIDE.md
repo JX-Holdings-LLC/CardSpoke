@@ -90,7 +90,7 @@ Variables declared only in setup are not lexical variables of teardown. Put tear
 | --- | --- |
 | `ctx.modId` | This plugin's ID. |
 | `ctx.appVersion`, `ctx.schemaVersion` | Host version information; not a substitute for feature testing. |
-| `ctx.config` | Settings snapshot. Use `ctx.config || {}` if none declared. |
+| `ctx.config` | Settings snapshot. Use `ctx.config \|\| {}` if none declared. |
 | `ctx.h(tag, props, children)` | Synchronously creates a virtual element description. |
 | `ctx.api` | UI, data, storage, events, middleware, network, filesystem APIs below. |
 | `ctx.utils` | Allowlisted asynchronous helpers below. |

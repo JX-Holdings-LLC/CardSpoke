@@ -447,7 +447,7 @@
       font-size: var(--text-sm);
       font-weight: 400;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.15s, outline 0s, outline-offset 0s;
       color: var(--text-medium);
       overflow-wrap: break-word;
       word-break: break-word;
@@ -790,7 +790,7 @@
       outline-offset: 2px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
       transform: scale(1.02);
-      transition: all 0.2s ease;
+      transition: all 0.2s ease, outline 0s, outline-offset 0s;
       position: relative;
       z-index: 1;
     }
@@ -813,7 +813,7 @@
       font-weight: 400; /* CHANGED: normal */
       font-family: inherit;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.15s, outline 0s, outline-offset 0s;
       border: none;
       background: transparent;
       color: var(--text);
@@ -997,7 +997,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s;
+      transition: all 0.15s, outline 0s, outline-offset 0s;
       font-weight: 700; /* CHANGED: bold */
     }
     
@@ -1100,7 +1100,7 @@
       font-weight: 400; /* CHANGED: normal */
       color: var(--text-muted);
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.15s, outline 0s, outline-offset 0s;
     }
     
     .modal-tab:hover {
@@ -1155,7 +1155,7 @@
       padding: var(--space-3xl);
       text-align: center;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.15s, outline 0s, outline-offset 0s;
       margin-bottom: var(--space-xl);
     }
     
@@ -1239,7 +1239,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.15s, outline 0s, outline-offset 0s;
     }
     
     .radio-option:hover {
@@ -1562,7 +1562,7 @@
       letter-spacing: 0.06em;
       cursor: pointer;
       border-radius: var(--radius);
-      transition: all 0.15s;
+      transition: all 0.15s, outline 0s, outline-offset 0s;
       font-family: inherit;
     }
 
@@ -1608,7 +1608,7 @@
       cursor: pointer;
       border-radius: var(--radius);
       font-family: inherit;
-      transition: all 0.15s;
+      transition: all 0.15s, outline 0s, outline-offset 0s;
     }
 
     .sort-btn:hover {
@@ -2005,7 +2005,7 @@ body.dark-mode .shortcut-item:hover {
   text-decoration: none;
   cursor: pointer;
   border-bottom: 1px dotted #1976d2;
-  transition: all 0.2s ease;
+  transition: all 0.2s ease, outline 0s, outline-offset 0s;
 }
 
 .card-link:hover {
@@ -2062,7 +2062,7 @@ body.dark-mode .shortcut-item:hover {
       border: 2px solid var(--border);
       border-radius: var(--radius);
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.2s, outline 0s, outline-offset 0s;
     }
     
     .preset-option:hover {
@@ -2114,7 +2114,7 @@ body.dark-mode .shortcut-item:hover {
       border-radius: var(--radius);
       background: var(--surface);
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.2s, outline 0s, outline-offset 0s;
       font-size: var(--text-base);
     }
     
@@ -2282,7 +2282,7 @@ body.dark-mode .shortcut-item:hover {
   cursor: pointer;
   border-radius: var(--radius);
   font-size: var(--text-sm);
-  transition: all 0.2s;
+  transition: all 0.2s, outline 0s, outline-offset 0s;
 }
 
 .preview-toggle button.active {

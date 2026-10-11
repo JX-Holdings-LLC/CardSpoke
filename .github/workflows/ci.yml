@@ -1,0 +1,210 @@
+name: CI
+
+# Pull-request and main-branch gate for the web app. Before this workflow the
+# unit suite, build, smoke checks and browser QA only ran inside the Pages
+# deploy (after merge), so a PR could land red. Each concern is its own job so
+# a failure names what broke.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Unit tests (Node ${{ matrix.node }})
+    runs-on: [self-hosted, Linux, X64]
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json engines: ^20.19.0 || >=22.12.0
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+  build:
+    name: Build, bundle drift, and static checks
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Production build
+        run: npm run build
+
+      # www/app.js, the worker bootstrap and the service worker are committed
+      # build output. A source change without a rebuild ships a stale bundle.
+      - name: Committed bundle matches source
+        run: |
+          if ! git diff --quiet -- www; then
+            echo "::error::www/ is out of date with the source. Run 'npm run build' and commit the result."
+            git diff --stat -- www
+            exit 1
+          fi
+          untracked=$(git ls-files --others --exclude-standard -- www)
+          if [ -n "$untracked" ]; then
+            echo "::error::The build produced untracked files under www/:"
+            echo "$untracked"
+            exit 1
+          fi
+
+      - name: Static release smoke checks
+        run: npm run smoke
+
+      - name: Advanced plugin packages match their source
+        run: npm run plugins:check
+
+      - name: Type-check plugin type definitions
+        run: npx tsc --noEmit --strict types/index.d.ts
+
+      - name: CLI starts
+        run: node cli/cardspoke.js --help
+
+      - name: Upload built site
+        uses: actions/upload-artifact@v4
+        with:
+          name: www
+          path: www
+          retention-days: 7
+
+  desktop-unit:
+    name: Desktop shell unit tests
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The desktop tests cover desktop/lib only (no Electron import), so
+      # they run on every PR without installing Electron. The full desktop
+      # build stays in desktop.yml, gated on desktop/** changes.
+      - name: Desktop unit tests
+        run: npm test
+        working-directory: desktop
+
+  markdown-lint:
+    name: Markdown lint
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Rules come from .markdownlint.jsonc. Most fixes are automatic:
+      # npx markdownlint-cli2@0.23.3 --fix "**/*.md" "#node_modules" "#desktop/node_modules"
+      - name: Lint Markdown
+        run: npx --yes markdownlint-cli2@0.23.3 "**/*.md" "#node_modules" "#desktop/node_modules"
+
+  browser-qa:
+    name: Browser release QA
+    needs: build
+    runs-on: [self-hosted, Linux, X64]
+    # The self-hosted runner lacks Chromium's system libraries and has no
+    # passwordless sudo to install them, so browser QA runs in Playwright's
+    # image, which ships both. Keep the tag equal to the playwright version
+    # in package.json (tests/ci-workflows.test.js checks this).
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Production build
+        run: npm run build
+
+      - name: Browser release QA
+        run: npm run qa:browser
+
+      - name: Upload browser QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-qa-artifacts
+          path: qa-artifacts/
+          if-no-files-found: ignore
+
+  plugin-qa:
+    name: Advanced plugin browser QA
+    needs: build
+    runs-on: [self-hosted, Linux, X64]
+    # The self-hosted runner lacks Chromium's system libraries and has no
+    # passwordless sudo to install them, so browser QA runs in Playwright's
+    # image, which ships both. Keep the tag equal to the playwright version
+    # in package.json (tests/ci-workflows.test.js checks this).
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Production build
+        run: npm run build
+
+      - name: Advanced plugin QA
+        run: npm run qa:plugins
+
+      - name: Upload plugin QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-qa-artifacts
+          path: qa-artifacts/
+          if-no-files-found: ignore
