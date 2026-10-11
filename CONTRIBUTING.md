@@ -43,6 +43,9 @@ By submitting a contribution to this project, you agree to the following terms:
 - Write tests for new features
 - Ensure all existing tests pass before submitting
 - Run `npm test` to execute the test suite
+- If you change anything under `www/src/` or `vite.config.js`, run `npm run build` and commit the regenerated `www/` output; CI fails when the committed bundle is out of date
+
+Every pull request runs the `CI` workflow (`.github/workflows/ci.yml`): unit tests on Node 20/22/24, the production build plus a bundle-drift check, static smoke checks, the advanced plugin source check, a type-check of `types/index.d.ts`, the desktop shell unit tests, and the Playwright browser QA (`npm run qa:browser`, `npm run qa:plugins`).
 
 ## Questions?
 
