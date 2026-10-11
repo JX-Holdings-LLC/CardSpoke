@@ -1,0 +1,9 @@
+audio/
+sheets/
+render.log
+.film-plan-request.json
+.vixl-cache/
+.vixl-cache.usage.json
+.vixl-jobs/
+__pycache__/
+.vixl-cache.seen
