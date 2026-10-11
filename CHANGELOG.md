@@ -40,6 +40,10 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Fixed
 
+- The GitHub Pages deploy runs again. Its browser QA step tried to
+  install Chromium's system libraries with sudo, which the self-hosted
+  runner doesn't allow; browser QA now runs in the official Playwright
+  container image.
 - Keyboard focus rings appear immediately. Buttons and other controls used
   `transition: all`, which faded the focus outline in from zero width.
 - The `ctx.config` row of the plugin authoring guide's context table renders
