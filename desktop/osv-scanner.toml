@@ -15,3 +15,16 @@
 id = "GHSA-ch52-4w7c-c8xp"
 ignoreUntil = 2027-01-03T00:00:00Z
 reason = "Build-time-only dev dependency (electron-builder > @electron/get > got > cacheable-request); single-user download cache, not shipped; no fixed version available."
+
+[[IgnoredVulns]]
+# sprintf-js <=1.1.3: unbounded precision specifiers in a format string can
+# exhaust memory. No fixed version exists yet (1.1.3 is the latest). Only
+# reached through electron-builder > app-builder-lib > @electron/get >
+# global-agent > roarr, the proxy logger used while electron-builder downloads
+# the Electron binary at build time. roarr formats its own fixed messages, so
+# no untrusted format string reaches sprintf-js, and none of it ships in the
+# app. Remove this entry once a fixed sprintf-js (or a roarr that drops it) is
+# available.
+id = "GHSA-hp3w-g68c-fv3c"
+ignoreUntil = 2027-01-11T00:00:00Z
+reason = "Build-time-only dev dependency (electron-builder > @electron/get > global-agent > roarr); fixed internal format strings, not shipped; no fixed version available."

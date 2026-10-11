@@ -38,8 +38,6 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 - The edit view opens again for cards with tags. It failed with "Render
   failed: Failed to execute 'insertBefore'" because the tag editor drew its
   chips before its input was attached.
-- Capacitor (core, Android, iOS) updated to 7.6.9 for GHSA-rvm3-566m-v7fv,
-  and the dev dependency source-map-js to 1.2.2 for GHSA-68fv-2mgg-jv7q.
 - First-batch and child-card plugin decorations no longer run before their
   tiles are attached. Rendering requests fresh output instead of reusing
   state-dependent results and callback handles from old worker instances.
@@ -61,6 +59,15 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Security
 
+- Capacitor (`core`, `cli`, `android`, `ios`) is updated to 7.6.9 for
+  GHSA-rvm3-566m-v7fv: remote content could be loaded at the app origin
+  through the internal HTTP proxy path. The lockfile also moves the dev-only
+  `source-map-js` to 1.2.2 (GHSA-68fv-2mgg-jv7q). Run `npx cap sync` after
+  pulling so generated native projects pick up the fixed runtime.
+- `desktop/osv-scanner.toml` ignores GHSA-hp3w-g68c-fv3c in `sprintf-js`
+  until 2027-01-11. No fixed version exists, and it is reached only through
+  electron-builder's build-time Electron download (`global-agent` > `roarr`),
+  which formats its own fixed messages and is not shipped.
 - `desktop/osv-scanner.toml` records a time-limited OSV ignore (until
   2027-01-03) for GHSA-ch52-4w7c-c8xp in `http-cache-semantics`. No fixed
   version exists yet, and the package is reached only through
