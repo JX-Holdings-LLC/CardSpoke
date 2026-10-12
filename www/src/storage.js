@@ -1595,7 +1595,7 @@ import {
         const folderNote = typeof getDesktopDataFolder === 'function' && getDesktopDataFolder()
           ? '\n\nDataset files in your data folder are moved to its .trash folder.'
           : '';
-        if (!await showConfirmDialog('WARNING: This will DELETE ALL instances and data from localStorage.' + folderNote + '\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?', {
+        if (!await showConfirmDialog('WARNING: This will DELETE ALL datasets and data from this browser.' + folderNote + '\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?', {
           title: 'Delete All Data',
           confirmLabel: 'Continue',
           cancelLabel: 'Cancel',

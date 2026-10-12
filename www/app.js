@@ -5454,7 +5454,7 @@
   }
   async function clearAllData() {
     const folderNote = typeof getDesktopDataFolder === "function" && getDesktopDataFolder() ? "\n\nDataset files in your data folder are moved to its .trash folder." : "";
-    if (!await showConfirmDialog("WARNING: This will DELETE ALL instances and data from localStorage." + folderNote + "\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?", {
+    if (!await showConfirmDialog("WARNING: This will DELETE ALL datasets and data from this browser." + folderNote + "\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?", {
       title: "Delete All Data",
       confirmLabel: "Continue",
       cancelLabel: "Cancel",
@@ -6502,6 +6502,8 @@ Export an unencrypted copy anyway?`,
   function handleExport(type) {
     if (type === "instance-json") exportJSON("instance");
     else if (type === "instance-txt") exportTXT();
+    else if (type === "instance-md") exportMarkdown();
+    else if (type === "instance-csv") exportCSV();
     else if (type === "plugins-json") exportJSON("plugins");
   }
   async function decryptImportEnvelope(envelope) {
@@ -7151,7 +7153,7 @@ This action cannot be undone!`, {
     const overlay = h("div", { className: "modal-overlay show" });
     const modal = h("div", { className: "modal" });
     const modalHeader = h("div", { className: "modal-header" });
-    modalHeader.appendChild(h("div", { className: "modal-title" }, "Dataset Information"));
+    modalHeader.appendChild(h("div", { className: "modal-title" }, "Data & Export"));
     const closeBtn = h("button", { className: "modal-close", "aria-label": "Close dialog", onclick: () => overlay.remove() }, "✕");
     modalHeader.appendChild(closeBtn);
     modal.appendChild(modalHeader);
@@ -7251,32 +7253,45 @@ This action cannot be undone!`, {
       )
     );
     modalBody.appendChild(storageSection);
-    const exportBtn = h("button", {
-      className: "btn btn-primary",
+    const exportButton = (type, label, className) => h("button", {
+      className,
       onclick: () => {
         overlay.remove();
-        handleExport("instance-json");
+        handleExport(type);
       }
-    }, "Export Dataset");
+    }, label);
+    const exportSection = h(
+      "div",
+      { style: "margin-bottom: var(--space-xl);" },
+      h("h3", { style: headingStyle }, "Export"),
+      h(
+        "p",
+        { style: "margin-bottom: var(--space-md); color: var(--text-secondary);" },
+        "A JSON backup can be imported back into CardSpoke. Markdown, CSV and plain text are readable copies for other apps."
+      ),
+      h(
+        "div",
+        { style: "display: flex; gap: var(--space-md); flex-wrap: wrap;" },
+        exportButton("instance-json", "Backup (JSON)", "btn btn-primary"),
+        exportButton("instance-md", "Markdown", "btn btn-secondary"),
+        exportButton("instance-csv", "CSV", "btn btn-secondary"),
+        exportButton("instance-txt", "Plain Text", "btn btn-secondary")
+      )
+    );
+    modalBody.appendChild(exportSection);
     const switchBtn = h("button", {
       className: "btn btn-secondary",
       onclick: () => {
         overlay.remove();
         showDatasetManager();
       }
-    }, "Switch Dataset");
-    const actionsSection = h(
+    }, "Manage Datasets");
+    modalBody.appendChild(h(
       "div",
       {},
-      h("h3", { style: headingStyle }, "Quick Actions"),
-      h(
-        "div",
-        { style: "display: flex; gap: var(--space-md); flex-wrap: wrap;" },
-        exportBtn,
-        switchBtn
-      )
-    );
-    modalBody.appendChild(actionsSection);
+      h("h3", { style: headingStyle }, "Datasets"),
+      h("div", { style: "display: flex; gap: var(--space-md); flex-wrap: wrap;" }, switchBtn)
+    ));
     modal.appendChild(modalBody);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
@@ -7366,7 +7381,7 @@ This action cannot be undone!`, {
         var headerRow = h("div", { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-sm);" });
         headerRow.appendChild(h("div", { style: "font-weight: 700; font-size: var(--text-lg);" }, manifest.name || plugin.id));
         var riskBadge = h("span", {
-          title: risk === 'SAFE' ? "CSS-only theme — runs no JavaScript" : "Contains JavaScript. Plugins are not sandboxed: once enabled (with your consent), this code has full access to the app and your data.",
+          title: risk === 'SAFE' ? "CSS-only theme — runs no JavaScript" : "Contains JavaScript. It runs in a separate worker and only uses the permissions you approve, but it can read your unlocked cards. Only enable plugins from authors you trust.",
           style: "font-size: var(--text-xs); padding: 2px 8px; border-radius: 4px; font-weight: 600; " + (risk === 'SAFE' ? "background: #d1fae5; color: #065f46;" : risk === 'LOW' ? "background: #dbeafe; color: #1e40af;" : risk === 'MEDIUM' ? "background: #fef3c7; color: #92400e;" : "background: #fee2e2; color: #991b1b;")
         }, risk);
         headerRow.appendChild(riskBadge);
@@ -11157,7 +11172,7 @@ ${prefix}`;
               "div",
               { style: "margin-bottom: var(--space-xl); text-align: center;" },
               h("h2", { style: "margin-bottom: var(--space-sm); color: var(--primary);" }, "Welcome to CardSpoke!"),
-              h("p", { style: "color: var(--text-secondary);" }, "A local-first, lightweight hierarchical note-taking app")
+              h("p", { style: "color: var(--text-secondary);" }, "Your notes, as cards, kept on your device.")
             ),
             // What are Cards?
             h(
@@ -11167,14 +11182,14 @@ ${prefix}`;
               h(
                 "p",
                 { style: "margin-bottom: var(--space-sm);" },
-                "Cards are the building blocks of CardSpoke. Think of them as notes or ideas that can be organized hierarchically."
+                "Every note in CardSpoke is a card. A card can hold other cards, so a project, a book or a recipe collection grows into a tree you can walk through."
               ),
               h(
                 "ul",
                 { style: "margin-left: var(--space-lg); margin-bottom: var(--space-sm);" },
                 h("li", { style: "margin-bottom: var(--space-xs);" }, "Each card has a title and body content"),
                 h("li", { style: "margin-bottom: var(--space-xs);" }, "Cards can have child cards to create nested structures"),
-                h("li", { style: "margin-bottom: var(--space-xs);" }, "Organize your thoughts in a hierarchy that makes sense to you")
+                h("li", { style: "margin-bottom: var(--space-xs);" }, "Link any card to another by writing its title in double brackets, like [[Groceries]]")
               )
             ),
             // Creating Cards
@@ -11192,13 +11207,13 @@ ${prefix}`;
                   h("li", { style: "margin-bottom: var(--space-xs);" }, "Click the menu button (☰) in the top right"),
                   h("li", { style: "margin-bottom: var(--space-xs);" }, 'Select "New Card" or press Ctrl+N'),
                   h("li", { style: "margin-bottom: var(--space-xs);" }, "Add a title and body text"),
-                  h("li", {}, 'Click "Save Card"')
+                  h("li", {}, 'Click "Save"')
                 )
               ),
               h(
                 "p",
                 { style: "margin-bottom: var(--space-sm);" },
-                'To create a child card, open any existing card and click the "Add Child Card" button. Child cards appear nested under their parent.'
+                'To put a card inside another, open the outer card and click "Add Child". The new card appears nested under it.'
               )
             ),
             // Tags
@@ -11227,12 +11242,12 @@ ${prefix}`;
               h(
                 "p",
                 { style: "margin-bottom: var(--space-sm);" },
-                "CardSpoke has powerful search capabilities:"
+                "Search forgives typos:"
               ),
               h(
                 "ul",
                 { style: "margin-left: var(--space-lg); margin-bottom: var(--space-sm);" },
-                h("li", { style: "margin-bottom: var(--space-xs);" }, "Press Ctrl+F or click the search icon to search"),
+                h("li", { style: "margin-bottom: var(--space-xs);" }, "Press Ctrl+F or click the search box at the top"),
                 h("li", { style: "margin-bottom: var(--space-xs);" }, "Use ↑/↓ arrow keys to navigate results"),
                 h("li", { style: "margin-bottom: var(--space-xs);" }, "Press Enter to open the selected card"),
                 h("li", { style: "margin-bottom: var(--space-xs);" }, "Search works across titles, content, and tags")
@@ -11262,13 +11277,13 @@ ${prefix}`;
                   "div",
                   {},
                   h("strong", {}, "Export"),
-                  " — Save your data in JSON, Markdown, or CSV formats (Data & Export menu)"
+                  " — Download a copy as Markdown, CSV or plain text to use in other apps (menu → Data & Export)"
                 ),
                 h(
                   "div",
                   {},
                   h("strong", {}, "Backups"),
-                  " — Create manual backups anytime from the Data & Export menu"
+                  " — Download a JSON backup that restores everything, including bookmarks and plugins (menu → Data & Export)"
                 ),
                 h(
                   "div",
@@ -11280,7 +11295,7 @@ ${prefix}`;
                   "div",
                   {},
                   h("strong", {}, "Dark Mode"),
-                  " — Toggle dark mode with the moon icon in the header"
+                  " — Switch with the theme button in the header, or press Alt+T"
                 )
               )
             ),
@@ -11291,11 +11306,11 @@ ${prefix}`;
               h(
                 "div",
                 { style: "background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius);" },
-                h("p", { style: "margin-bottom: var(--space-xs); font-weight: 600;" }, "Your Privacy Matters"),
+                h("p", { style: "margin-bottom: var(--space-xs); font-weight: 600;" }, "Your notes stay with you"),
                 h(
                   "p",
                   { style: "color: var(--text-secondary); font-size: 0.9rem;" },
-                  "All your data is stored locally on your device. CardSpoke never sends your data to any server. You have complete control and ownership of your information."
+                  "Your cards are saved on this device. There is no account, and CardSpoke does not upload your cards anywhere. To keep a dataset private from others who use this device, protect it with a PIN in Data & Export → Manage Datasets."
                 )
               )
             ),
@@ -11438,7 +11453,7 @@ ${prefix}`;
                   "div",
                   {},
                   h("strong", {}, "Datasets"),
-                  " — Create multiple isolated data vaults. Access from Data & Export menu."
+                  " — Keep separate collections of cards, each with its own storage and optional PIN. Open Data & Export, then Manage Datasets."
                 ),
                 h(
                   "div",
@@ -11453,29 +11468,7 @@ ${prefix}`;
               "div",
               { style: "margin-bottom: var(--space-lg);" },
               h("h3", { style: "margin-bottom: var(--space-sm); color: var(--primary);" }, "Data & Privacy"),
-              h("p", {}, "Your data is stored locally on your device. CardSpoke never sends your data to external servers. Export anytime to JSON, Markdown, or CSV.")
-            ),
-            // Language & Localization Section (v1.0.0)
-            h(
-              "div",
-              { style: "margin-bottom: var(--space-lg);" },
-              h("h3", { style: "margin-bottom: var(--space-sm); color: var(--primary);" }, "Language & Localization"),
-              h(
-                "p",
-                { style: "margin-bottom: var(--space-sm);" },
-                "CardSpoke supports community language packs. Visit the CardSpoke website to download language packs for your preferred language."
-              ),
-              h(
-                "p",
-                { style: "font-size: var(--text-sm); color: var(--text-secondary);" },
-                "Coming soon: Download language packs from ",
-                h("a", {
-                  href: "https://github.com/jxburros/CardSpoke/wiki/Language-Packs",
-                  target: "_blank",
-                  rel: "noopener noreferrer",
-                  style: "color: var(--primary);"
-                }, "CardSpoke Language Packs")
-              )
+              h("p", {}, "Your cards are saved on this device, and CardSpoke does not upload them anywhere. CardSpoke only goes online when you ask it to, such as browsing the plugin gallery or installing a plugin from a URL. A plugin you enable can read your unlocked cards, so only enable plugins from authors you trust. Download a backup or a Markdown, CSV or plain-text copy anytime from Data & Export.")
             ),
             // Version Info
             h(

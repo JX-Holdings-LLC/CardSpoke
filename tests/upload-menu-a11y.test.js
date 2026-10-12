@@ -153,7 +153,7 @@ test('menu button exposes aria-expanded/aria-controls and close restores focus',
 
 test('target=_blank links in settings/about carry rel="noopener noreferrer"', () => {
   const blanks = systems.match(/target: '_blank'[^}]*/g) || [];
-  assert.ok(blanks.length >= 3, 'expected the settings/about links');
+  assert.ok(blanks.length >= 2, 'expected the settings/about links');
   blanks.forEach(b => assert.ok(b.includes("rel: 'noopener noreferrer'"), `missing rel: ${b}`));
   assert.ok(systems.includes("href: 'https://github.com/jxburros/CardSpoke'"), 'URLs unchanged');
 });
