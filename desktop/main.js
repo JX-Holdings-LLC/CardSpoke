@@ -406,7 +406,7 @@ function buildMenu() {
               type: 'info',
               title: 'About CardSpoke',
               message: 'CardSpoke ' + app.getVersion(),
-              detail: 'A lightweight, local-first card-based knowledge app.\n' +
+              detail: 'A private, local-first notebook where every note is a card.\n' +
                 'Created by Jeffrey Guntly · Maintained by JX Holdings, LLC\n' +
                 'Licensed under the Apache License 2.0.'
             })

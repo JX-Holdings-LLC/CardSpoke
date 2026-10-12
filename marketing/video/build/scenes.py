@@ -442,7 +442,7 @@ def end():
                   font="body", align="center")
     sc.op(type="move", target=sub, x="center")
     sc.fade_in(sub, 2400, 600, dy=12)
-    url = sc.text("url", "github.com/jxburros/CardSpoke", 0, oy + lh + 260, 40, ACCENT, font="mono",
+    url = sc.text("url", "github.com/JX-Holdings-LLC/CardSpoke", 0, oy + lh + 260, 40, ACCENT, font="mono",
                   align="center")
     sc.op(type="move", target=url, x="center")
     sc.fade_in(url, 3000, 600, dy=12)

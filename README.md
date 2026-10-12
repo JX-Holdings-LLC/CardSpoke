@@ -2,310 +2,114 @@
 
 ![CardSpoke logo](./CardSpoke.svg)
 
-**Version:** 0.21.1 Public Preview | **Schema:** v4
+**Your notes, as cards, kept on your device.**
 
-CardSpoke is a lightweight, local-first, card-based knowledge app for organizing notes, ideas, references, writing, research, and personal information in flexible card trees.
+CardSpoke is a private, local-first notebook where every note is a card. A card can hold other cards, so a novel, a research project or a recipe collection grows into a tree you can walk through. Link any card to another by writing its title in double brackets, and CardSpoke shows the connection from both sides.
 
-Created by [Jeffrey Guntly](https://github.com/jxburros) and [JX Holdings, LLC](https://jxholdings.com). The source of truth is the [CardSpoke repository](https://github.com/jxburros/CardSpoke).
+There is no account to create and no cloud to trust. Your cards are saved on your device, you can lock a collection with a PIN, and you can take everything with you whenever you like.
 
-The public app is focused on the main CardSpoke experience first: the web app, followed by desktop packaging, then mobile packaging. Spin-offs, alternate shells, OS-specific app suites, typed-card platform experiments, runtime profiles, and cloud storage drivers are intentionally out of scope for this repository's current public version.
+**[Open CardSpoke in your browser](https://jx-holdings-llc.github.io/CardSpoke/)** · [Desktop app](#get-cardspoke) · [Build a plugin](#build-plugins)
 
-## What CardSpoke Is
+*Public Preview 0.21.1. Free and open source under the Apache License 2.0.*
 
-- **A card-based knowledge app:** Create cards, nest cards inside other cards, and move through information as a hierarchy instead of a flat document list.
-- **Local-first by default:** User data stays on the user's device unless they explicitly export or import it.
-- **Portable:** Export data as JSON, TXT, Markdown, or CSV from the app.
-- **Extensible:** A three-layer plugin system lets users and developers add themes, features, and deeper app customizations without bloating the default experience.
-- **Lightweight:** The default app is meant to stay fast, understandable, and useful without requiring accounts, servers, or hosted sync.
+## Get CardSpoke
 
-## What Is Not In This Public Version
+| Where | How |
+| --- | --- |
+| **Browser** | Open [jx-holdings-llc.github.io/CardSpoke](https://jx-holdings-llc.github.io/CardSpoke/). After the first visit it also works offline. Your cards stay in that browser on that device. |
+| **Windows, macOS, Linux** | Installers will be on the [Releases page](https://github.com/JX-Holdings-LLC/CardSpoke/releases) with the first desktop release. Until then you can build the app yourself with the [Desktop guide](./docs/guides/DESKTOP.md). The desktop app saves each collection as a plain file in a folder you choose. |
+| **Phones and tablets** | The browser version adapts to small screens. Native mobile apps are experimental and not yet published. |
 
-The first public CardSpoke scope does not include:
+## What you can do
 
-- OS-specific shells or app suites
-- Alternate products built on CardSpoke
-- Typed-card platform/domain systems
-- Runtime profiles such as `lite` or `os`
-- A separate core-only build target
-- Cloud storage drivers such as Google Drive, OneDrive, or WebDAV
-- Production-ready mobile security hardening
-- Real-time collaboration or hosted sync
+### Give your notes shape
 
-Cloud/off-device storage may return in a future version, but the public preview keeps storage local and user-controlled.
+- Put cards inside cards, as deep as you need. Breadcrumbs always show the way back.
+- Write `[[Card Title]]` to link to another card. Every card lists the cards that link to it. Clicking a link to a card that doesn't exist yet offers to create it.
+- Add tags, see related cards that share them, and rename or merge tags across everything at once.
+- Bookmark the cards you use most. Recent cards are one click away.
+- Drag cards to reorder them or move them under a different parent.
 
-## Current Feature Set
+### Find anything
 
-### Cards and Organization
+- Search forgives typos and looks through titles, text and tags.
+- Narrow results by tag, bookmark or date with Advanced Search.
+- Search the current collection or all of them at once.
 
-- Hierarchical parent/child cards
-- Card create, read, update, delete, duplicate, and reparent flows
-- Bookmarks and recent cards
-- Card links using `[[Card Title]]` syntax
-- Backlinks and related-card panels
-- Tags, tag filtering, tag management, and tag suggestions
+### Keep it private
 
-### Search and Navigation
+- **No account, no server.** Your cards are saved on your device and CardSpoke does not upload them anywhere.
+- **Separate collections.** Keep work, personal and creative projects in their own datasets, each with its own storage.
+- **PIN protection.** Lock a dataset with a PIN and it is encrypted on disk (AES-GCM). Without the PIN, nobody can read it, including you, so remember it.
+- **Plain files on desktop.** The desktop app keeps each dataset as a readable JSON file in a folder you pick, so you can back it up with the tools you already use.
 
-- Fuzzy search
-- Advanced search filters
-- Keyboard navigation for search results
-- Breadcrumb navigation through card trees
-- Grid/list/compact display options
+### Take it with you
 
-### Editing and Recovery
+- Download a **JSON backup** that restores everything: cards, tags, bookmarks, themes and plugins. A PIN-protected dataset can be backed up encrypted.
+- Download a readable copy as **Markdown**, **CSV** or **plain text** for other apps.
+- Import a backup, or paste in an indented outline and CardSpoke turns it into cards.
 
-- Markdown-style rich text mode
-- Formatting toolbar
-- Undo/redo
-- Trash recovery
-- Import text into card bodies
+### Write comfortably
 
-### Import and Export
+- Formatting toolbar with Markdown-style rich text.
+- Undo and redo, and a trash bin that lets you restore deleted cards.
+- List, grid and compact views.
+- Light and dark modes, high contrast, and reading presets including a dyslexia-friendly one.
+- Keyboard shortcuts for almost everything. Press `Ctrl+/` to see them.
 
-- JSON backup/export
-- TXT export
-- Markdown export
-- CSV export
-- JSON/TXT import flows
+### Make it yours
 
-### Appearance and Accessibility
+- Install themes from the built-in plugin gallery, such as Forest, Cyberpunk and Monochrome.
+- Add features such as a Kanban board, a daily journal or a Pomodoro timer.
+- Use the [command-line tool](./docs/guides/CLI.md) to read and edit your cards from scripts or AI agents. It works on the desktop app's data folder, even while the app is open, and never touches the network.
 
-- Dark/light theme toggle
-- High contrast option
-- Typography presets, including a dyslexia-friendly option
-- Keyboard shortcuts
-- Focus management for modals
-- Reduced-motion support where applicable
+## Your data and privacy
 
-### Plugin System
+CardSpoke saves your cards on your device and does not collect analytics. It only goes online when you ask it to, such as when you browse the plugin gallery. That request contains no card data.
 
-CardSpoke keeps its default app small while allowing optional extensions through plugins.
+A few things are worth knowing:
 
-Plugin layers:
+- **Plugins can read your cards.** Plugin code runs in a separate, permission-checked worker, and CardSpoke asks before running any. An enabled plugin can still read your unlocked cards, so only enable plugins from authors you trust. If something goes wrong, open CardSpoke with `?safemode` at the end of the address to start with all plugins off.
+- **Readable copies aren't encrypted.** Markdown, CSV and plain-text copies of a PIN-protected dataset are readable by anyone who gets the file. CardSpoke warns you before writing one.
+- **The browser version lives in the browser.** Clearing your browser's site data deletes cards stored there. Download a backup regularly.
 
-- **Theme:** CSS-only visual changes.
-- **Feature:** Adds UI or behavior through the plugin API.
-- **App:** Deeper customization with higher risk and explicit user control.
+The full details are in [Storage & Privacy](./docs/policies/STORAGE_AND_PRIVACY.md) and [Security & Safety](./docs/policies/SECURITY_AND_SAFETY.md).
 
-The plugin runtime includes consent prompts, risk labels, safe mode, resource cleanup, middleware hooks, component overrides, and sample plugins.
+## Build plugins
 
-**Trust model:** JavaScript packages run in dedicated workers with permission-checked API calls and restricted UI descriptions. Workers reduce risk but are not a complete hostile-code sandbox. The app asks for `plugin-code` trust consent before running any package JavaScript; plugins can read unlocked cards and dynamic imports are not covered by the host network permission. Only allow authors you trust. See [Security & Safety](./docs/policies/SECURITY_AND_SAFETY.md).
+CardSpoke stays small by default and grows through plugins. There are three kinds:
 
-## Getting Started
+| Kind | What it can do | How it runs |
+| --- | --- | --- |
+| **Theme** | Restyle the app with CSS | No code. Turns on when installed. |
+| **Feature** | Add panels, buttons, card decorations and behavior | JavaScript in a worker, with the permissions the user approves |
+| **App** | Reshape the app: intercept saves, replace components, even rename it | Same worker model, turned on by the user |
 
-1. Install dependencies. Node 20.19+ or 22.12+ is recommended.
+You can write a plugin as a single JSON file, test it in the app's **Plugin Manager → Create** tab, and share it as a JSON file. The browser version can also install a plugin from a URL hosted on GitHub.
 
-   ```bash
-   npm install
-   ```
+- [Plugin Authoring Guide](./docs/guides/PLUGIN_AUTHORING_GUIDE.md): start here. It covers the package format, the `ctx` API, permissions and testing.
+- [Sample plugins](./sample-plugins/) and [nine advanced examples](./sample-plugins/advanced/README.md) to copy from.
+- [Plugin API reference](./docs/api/PLUGIN_API.md), [middleware hooks](./docs/api/MIDDLEWARE_PIPELINE.md) and [component overrides](./docs/api/COMPONENT_REGISTRY.md).
+- [TypeScript definitions](./types/README.md) for editor autocomplete.
 
-2. Build the web bundle.
+## What's not here yet
 
-   ```bash
-   npm run build
-   ```
+CardSpoke is a public preview. It does not currently offer:
 
-3. Run tests.
+- Sync between devices, cloud storage or real-time collaboration. To move cards between devices, export a backup and import it on the other one.
+- Published mobile apps.
+- Translations into other languages.
 
-   ```bash
-   npm test
-   ```
+## Help and feedback
 
-4. Start local development.
+- In the app, open the menu (☰) and choose **Getting Started** or **Help & Documentation**.
+- Found a bug or have an idea? [Open an issue](https://github.com/JX-Holdings-LLC/CardSpoke/issues).
+- See what changed in each release in the [changelog](./CHANGELOG.md).
 
-   ```bash
-   npm run dev
-   ```
+## Working on CardSpoke itself
 
-   Note: the dev server serves the pre-built `www/app.js`. After editing files
-   under `www/src/`, re-run `npm run build` (or run `npx vite build --watch` in a
-   second terminal) to see the change; only `index.html`/`styles.css` edits are
-   picked up live.
+To build CardSpoke from source, run the tests or package the desktop and mobile apps, see the [Developer Guide](./docs/guides/DEVELOPER_GUIDE.md) and [Contributing](./CONTRIBUTING.md). The [documentation home](./docs/README.md) maps everything else. The logo, icons and brand guide are in [`brand/`](./brand/README.md).
 
-5. Preview the built app (`npm run build` first; `vite preview` serves the
-   production site from `dist/`).
+## Credits
 
-   ```bash
-   npm run preview
-   ```
-
-6. Run the release checks (the same gates CI enforces before deploying).
-
-   ```bash
-   npm run smoke        # fast static checks: version consistency, CSP, bundle sanity
-   npm run qa:browser   # end-to-end browser QA in headless Chromium
-   ```
-
-   `qa:browser` needs a Chromium for Playwright. If you don't have one, install
-   it once with `npx playwright install --with-deps chromium`, or point
-   `CHROMIUM_PATH` at an existing Chromium/Chrome binary.
-
-## Command-Line Interface
-
-`cli/cardspoke.js` reads and edits CardSpoke datasets from a terminal. It is
-built for scripts and AI agents: every command can print JSON, and it never
-uses the network. With the desktop app, it works directly on the dataset
-files in your data folder, even while the app is open. It also works on any
-exported JSON backup.
-
-```bash
-npm run cli -- datasets                         # datasets in the desktop data folder
-npm run cli -- create "Projects" --tag work     # added to the dataset open in the app
-npm run cli -- tree --dataset "Research" --json
-npm run cli -- tree --file backup.json          # an exported backup
-```
-
-See the [CLI guide](./docs/guides/CLI.md) for every command.
-
-## Desktop and Mobile Packaging
-
-The public product focus is:
-
-1. Web app first
-2. Desktop packaging next
-3. Mobile packaging after that
-
-### Desktop (Windows, macOS, Linux)
-
-The desktop app is a locked-down Electron shell in [`desktop/`](./desktop/)
-with installers for Windows (NSIS `.exe`), macOS (`.dmg`/`.zip`) and Linux
-(`AppImage`/`.deb`):
-
-```bash
-npm run desktop:install   # one-time: installs Electron + electron-builder
-npm run desktop:start     # build the web bundle and launch the desktop app
-npm run desktop:dist      # build installers for the current OS into desktop/release/
-npm run desktop:test      # desktop shell unit tests
-```
-
-The desktop app saves each dataset as a plain JSON file in a data folder you
-choose (default `Documents/CardSpoke`). Pick the folder in **Dataset Manager →
-Data Folder** or **File → Change Data Folder…**.
-
-See the [Desktop guide](./docs/guides/DESKTOP.md) for the data folder,
-installer details, the security model, code signing and the release workflow.
-
-### Mobile (Capacitor)
-
-Capacitor commands remain available for development. The native projects are
-generated, so add the platform once per fresh checkout before syncing:
-
-```bash
-npm run platform:android   # one-time: generates android/ (npx cap add android)
-npm run platform:ios       # one-time: generates ios/ (macOS only)
-
-npm run sync
-npm run sync:android
-npm run sync:ios
-npm run open:android
-npm run open:ios
-```
-
-See the [Capacitor guide](./docs/guides/README.CAPACITOR.md) for prerequisites.
-
-Mobile builds should be treated as experimental until platform-specific security hardening is completed.
-
-## Project Layout
-
-- `www/` - Web assets consumed by the app and Capacitor shells.
-- `www/src/` - Source slices compiled by Vite into `www/app.js`.
-- `www/src/core/` - Plugin runtime modules used by the main CardSpoke app.
-- `cli/` - Command-line interface for editing CardSpoke JSON files.
-- `desktop/` - Electron desktop shell and installer configuration.
-- `brand/` - The logo package: wordmark and icon in every format, app icons, and the usage guide.
-- `tests/` - Automated uvu tests.
-- `docs/` - User, developer, API, policy, and release documentation.
-- `sample-plugins/` - Example plugin packages.
-
-## Documentation
-
-Start with the [Documentation home](./docs/README.md) for a role-based map and the [AI & contributor context](./docs/AI_CONTEXT.md) for document precedence and review rules.
-
-### Guides
-
-- [Developer Guide](./docs/guides/DEVELOPER_GUIDE.md)
-- [Code & Plugin System Handbook](./docs/guides/CODE_AND_PLUGIN_SYSTEM_HANDBOOK.md)
-- [Test Guide](./docs/guides/TEST_GUIDE.md)
-- [Desktop App Guide](./docs/guides/DESKTOP.md)
-- [Capacitor Guide](./docs/guides/README.CAPACITOR.md)
-- [Deviation Guide](./docs/guides/DEVIATION_GUIDE.md)
-- [Feature Catalog](./docs/guides/FEATURES.md)
-- [Brand Guide](./brand/README.md): the logo, icon, colors and which file to use
-
-### API and Schema
-
-- [API Reference](./docs/api/API_REFERENCE.md)
-- [Schema & Migration Docs](./docs/api/SCHEMA.md)
-- [Schema Reference](./docs/api/SCHEMA_REFERENCE.md)
-- [Storage Model](./docs/api/STORAGE_DRIVER_INTERFACE.md)
-
-### Plugin System
-
-- [Standalone Plugin Authoring Guide for Humans and AI Agents](./docs/guides/PLUGIN_AUTHORING_GUIDE.md)
-- [Nine Advanced Plugin Packages](./sample-plugins/advanced/README.md)
-- [Advanced Plugin Verification Report](./docs/reports/ADVANCED_PLUGIN_VERIFICATION.md)
-- [Plugin System Overview](./docs/architecture/PLUGIN_SYSTEM.md)
-- [Plugin Invariants](./docs/architecture/PLUGIN_INVARIANTS.md)
-
-### Policies
-
-- [Code of Conduct](./docs/policies/CODE_OF_CONDUCT.md)
-- [Security & Safety](./docs/policies/SECURITY_AND_SAFETY.md)
-- [Storage & Privacy](./docs/policies/STORAGE_AND_PRIVACY.md)
-- [Release & Versioning](./docs/policies/RELEASE_AND_VERSIONING.md)
-
-### Specifications
-
-- [CardSpoke Specification v1](./docs/specifications/cardspoke_spec_v1.md)
-- [First Public Scope](./docs/specifications/FIRST_PUBLIC_SCOPE.md)
-
-## Storage Model
-
-CardSpoke is local-first. The public preview uses local browser/device storage and user-controlled import/export. Preferences live under `cardspoke_*` LocalStorage keys. Dataset storage defaults to local storage on the user's device.
-
-The current public version does not include cloud sync or cloud storage drivers. Users can export backups and move them wherever they choose.
-
-## Environment and Configuration
-
-CardSpoke has no required environment variables for normal use.
-
-| Key | Context | Notes |
-|-----|---------|-------|
-| `NODE_ENV` | Vite build | Set to `production` for release builds. |
-| `VITE_*` prefix | Vite | Exposed to the client bundle at build time. Do not put secrets here. |
-
-## Troubleshooting
-
-### `npm run build` fails with a module resolution error
-
-Run `npm install` first, then retry. If the error persists, delete `node_modules/` and `package-lock.json`, reinstall, and rebuild.
-
-### `file://` page is blank
-
-Open the browser console. A missing `www/app.js` means the build has not been run yet. A browser CORS error means the browser is blocking local file access; run `npm run build` and serve the app with `npm run preview` instead.
-
-### Tests fail with "Cannot find module"
-
-Ensure you are on Node 20.19+ or 22.12+ and that `npm install` completed successfully.
-
-### Capacitor sync fails
-
-Confirm that Android SDK or Xcode is installed and that `npx cap doctor` reports no blocking errors. See the Capacitor guide for platform-specific setup.
-
-## Maintained by
-
-CardSpoke is created by [Jeffrey Guntly](https://github.com/jxburros) and maintained by [JX Holdings, LLC](https://jxholdings.com). See [Contributing](./CONTRIBUTING.md) for contribution terms and expectations.
-
-## Contributing
-
-- Keep the default app lightweight and local-first.
-- Do not add hosted sync, telemetry, cloud storage, or network services without explicit future-version planning.
-- Follow plugin development practices in the Plugin System Overview.
-- Adhere to the Security & Safety policy.
-- Keep spin-offs, OS-specific shells, and alternate app suites outside this repository unless the public CardSpoke scope changes later.
-
----
-
-## Project Stewardship
-
-This project is developed by **Jeffrey** through **JX Holdings, LLC**. GitHub: [`jxburros`](https://github.com/jxburros).
+CardSpoke is created by [Jeffrey Guntly](https://github.com/jxburros) and maintained by [JX Holdings, LLC](https://jxholdings.com). Licensed under the [Apache License 2.0](./LICENSE).

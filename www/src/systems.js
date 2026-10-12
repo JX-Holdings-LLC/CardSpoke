@@ -1622,19 +1622,19 @@ import {
                 // Welcome
                 h('div', { style: 'margin-bottom: var(--space-xl); text-align: center;' },
                   h('h2', { style: 'margin-bottom: var(--space-sm); color: var(--primary);' }, 'Welcome to CardSpoke!'),
-                  h('p', { style: 'color: var(--text-secondary);' }, 'A local-first, lightweight hierarchical note-taking app')
+                  h('p', { style: 'color: var(--text-secondary);' }, 'Your notes, as cards, kept on your device.')
                 ),
 
                 // What are Cards?
                 h('div', { style: 'margin-bottom: var(--space-xl);' },
                   h('h3', { style: 'margin-bottom: var(--space-md); color: var(--primary);' }, 'What are Cards?'),
                   h('p', { style: 'margin-bottom: var(--space-sm);' },
-                    'Cards are the building blocks of CardSpoke. Think of them as notes or ideas that can be organized hierarchically.'
+                    'Every note in CardSpoke is a card. A card can hold other cards, so a project, a book or a recipe collection grows into a tree you can walk through.'
                   ),
                   h('ul', { style: 'margin-left: var(--space-lg); margin-bottom: var(--space-sm);' },
                     h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Each card has a title and body content'),
                     h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Cards can have child cards to create nested structures'),
-                    h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Organize your thoughts in a hierarchy that makes sense to you')
+                    h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Link any card to another by writing its title in double brackets, like [[Groceries]]')
                   )
                 ),
 
@@ -1647,11 +1647,11 @@ import {
                       h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Click the menu button (☰) in the top right'),
                       h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Select "New Card" or press Ctrl+N'),
                       h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Add a title and body text'),
-                      h('li', {}, 'Click "Save Card"')
+                      h('li', {}, 'Click "Save"')
                     )
                   ),
                   h('p', { style: 'margin-bottom: var(--space-sm);' },
-                    'To create a child card, open any existing card and click the "Add Child Card" button. Child cards appear nested under their parent.'
+                    'To put a card inside another, open the outer card and click "Add Child". The new card appears nested under it.'
                   )
                 ),
 
@@ -1672,10 +1672,10 @@ import {
                 h('div', { style: 'margin-bottom: var(--space-xl);' },
                   h('h3', { style: 'margin-bottom: var(--space-md); color: var(--primary);' }, 'Finding Cards with Search'),
                   h('p', { style: 'margin-bottom: var(--space-sm);' },
-                    'CardSpoke has powerful search capabilities:'
+                    'Search forgives typos:'
                   ),
                   h('ul', { style: 'margin-left: var(--space-lg); margin-bottom: var(--space-sm);' },
-                    h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Press Ctrl+F or click the search icon to search'),
+                    h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Press Ctrl+F or click the search box at the top'),
                     h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Use ↑/↓ arrow keys to navigate results'),
                     h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Press Enter to open the selected card'),
                     h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Search works across titles, content, and tags')
@@ -1693,16 +1693,16 @@ import {
                       h('strong', {}, 'Undo/Redo'), ' — Press Ctrl+Z to undo and Ctrl+Y to redo changes'
                     ),
                     h('div', {},
-                      h('strong', {}, 'Export'), ' — Save your data in JSON, Markdown, or CSV formats (Data & Export menu)'
+                      h('strong', {}, 'Export'), ' — Download a copy as Markdown, CSV or plain text to use in other apps (menu → Data & Export)'
                     ),
                     h('div', {},
-                      h('strong', {}, 'Backups'), ' — Create manual backups anytime from the Data & Export menu'
+                      h('strong', {}, 'Backups'), ' — Download a JSON backup that restores everything, including bookmarks and plugins (menu → Data & Export)'
                     ),
                     h('div', {},
                       h('strong', {}, 'Plugins'), ' — Customize CardSpoke with themes and plugins (Plugin Manager)'
                     ),
                     h('div', {},
-                      h('strong', {}, 'Dark Mode'), ' — Toggle dark mode with the moon icon in the header'
+                      h('strong', {}, 'Dark Mode'), ' — Switch with the theme button in the header, or press Alt+T'
                     )
                   )
                 ),
@@ -1710,9 +1710,9 @@ import {
                 // Privacy Note
                 h('div', { style: 'margin-bottom: var(--space-lg);' },
                   h('div', { style: 'background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius);' },
-                    h('p', { style: 'margin-bottom: var(--space-xs); font-weight: 600;' }, 'Your Privacy Matters'),
+                    h('p', { style: 'margin-bottom: var(--space-xs); font-weight: 600;' }, 'Your notes stay with you'),
                     h('p', { style: 'color: var(--text-secondary); font-size: 0.9rem;' },
-                      'All your data is stored locally on your device. CardSpoke never sends your data to any server. You have complete control and ownership of your information.'
+                      'Your cards are saved on this device. There is no account, and CardSpoke does not upload your cards anywhere. To keep a dataset private from others who use this device, protect it with a PIN in Data & Export → Manage Datasets.'
                     )
                   )
                 ),
@@ -1830,7 +1830,7 @@ import {
                     ),
                     h('div', {}, 
                       h('strong', {}, 'Datasets'), 
-                      ' — Create multiple isolated data vaults. Access from Data & Export menu.'
+                      ' — Keep separate collections of cards, each with its own storage and optional PIN. Open Data & Export, then Manage Datasets.'
                     ),
                     h('div', {}, 
                       h('strong', {}, 'Developer Mode'), 
@@ -1842,33 +1842,16 @@ import {
                 // Data & Privacy Section
                 h('div', { style: 'margin-bottom: var(--space-lg);' },
                   h('h3', { style: 'margin-bottom: var(--space-sm); color: var(--primary);' }, 'Data & Privacy'),
-                  h('p', {}, 'Your data is stored locally on your device. CardSpoke never sends your data to external servers. Export anytime to JSON, Markdown, or CSV.')
-                ),
-
-                // Language & Localization Section (v1.0.0)
-                h('div', { style: 'margin-bottom: var(--space-lg);' },
-                  h('h3', { style: 'margin-bottom: var(--space-sm); color: var(--primary);' }, 'Language & Localization'),
-                  h('p', { style: 'margin-bottom: var(--space-sm);' },
-                    'CardSpoke supports community language packs. Visit the CardSpoke website to download language packs for your preferred language.'
-                  ),
-                  h('p', { style: 'font-size: var(--text-sm); color: var(--text-secondary);' },
-                    'Coming soon: Download language packs from ',
-                    h('a', {
-                      href: 'https://github.com/jxburros/CardSpoke/wiki/Language-Packs',
-                      target: '_blank',
-                      rel: 'noopener noreferrer',
-                      style: 'color: var(--primary);'
-                    }, 'CardSpoke Language Packs')
-                  )
+                  h('p', {}, 'Your cards are saved on this device, and CardSpoke does not upload them anywhere. CardSpoke only goes online when you ask it to, such as browsing the plugin gallery or installing a plugin from a URL. A plugin you enable can read your unlocked cards, so only enable plugins from authors you trust. Download a backup or a Markdown, CSV or plain-text copy anytime from Data & Export.')
                 ),
 
                 // Version Info
                 h('div', { style: 'padding-top: var(--space-md); border-top: 1px solid var(--border); text-align: center; color: var(--text-secondary);' },
                   h('p', {}, `CardSpoke v${APP_VERSION}`),
                   h('p', { style: 'font-size: var(--text-sm);' },
-                    h('a', { href: 'https://github.com/jxburros/CardSpoke', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'GitHub'),
+                    h('a', { href: 'https://github.com/JX-Holdings-LLC/CardSpoke', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'GitHub'),
                     ' · ',
-                    h('a', { href: 'https://github.com/jxburros/CardSpoke/blob/main/README.md', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'Documentation')
+                    h('a', { href: 'https://github.com/JX-Holdings-LLC/CardSpoke/blob/main/README.md', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'Documentation')
                   )
                 )
               )

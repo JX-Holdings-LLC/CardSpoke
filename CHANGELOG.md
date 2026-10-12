@@ -10,6 +10,10 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Added
 
+- **Markdown, CSV and plain-text export in the app.** Data & Export now has
+  Backup (JSON), Markdown, CSV and Plain Text buttons. The Markdown and CSV
+  exporters existed but no button reached them, although the docs and
+  Getting Started promised them.
 - **Desktop data folder.** The desktop app saves every dataset as a plain
   JSON file in a folder you choose (default `Documents/CardSpoke`), set in
   Dataset Manager → Data Folder or File → Change Data Folder…. The folder is
@@ -40,6 +44,13 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Changed
 
+- **User-focused copy.** The README and Feature Guide now speak to people
+  using CardSpoke and writing plugins for it; build, packaging and
+  troubleshooting notes moved to the Developer Guide. The app, manifest,
+  packages and desktop About box share one description: "A private,
+  local-first notebook where every note is a card."
+- **Data & Export dialog.** The dialog is titled Data & Export (was Dataset
+  Information); **Switch Dataset** is now **Manage Datasets**.
 - **New logo and icons.** The logo is redrawn on one grid with one line
   weight, set in Inter Bold like the app's headings. A new square icon (the C
   and S cards from the logo, joined by a spoke) replaces the old glyph on the
@@ -49,6 +60,17 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
   variants, social images, every icon size) and the [brand guide](brand/README.md).
 
 ### Fixed
+
+- In-app copy that contradicted the app: the plugin risk tooltip said plugins
+  are not sandboxed (they run in a permission-checked worker); privacy notes
+  said CardSpoke never contacts a server (the plugin gallery does); Getting
+  Started named buttons that don't exist; "data vaults" and "instances" are
+  now "datasets"; the Help screen no longer advertises language packs, which
+  don't exist.
+- Repository links point at `JX-Holdings-LLC/CardSpoke`, where the project
+  and its live web app are hosted.
+- Storage & Privacy and Security & Safety no longer say every export is
+  plaintext; JSON backups of PIN-protected datasets are encrypted by default.
 
 - The GitHub Pages deploy runs again. Its browser QA step tried to
   install Chromium's system libraries with sudo, which the self-hosted

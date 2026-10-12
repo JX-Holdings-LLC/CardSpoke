@@ -45,7 +45,7 @@ Those items require a separate future-version scope or another repository.
 - Confirm `www/index.html`, `www/app.js`, and `www/styles.css` still open locally after build.
 - Confirm import/export smoke tests with a real dataset.
 - Confirm Plugin Manager install, enable, suspend, delete, and Safe Mode flows.
-- Confirm README, Feature Catalog, and First Public Scope agree with the release.
+- Confirm README, Feature Guide, and First Public Scope agree with the release.
 - Tag release with version and schemaVersion.
 
 > The four automated checks above are the same gates `.github/workflows/pages.yml`

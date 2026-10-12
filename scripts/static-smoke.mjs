@@ -126,7 +126,7 @@ check(`desktop/package-lock.json version (${desktopLock.version}) matches packag
   desktopLock.version === pkg.version);
 
 check('footer links to the canonical CardSpoke repository',
-  indexHtml.includes('href="https://github.com/jxburros/CardSpoke"'));
+  indexHtml.includes('href="https://github.com/JX-Holdings-LLC/CardSpoke"'));
 check('footer credits Jeffrey Guntly GitHub profile',
   indexHtml.includes('href="https://github.com/jxburros"'));
 check('footer credits JX Holdings, LLC',

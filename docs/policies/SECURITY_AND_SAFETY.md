@@ -11,7 +11,7 @@ This guide outlines expectations for secure, transparent, and user-respecting be
 ## Core App Expectations
 
 - Keep dependencies minimal and vetted; avoid unnecessary network services.
-- Validate inputs for card content, plugin manifests, and file imports. Import flows accept JSON/CSV/Markdown/TXT backups from the UI—validate schema version and card IDs before merging into the active dataset.
+- Validate inputs for card content, plugin manifests, and file imports. Import flows accept JSON backups and TXT files/outlines from the UI—validate schema version and card IDs before merging into the active dataset.
 - Treat migrations as critical operations; validate results and avoid silent drops.
 - Surface errors with actionable guidance.
 
@@ -33,11 +33,11 @@ This guide outlines expectations for secure, transparent, and user-respecting be
     (250,000 iterations) key derived from the PIN, persisted as a JSON envelope
     that never contains the PIN. See `www/src/core/dataset-crypto.js` and
     [Storage & Privacy](./STORAGE_AND_PRIVACY.md#dataset-encryption-at-rest)
-  - **Not covered:** user-initiated exports are still written as unencrypted
-    JSON/CSV/Markdown/TXT, including exports of a PIN-protected dataset. For
-    sensitive data, users should encrypt exports manually
-  - Future consideration: a password-protected export option reusing the same
-    envelope format
+  - **Shipped:** a JSON backup of a PIN-protected dataset is encrypted with the
+    same envelope by default (the user can choose an unencrypted backup)
+  - **Not covered:** Markdown, CSV and TXT copies are always plaintext. The app
+    asks for confirmation before writing one from a PIN-protected dataset. For
+    sensitive data, users should encrypt those files manually
 - Minimize retention of logs; avoid logging user content unless necessary for explicit debug flows.
 
 ## Reporting & Response
@@ -46,7 +46,7 @@ This guide outlines expectations for secure, transparent, and user-respecting be
   vulnerability reporting on the repository's Security tab, so a fix can ship
   before the issue is public. This must be enabled in repository settings before
   the public release.
-- **Public issues** (<https://github.com/jxburros/CardSpoke/issues>) are
+- **Public issues** (<https://github.com/JX-Holdings-LLC/CardSpoke/issues>) are
   appropriate for hardening suggestions and already-public weaknesses — not for
   an unpatched exploitable defect, since filing one discloses it to everyone.
 - No response-time commitment is offered: CardSpoke is maintained by a single

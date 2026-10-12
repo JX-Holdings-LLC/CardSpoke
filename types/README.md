@@ -102,13 +102,13 @@ export default plugin;
 
 ## Documentation
 
-See the [CardSpoke documentation](https://github.com/jxburros/CardSpoke/blob/main/docs/) for:
+See the [CardSpoke documentation](https://github.com/JX-Holdings-LLC/CardSpoke/blob/main/docs/) for:
 
-- [Plugin API Guide](https://github.com/jxburros/CardSpoke/blob/main/docs/api/PLUGIN_API.md)
-- [Middleware Pipeline](https://github.com/jxburros/CardSpoke/blob/main/docs/api/MIDDLEWARE_PIPELINE.md)
-- [Component Registry](https://github.com/jxburros/CardSpoke/blob/main/docs/api/COMPONENT_REGISTRY.md)
-- [API Reference](https://github.com/jxburros/CardSpoke/blob/main/docs/api/API_REFERENCE.md)
-- [Plugin System](https://github.com/jxburros/CardSpoke/blob/main/docs/architecture/PLUGIN_SYSTEM.md)
+- [Plugin API Guide](https://github.com/JX-Holdings-LLC/CardSpoke/blob/main/docs/api/PLUGIN_API.md)
+- [Middleware Pipeline](https://github.com/JX-Holdings-LLC/CardSpoke/blob/main/docs/api/MIDDLEWARE_PIPELINE.md)
+- [Component Registry](https://github.com/JX-Holdings-LLC/CardSpoke/blob/main/docs/api/COMPONENT_REGISTRY.md)
+- [API Reference](https://github.com/JX-Holdings-LLC/CardSpoke/blob/main/docs/api/API_REFERENCE.md)
+- [Plugin System](https://github.com/JX-Holdings-LLC/CardSpoke/blob/main/docs/architecture/PLUGIN_SYSTEM.md)
 
 ## License
 

@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>CardSpoke — Local-first knowledge cards</title>
+  <title>CardSpoke — Notes as cards, kept on your device</title>
+  <meta name="description" content="A private, local-first notebook where every note is a card. No account, no cloud, optional PIN encryption. Works in the browser and on Windows, macOS and Linux.">
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="app:version" content="0.21.1">
   <meta name="app:author" content="Jeffrey Guntly, JX Holdings, LLC">
@@ -136,7 +137,7 @@
 
     <footer class="app-footer" data-plugin-anchor="footer">
       <p>Created by <a href="https://github.com/jxburros" target="_blank" rel="noopener noreferrer"><span id="app-creator"></span></a> for <a href="https://jxholdings.com" target="_blank" rel="noopener noreferrer"><span id="app-updater"></span></a></p>
-      <p>CardSpoke <span id="app-version"></span> (<span id="app-release-date"></span>) &middot; <a href="https://github.com/jxburros/CardSpoke" target="_blank" rel="noopener noreferrer">View the project on GitHub</a></p>
+      <p>CardSpoke <span id="app-version"></span> (<span id="app-release-date"></span>) &middot; <a href="https://github.com/JX-Holdings-LLC/CardSpoke" target="_blank" rel="noopener noreferrer">View the project on GitHub</a></p>
     </footer>
     
   </div>
@@ -173,7 +174,7 @@
         <div class="tab-content active" id="tab-json" role="tabpanel" aria-labelledby="tab-btn-json">
           <div class="file-upload-area" id="fileUploadAreaJSON" role="button" tabindex="0" aria-describedby="uploadHintJSON">
             <div class="upload-text">Choose a JSON file, or drag &amp; drop it here</div>
-            <div class="upload-hint" id="uploadHintJSON">Supports card, subtree, and instance exports</div>
+            <div class="upload-hint" id="uploadHintJSON">Accepts CardSpoke backups and exported cards</div>
           </div>
           <input type="file" id="fileInputJSON" accept=".json,application/json" tabindex="-1" aria-hidden="true" style="display: none;" />
           

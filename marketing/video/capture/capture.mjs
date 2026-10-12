@@ -43,7 +43,7 @@ async function session({ width = 1280, height = 720, scale = 1.5, mobile = false
     localStorage.setItem('nested_cards_store', data);
     sessionStorage.setItem('seeded', '1');
   }, JSON.stringify(store));
-  await context.route('https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/**', route => {
+  await context.route('https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/**', route => {
     const rel = new URL(route.request().url()).pathname.split('/sample-plugins/')[1];
     route.fulfill({ path: join(ROOT, 'sample-plugins', rel), contentType: 'application/json' });
   });
