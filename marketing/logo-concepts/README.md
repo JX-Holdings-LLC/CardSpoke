@@ -55,6 +55,25 @@ spacing -0.03em) and the lines are heavier and square-cornered, like the app's 2
 
 Rebuild round 2 with `python3 marketing/logo-concepts/source/build2.py`; the geometry is in `source/variants2.py`.
 
+## Round 3: square marks from 2d
+
+2d (`round-2/02d-compact-app`) is the chosen wordmark. `round-3/` holds six square versions of it.
+Each comes as `NAME.svg` (black on transparent, 1024 x 1024) and `NAME-tile.svg` (white on a
+full-bleed `#111111` square, the app's theme color). On the tile the mark stays inside the middle
+60%, which is the maskable-icon safe zone, so the Android circle crop and the iOS/macOS rounded mask
+never cut into it.
+
+| File | Idea |
+| --- | --- |
+| `s1-ladder` | C over S, a small card feeding each: 2d stacked into a square. |
+| `s2-ladder-solid` | The ladder with solid letter cards; the letters stay readable at 32 px. |
+| `s3-diagonal` | Only C and S, stepped, joined by one spoke. |
+| `s4-cluster` | Only the C card, fed by the two side cards. |
+| `s5-cards-only` | The ladder with no letters and heavier lines, for 16 px favicons. |
+| `s6-two-line` | The full 2d wordmark on two lines, for avatars and social profiles. |
+
+Rebuild with `python3 marketing/logo-concepts/source/build3.py`; the geometry is in `source/variants3.py`.
+
 ## Using one in the app
 
 Variants 01–09 drop in without changing the app. They are black on a transparent background with a
