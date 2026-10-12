@@ -28,4 +28,21 @@ test('browser QA never relies on sudo-installed system libraries', () => {
   }
 });
 
+test('self-hosted jobs reclaim the workspace before checkout', () => {
+  // Container jobs run as root on the shared self-hosted runner and leave
+  // root-owned files behind; any later job that checks out as the runner
+  // user must first chown them back, or checkout fails with EACCES.
+  for (const { name, text } of workflows) {
+    const jobs = text.split(/^(?=  [a-z][\w-]*:\n)/m);
+    for (const job of jobs) {
+      if (!job.includes('self-hosted') || job.includes('container:')) continue;
+      const checkout = job.indexOf('uses: actions/checkout@');
+      if (checkout === -1) continue;
+      const reclaim = job.indexOf('name: Reclaim workspace from container jobs');
+      const jobName = (job.match(/^  ([a-z][\w-]*):/) || [])[1];
+      assert.ok(reclaim !== -1 && reclaim < checkout, `${name} job ${jobName} checks out without reclaiming the workspace`);
+    }
+  }
+});
+
 test.run();
