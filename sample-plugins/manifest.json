@@ -7,63 +7,63 @@
       "name": "Forest",
       "description": "An earthy green theme inspired by woodland canopies. Overrides the core CSS variables so it composes with light/dark mode.",
       "layer": "theme",
-      "url": "https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/themes/forest.json"
+      "url": "https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/themes/forest.json"
     },
     {
       "id": "cyberpunk-theme",
       "name": "Cyberpunk",
       "description": "Neon-on-black theme. Dark in both light and dark modes, with magenta/cyan accents.",
       "layer": "theme",
-      "url": "https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/themes/cyberpunk.json"
+      "url": "https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/themes/cyberpunk.json"
     },
     {
       "id": "monochrome-theme",
       "name": "Monochrome",
       "description": "Stark black-and-white brutalist theme with hard shadows and zero border radius.",
       "layer": "theme",
-      "url": "https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/themes/monochrome.json"
+      "url": "https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/themes/monochrome.json"
     },
     {
       "id": "auto-save-indicator",
       "name": "Auto-Save Indicator",
       "description": "Flashes a 'Saved' badge in the header whenever the store is persisted. Demonstrates ctx.api.middleware ('card.save') and ctx.api.ui.inject.",
       "layer": "feature",
-      "url": "https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/features/auto-save-indicator.json"
+      "url": "https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/features/auto-save-indicator.json"
     },
     {
       "id": "card-color-tags",
       "name": "Card Color Tags",
       "description": "Gives every tag a stable color derived from its text. Demonstrates the 'card.render' middleware hook.",
       "layer": "feature",
-      "url": "https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/features/card-color-tags.json"
+      "url": "https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/features/card-color-tags.json"
     },
     {
       "id": "card-reading-time",
       "name": "Card Reading Time",
       "description": "Adds an estimated reading time to card tiles with longer bodies. Demonstrates reading card data from the 'card.render' middleware hook.",
       "layer": "feature",
-      "url": "https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/features/card-reading-time.json"
+      "url": "https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/features/card-reading-time.json"
     },
     {
       "id": "kanban-board",
       "name": "Kanban Board",
       "description": "Adds a Board button to the header that opens a todo/doing/done kanban view of all cards, driven by tags. Demonstrates an app-layer transformation with ctx.api.data.",
       "layer": "app",
-      "url": "https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/apps/kanban-board.json"
+      "url": "https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/apps/kanban-board.json"
     },
     {
       "id": "daily-journal",
       "name": "Daily Journal",
       "description": "Turns CardSpoke into a journaling app: renames the app and adds a Today's Entry button that creates one dated, tagged journal card per day. Demonstrates overrides.appName and ctx.api.data.createCard.",
       "layer": "app",
-      "url": "https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/apps/daily-journal.json"
+      "url": "https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/apps/daily-journal.json"
     },
     {
       "id": "pomodoro-desk",
       "name": "Pomodoro Desk",
       "description": "Adds a pomodoro timer to the header and counts completed sessions in plugin storage. Demonstrates ctx.api.storage, manifest.config (see the plugin settings panel), and teardownJs cleanup of timers.",
       "layer": "app",
-      "url": "https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/apps/pomodoro-desk.json"
+      "url": "https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/apps/pomodoro-desk.json"
     }
   ]
 }

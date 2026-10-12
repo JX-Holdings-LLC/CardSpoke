@@ -1,7 +1,7 @@
 {
   "name": "CardSpoke",
   "short_name": "CardSpoke",
-  "description": "A lightweight, local-first, card-based knowledge system.",
+  "description": "A private, local-first notebook where every note is a card.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

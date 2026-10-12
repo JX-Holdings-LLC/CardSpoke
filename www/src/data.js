@@ -782,6 +782,8 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
       function handleExport(type) {
         if (type === 'instance-json') exportJSON('instance');
         else if (type === 'instance-txt') exportTXT();
+        else if (type === 'instance-md') exportMarkdown();
+        else if (type === 'instance-csv') exportCSV();
         else if (type === 'plugins-json') exportJSON('plugins');
       }
 
@@ -1585,7 +1587,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         const overlay = h('div', { className: 'modal-overlay show' });
         const modal = h('div', { className: 'modal' });
         const modalHeader = h('div', { className: 'modal-header' });
-        modalHeader.appendChild(h('div', { className: 'modal-title' }, 'Dataset Information'));
+        modalHeader.appendChild(h('div', { className: 'modal-title' }, 'Data & Export'));
         const closeBtn = h('button', { className: 'modal-close', 'aria-label': 'Close dialog', onclick: () => overlay.remove() }, '✕');
         modalHeader.appendChild(closeBtn);
         modal.appendChild(modalHeader);
@@ -1700,22 +1702,33 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         );
         modalBody.appendChild(storageSection);
 
-        // Quick Actions section
-        const exportBtn = h('button', {
-          className: 'btn btn-primary',
-          onclick: () => { overlay.remove(); handleExport('instance-json'); }
-        }, 'Export Dataset');
+        // Export section: the JSON backup restores everything; the other
+        // formats are readable copies for other apps.
+        const exportButton = (type, label, className) => h('button', {
+          className,
+          onclick: () => { overlay.remove(); handleExport(type); }
+        }, label);
+        const exportSection = h('div', { style: 'margin-bottom: var(--space-xl);' },
+          h('h3', { style: headingStyle }, 'Export'),
+          h('p', { style: 'margin-bottom: var(--space-md); color: var(--text-secondary);' },
+            'A JSON backup can be imported back into CardSpoke. Markdown, CSV and plain text are readable copies for other apps.'),
+          h('div', { style: 'display: flex; gap: var(--space-md); flex-wrap: wrap;' },
+            exportButton('instance-json', 'Backup (JSON)', 'btn btn-primary'),
+            exportButton('instance-md', 'Markdown', 'btn btn-secondary'),
+            exportButton('instance-csv', 'CSV', 'btn btn-secondary'),
+            exportButton('instance-txt', 'Plain Text', 'btn btn-secondary')
+          )
+        );
+        modalBody.appendChild(exportSection);
+
         const switchBtn = h('button', {
           className: 'btn btn-secondary',
           onclick: () => { overlay.remove(); showDatasetManager(); }
-        }, 'Switch Dataset');
-        const actionsSection = h('div', {},
-          h('h3', { style: headingStyle }, 'Quick Actions'),
-          h('div', { style: 'display: flex; gap: var(--space-md); flex-wrap: wrap;' },
-            exportBtn, switchBtn
-          )
-        );
-        modalBody.appendChild(actionsSection);
+        }, 'Manage Datasets');
+        modalBody.appendChild(h('div', {},
+          h('h3', { style: headingStyle }, 'Datasets'),
+          h('div', { style: 'display: flex; gap: var(--space-md); flex-wrap: wrap;' }, switchBtn)
+        ));
 
         modal.appendChild(modalBody);
         overlay.appendChild(modal);
@@ -1827,7 +1840,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
             var riskBadge = h('span', {
               title: risk === 'SAFE'
                 ? 'CSS-only theme — runs no JavaScript'
-                : 'Contains JavaScript. Plugins are not sandboxed: once enabled (with your consent), this code has full access to the app and your data.',
+                : 'Contains JavaScript. It runs in a separate worker and only uses the permissions you approve, but it can read your unlocked cards. Only enable plugins from authors you trust.',
               style: 'font-size: var(--text-xs); padding: 2px 8px; border-radius: 4px; font-weight: 600; ' +
                 (risk === 'SAFE' ? 'background: #d1fae5; color: #065f46;' :
                  risk === 'LOW' ? 'background: #dbeafe; color: #1e40af;' :
@@ -2044,7 +2057,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           var loading = h('div', { style: 'padding: var(--space-md); color: var(--text-muted);' }, 'Loading gallery...');
           container.appendChild(loading);
 
-          fetch('https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/manifest.json')
+          fetch('https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/manifest.json')
             .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(function(manifest) {
               loading.remove();

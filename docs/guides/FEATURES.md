@@ -1,171 +1,142 @@
-# CardSpoke Feature Catalog
+# CardSpoke Feature Guide
 
-This catalog describes the current public CardSpoke app scope: the main local-first web app, followed by desktop and mobile packaging. It intentionally excludes OS-specific shells, spin-off apps, typed-card platform systems, runtime profiles, core-only builds, and cloud storage drivers.
+Everything CardSpoke 0.21.1 (Public Preview) can do, and where to find it. Open the menu with the ☰ button in the top right.
 
-**Current Public Preview:** 0.21.1 | **Schema Version:** 4
+## Cards
 
-## Core Product Shape
+Every note in CardSpoke is a card with a title, a body and optional tags. A card can hold other cards.
 
-- **Card-based knowledge app:** Presents information as hierarchical cards for lightweight knowledge organization.
-- **Local-first by default:** Data stays on the user's device unless the user explicitly imports or exports it.
-- **Minimal default app:** Keeps the built-in experience focused and fast while leaving optional complexity to plugins.
-- **Plugin-ready foundation:** Theme, Feature, and App plugins can extend the app without bloating the default experience.
-- **Portable data:** Users can export backups and readable formats directly from the app.
+- **New card:** menu → **New Card**, or `Ctrl+N`. Click **Save** when you're done.
+- **Card inside a card:** open a card and click **Add Child**. Nest as deep as you like.
+- **Move and reorder:** drag cards in the list, or move a card under a different parent.
+- **Duplicate:** **Duplicate** (or `Ctrl+D`) copies a card, with or without the cards inside it.
+- **Share:** **Share** copies a card to the clipboard as Markdown or JSON, ready to paste elsewhere. It does not send anything over the internet.
+- **Bring in text:** **Import TXT** on a card adds a text file to its body or turns an indented outline into child cards.
+- **Breadcrumbs:** the trail at the top shows where you are and takes you back up.
 
-## User Interface Features
+## Links between cards
 
-- **Dark/Light theme toggle:** Switch between dark and light modes via the header button or `Alt+T` keyboard shortcut.
-- **Rich Text mode:** Enable Markdown-style formatting in card bodies.
-- **Grid View:** Toggle between list and grid layouts for card display.
-- **Compact View:** Reduce visual density with compact mode.
-- **High Contrast mode:** Accessibility option for improved readability.
-- **Typography presets:** Choose Default, Comfortable, Compact, or Dyslexia-Friendly reading modes.
-- **Developer Mode:** Enable debug logging and developer features.
-- **Save status indicator:** Visual feedback showing save state.
-- **Toast notifications:** Non-blocking feedback with hover-to-pause, click-to-dismiss, and keyboard accessibility.
-- **Breadcrumb navigation:** Track and navigate the card hierarchy.
-- **Getting Started guide:** First-run onboarding for new users.
+- Write `[[Card Title]]` in a card's body to link to another card.
+- Clicking a link to a card that doesn't exist yet offers to create it.
+- **Referenced By** on every card lists the cards that link to it.
+- **Related Cards** lists cards that share tags with the one you're reading.
 
-## Card Management
+## Tags, bookmarks and recent cards
 
-- **Hierarchical cards:** Create parent-child relationships between cards.
-- **Card CRUD:** Create, read, update, and delete cards.
-- **Card duplication:** Duplicate cards with or without children.
-- **Card sharing:** Copy cards as JSON or Markdown.
-- **Drag and drop:** Reorder and reparent cards where supported.
-- **Bookmarks:** Star cards for quick access.
-- **Recent cards:** Track recently viewed/edited cards.
-- **Card links:** Reference other cards using `[[Card Title]]` syntax.
-- **Backlinks:** Show cards that link to the current card.
-- **Related cards:** Show cards that share tags with the current card.
+- Add tags while editing a card. Click a tag to see every card that has it.
+- **Suggest Tags** proposes tags based on similar cards.
+- **Tag Manager** (menu) renames, merges or deletes a tag across all cards.
+- Click ☆ **Bookmark** on a card to star it. **Bookmarks** (`Ctrl+B`) and **Recent Cards** (`Ctrl+R`) are in the menu.
 
-## Tag System
+## Search
 
-- **Tag creation:** Add multiple tags per card.
-- **Tag Manager:** Rename, merge, or delete tags across cards.
-- **Smart tag suggestions:** Suggestions based on content similarity with other tagged cards.
-- **Tag filtering:** Click tags to filter and search by tag.
+- Press `Ctrl+F` or click the search box. Search forgives typos and looks through titles, text and tags.
+- Use the arrow keys to move through results and Enter to open one.
+- Choose **Current** or **All** to search this collection or every collection.
+- **Advanced Search** (menu) filters by tag, by bookmark, or by date (today, last 7 days, last 30 days).
 
-## Search Features
+## Editing and recovery
 
-- **Fuzzy search:** Typo-tolerant search using Levenshtein distance scoring.
-- **Advanced search:** Filter by text, tag, bookmark status, or date range.
-- **Keyboard navigation:** Arrow keys to navigate results, Enter to select.
-- **Search highlighting:** Matched terms highlighted in results.
+- **Rich Text** (Appearance) turns on Markdown-style formatting and a toolbar for bold, italic, headings and lists.
+- **Undo and redo** with `Ctrl+Z` and `Ctrl+Y`, or the undo button in the header.
+- **Trash Bin** (menu) keeps deleted cards until you restore them or delete them for good.
+- The save indicator shows when your changes are safely saved on this device.
 
-## User Data & Storage
+## Your collections (datasets)
 
-- **Local-first ownership:** User data stays on-device by default.
-- **Local storage focus:** The public preview focuses on LocalStorage/IndexedDB style local persistence and user-controlled import/export.
-- **No default telemetry:** The core avoids analytics/tracking beacons and requires explicit consent before any off-device transmission.
-- **Dataset operations:** Dataset management remains local and user-controlled.
-- **Cloud storage deferred:** Google Drive, OneDrive, WebDAV, and other cloud/off-device storage drivers are not part of the current public app scope.
+A dataset is a separate collection of cards with its own storage. Open menu → **Data & Export** → **Manage Datasets**.
 
-## Import & Export
+- **Create, open and delete** datasets. Searching **All** looks across them.
+- **Choose where a dataset is stored:** browser storage, a larger browser database (IndexedDB), or a file you pick on your own disk.
+- **Lock with a PIN.** A PIN-protected dataset is encrypted on disk with AES-GCM. There is no way to recover it without the PIN. A short PIN keeps out casual snooping, not a determined attacker.
+- **Desktop data folder.** In the desktop app, each dataset is a plain JSON file in a folder you choose (default `Documents/CardSpoke`). Change it under **File → Change Data Folder…**. Edits made to those files by other tools, such as the [command-line tool](./CLI.md), appear in the app automatically.
 
-- **Export formats:** JSON, CSV, Markdown, and TXT.
-- **Import formats:** JSON and TXT.
-- **Bulk operations:** Bulk export/import with hierarchy preservation where supported.
-- **Timestamped exports:** Exports are named with a timestamp or date-based filename for easier backup tracking.
+## Backups and export
 
-## Undo/Redo & Recovery
+Open menu → **Data & Export**.
 
-- **Undo/Redo stack:** Ctrl+Z/Ctrl+Y shortcuts for reversible edits.
-- **Trash Bin:** Recover deleted cards from the trash with restore or permanent delete options.
+| Button | What you get | Use it to |
+| --- | --- | --- |
+| **Backup (JSON)** | Everything in the dataset: cards, tags, bookmarks, theme and plugins | Restore later, or move to another device or browser |
+| **Markdown** | One document with a heading per card, nested by depth | Read or edit in another notes app |
+| **CSV** | One row per card | Open in a spreadsheet |
+| **Plain Text** | An indented outline | Paste anywhere |
 
-## Keyboard Shortcuts
+- A PIN-protected dataset can be backed up **encrypted**; you'll need the PIN to import it. Markdown, CSV and plain-text copies are never encrypted, and CardSpoke warns you before writing one.
+- **Upload** (menu, or `Ctrl+U`) imports a JSON backup, or turns a text file or indented outline into cards.
 
-- `Ctrl+N` — New card
-- `Ctrl+F` — Focus search
-- `Ctrl+H` — Go to home
-- `Ctrl+B` — Show bookmarks
-- `Ctrl+R` — Show recent cards
-- `Ctrl+Z` / `Ctrl+Y` — Undo / Redo
-- `Ctrl+D` — Duplicate current card
-- `Ctrl+E` — Show plugin manager
-- `Ctrl+U` — Upload data
-- `Ctrl+T` — Focus tags input when editing a card
-- `Ctrl+G` — Toggle grid/list view
-- `Ctrl+[` / `Ctrl+]` — Navigate to parent/first child
-- `Ctrl+/` — Show keyboard shortcuts help
-- `Alt+T` — Toggle theme
-- `Alt+C` — Toggle compact view
-- `Escape` — Close modals/go back
+## Appearance and accessibility
 
-## Plugin Ecosystem
+Open menu → **Appearance**.
 
-- **Plugin Manager:** View installed plugins, install plugins, browse samples, and manage plugin state.
-- **Three-layer system:** Theme, Feature, and App plugins cover visual changes through deeper customizations.
-- **Plugin API:** Permission-gated `ctx` contexts with UI, data, storage, events, middleware, network, and filesystem surfaces.
-- **Middleware Pipeline:** Interceptors for core operations such as create, update, delete, save, and render.
-- **Component Registry:** Component overrides for supported UI pieces.
-- **Permission System:** User consent for sensitive operations.
-- **Resource Management:** Automatic cleanup of DOM elements, event listeners, middleware, and components created through the plugin API.
-- **Safe Mode:** Launch with `?safemode` to disable plugins for troubleshooting.
-- **Risk assessment:** Risk scoring based on layer and code analysis.
-- **Metadata transparency:** Plugins declare name, version, author, description, layer, compatibility, and permissions.
-- **TypeScript support:** Type definitions available in `types/` for plugin development.
-- **Plugin introspection:** Inspect installed plugins with `Plugin.get(id)` and `Plugin.list()`; setup/teardown errors surface as toasts and console warnings. There is no `Plugin.devTools` object or hook-statistics view.
+- **Light and dark mode:** the theme button in the header, or `Alt+T`.
+- **Views:** default list, **Grid View** (`Ctrl+G`) and **Compact View** (`Alt+C`).
+- **High Contrast** for easier reading.
+- **Typography presets:** Default, Comfortable, Compact and Dyslexia-Friendly.
+- **Theme plugins** such as Forest, Cyberpunk and Monochrome, from the plugin gallery.
+- Dialogs keep keyboard focus inside them and return it when they close. Animations are reduced when your system asks for reduced motion.
 
-## Accessibility Features
+## Keyboard shortcuts
 
-- **Focus trapping:** Modal dialogs trap keyboard focus.
-- **ARIA attributes:** Proper labeling for interactive elements.
-- **Reduced motion support:** Respects `prefers-reduced-motion` where implemented.
-- **Keyboard navigation:** Keyboard accessibility throughout the app.
-- **High contrast mode:** Enhanced visibility option.
-- **Dyslexia-friendly typography:** Specialized font sizing and spacing preset.
+Press `Ctrl+/` in the app to see them all. On a Mac, use `Cmd` for `Ctrl` and `Option` for `Alt`.
 
-## Deviations and Forks
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+N` | New card |
+| `Ctrl+F` | Search |
+| `Ctrl+H` | Home |
+| `Ctrl+B` | Bookmarks |
+| `Ctrl+R` | Recent cards |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
+| `Ctrl+D` | Duplicate the current card |
+| `Ctrl+T` | Jump to the tags field while editing |
+| `Ctrl+G` | Toggle grid view |
+| `Ctrl+[` / `Ctrl+]` | Go to the parent / first child card |
+| `Ctrl+E` | Plugin Manager |
+| `Ctrl+U` | Upload |
+| `Alt+T` | Light / dark mode |
+| `Alt+C` | Compact view |
+| `Escape` | Close a dialog or go back |
 
-- Community members may ship Deviations, but they must not use the CardSpoke name or branding.
-- Deviations must provide mandatory metadata, credit CardSpoke/JX Holdings, and avoid implying official endorsement.
-- Monetization is permitted when authorship and endorsement status are transparent.
+## Plugins
 
-## Platform & Build Footprint
+Plugins add to CardSpoke without making the default app heavier. Open menu → **Plugin Manager** (`Ctrl+E`).
 
-- **Web app first:** The main public target is the CardSpoke web app.
-- **Prebuilt web bundle:** `www/app.js` is built by Vite from `www/src/`.
-- **Desktop next:** Desktop packaging should wrap the same main app experience.
-- **Mobile later:** Capacitor workflows support Android and iOS iteration, but production mobile hardening is not part of the first public promise.
+- **Gallery:** browse curated themes and features, such as Kanban Board, Daily Journal, Pomodoro Desk, Card Color Tags and Card Reading Time.
+- **Install:** from a JSON file, or from a URL hosted on GitHub.
+- **Create:** write a plugin right in the app with metadata, JavaScript and CSS.
+- **Installed:** turn plugins on and off, or remove them. Removing a plugin cleans up everything it added.
 
-## Schema, Versioning, and Compatibility
+There are three kinds of plugin:
 
-- **Current schema version:** 4.
-- **Default store shape:** `rootOrder`, `cards`, `plugins`, `bookmarks`, `recentCards`, `viewMode`, `activeTheme`, `richTextEnabled`.
-- **Migration rules:** Schema bumps require documented migrations, idempotent steps, explicit fallbacks, and plugin impact notes.
-- **Compatibility safeguards:** Plugins must declare compatibility and refuse to run on unsupported versions.
+- **Theme** plugins only change colors and styles. They contain no code.
+- **Feature** plugins add panels, buttons and behavior.
+- **App** plugins can reshape the app itself, for example by renaming it or replacing parts of the interface.
 
-## LocalStorage Keys
+Feature and App plugins run their code in a separate worker and can only use the permissions you approve. CardSpoke asks before running any plugin code, and labels each plugin with its risk level. An enabled plugin can still read your unlocked cards, so only enable plugins from authors you trust.
 
-CardSpoke uses LocalStorage for preferences and lightweight configuration. Public keys are prefixed with `cardspoke_`.
+If a plugin causes trouble, add `?safemode` to the end of the address (in the browser) to start CardSpoke with every plugin turned off.
 
-### User Preferences
+**Writing your own?** Start with the [Plugin Authoring Guide](./PLUGIN_AUTHORING_GUIDE.md), then the [sample plugins](../../sample-plugins/) and the [Plugin API reference](../api/PLUGIN_API.md).
 
-- `cardspoke_richtext`
-- `cardspoke_gridView`
-- `cardspoke_highcontrast`
-- `cardspoke_typography`
-- `cardspoke_devmode`
-- `cardspoke_theme`
-- `cardspoke_activeThemeMod`
+## Command-line tool
 
-### Application State
+The [CardSpoke CLI](./CLI.md) reads and edits datasets from a terminal: list, search, create, move, tag and export cards. Every command can print JSON, so scripts and AI agents can use it. It works on the desktop app's data folder (even while the app is open) or on any exported backup, and it never uses the network.
 
-- `cardspoke_datasets`
-- `cardspoke_dataset_metadata`
-- `cardspoke_lastUploadTab`
-- `cardspoke_hasSeenGettingStarted`
+## Privacy
 
-## Developer & Testing Experience
+- No account and no analytics. Your cards are saved on your device.
+- CardSpoke only goes online when you browse the plugin gallery or install a plugin by URL, and those requests contain no card data.
+- The browser version keeps cards in that browser. Clearing the browser's site data deletes them, so download a backup regularly.
 
-- **Node/uvu toolchain:** Uses Node 18+, Vite, and uvu.
-- **Canonical build:** `npm run build` is the main app build path.
-- **Automated tests:** `npm test` runs the app and plugin tests that remain in the public app scope.
-- **Capacitor workflows:** Capacitor scripts remain available for native packaging iteration.
+Details: [Storage & Privacy](../policies/STORAGE_AND_PRIVACY.md) and [Security & Safety](../policies/SECURITY_AND_SAFETY.md).
 
-## Community & Governance Features
+## Not in this version
 
-- **Transparency:** Community plugins must publish versioning, creator identity, and changelogs.
-- **Credit & ownership rules:** CardSpoke stays free-to-use under JX Holdings, LLC ownership; creators must credit CardSpoke/JX Holdings and avoid implying official endorsement.
-- **Quality expectations:** Plugins should fail safely, avoid data corruption or obfuscation, and document install/removal steps.
+- Sync between devices, cloud storage or real-time collaboration. Move cards between devices with a backup.
+- Published mobile apps. The browser version works on phones and tablets.
+- Translations into other languages.
+
+## For maintainers
+
+Storage keys, the store shape and schema rules are documented in the [Schema Reference](../api/SCHEMA_REFERENCE.md) and [Storage Model](../api/STORAGE_DRIVER_INTERFACE.md). Community rules for forks and derivative apps are in the [Deviation Guide](./DEVIATION_GUIDE.md).

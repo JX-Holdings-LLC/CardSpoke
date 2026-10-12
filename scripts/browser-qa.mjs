@@ -33,6 +33,7 @@
  *  11. header/menu/upload-modal a11y: theme label, Option+T, focus return,
  *      tab semantics, keyboard + drag-and-drop upload, scroll unlock
  *  12. the edit view opens for a card with tags
+ *  13. Data & Export downloads JSON, Markdown, CSV and plain text
  *
  * Requirements (CS-102 — reproducible from a clean checkout):
  *   npm ci                                   (playwright is a pinned devDependency)
@@ -520,8 +521,8 @@ await scenario('plugin-dataset-round-trip (NEW-4/reconcile)', async () => {
   // Switch to the empty dataset via the Dataset Manager (invokes reconcile).
   await openMenu(page);
   await page.click('#menuDataHub');
-  await page.waitForSelector('.modal-overlay.show .btn:has-text("Switch Dataset")');
-  await page.click('.modal-overlay.show .btn:has-text("Switch Dataset")');
+  await page.waitForSelector('.modal-overlay.show .btn:has-text("Manage Datasets")');
+  await page.click('.modal-overlay.show .btn:has-text("Manage Datasets")');
   await page.waitForSelector('#newDatasetName');
   await page.click('.modal-overlay.show .btn-primary:has-text("Open")'); // Open the empty vault
   await page.waitForFunction(() =>
@@ -538,8 +539,8 @@ await scenario('plugin-dataset-round-trip (NEW-4/reconcile)', async () => {
   // the exact case the disable()-only reconcile got stuck on), no re-prompt.
   await openMenu(page);
   await page.click('#menuDataHub');
-  await page.waitForSelector('.modal-overlay.show .btn:has-text("Switch Dataset")');
-  await page.click('.modal-overlay.show .btn:has-text("Switch Dataset")');
+  await page.waitForSelector('.modal-overlay.show .btn:has-text("Manage Datasets")');
+  await page.click('.modal-overlay.show .btn:has-text("Manage Datasets")');
   await page.waitForSelector('#newDatasetName');
   await page.click('.modal-overlay.show .btn-primary:has-text("Open")'); // Open default again
   await page.waitForFunction(() =>
@@ -569,11 +570,11 @@ await scenario('dataset-manager-and-multisearch (NEW-2/3/4)', async () => {
   await page.waitForSelector('#main');
   await createCardViaUI(page, 'Alpha Base Card', 'lives in default dataset');
 
-  // Open Dataset Manager: menu → Data & Export → Switch Dataset
+  // Open Dataset Manager: menu → Data & Export → Manage Datasets
   await openMenu(page);
   await page.click('#menuDataHub');
-  await page.waitForSelector('.modal-overlay.show .btn:has-text("Switch Dataset")');
-  await page.click('.modal-overlay.show .btn:has-text("Switch Dataset")');
+  await page.waitForSelector('.modal-overlay.show .btn:has-text("Manage Datasets")');
+  await page.click('.modal-overlay.show .btn:has-text("Manage Datasets")');
   await page.waitForSelector('#newDatasetName');
 
   // CS-105: form labels are programmatically associated with their controls
@@ -627,8 +628,8 @@ await scenario('dataset-manager-and-multisearch (NEW-2/3/4)', async () => {
   // NEW-2: both datasets listed in the manager
   await openMenu(page);
   await page.click('#menuDataHub');
-  await page.waitForSelector('.modal-overlay.show .btn:has-text("Switch Dataset")');
-  await page.click('.modal-overlay.show .btn:has-text("Switch Dataset")');
+  await page.waitForSelector('.modal-overlay.show .btn:has-text("Manage Datasets")');
+  await page.click('.modal-overlay.show .btn:has-text("Manage Datasets")');
   await page.waitForSelector('#newDatasetName');
   const listed = await page.evaluate(() => {
     const overlays = document.querySelectorAll('.modal-overlay.show');
@@ -1094,6 +1095,36 @@ await scenario('edit-tagged-card', async () => {
   check('edit view renders for a tagged card', !view.renderFailed && view.title === 'Plain');
   check('existing tags show as chips', view.chips.join(',') === 'alpha,beta', view.chips.join(','));
   check('tag input stays after the chips', view.inputLast === true);
+  check('no console/page errors', errors.length === 0, errors.join(' | '));
+  await context.close();
+});
+
+await scenario('data-export-formats', async () => {
+  // Every format the docs promise must be reachable from Data & Export.
+  const errors = [];
+  const { context, page } = await freshPage(errors);
+  await page.goto(BASE);
+  await page.waitForSelector('#main');
+  await createCardViaUI(page, 'Export Me', 'body text');
+  await waitSaved(page);
+
+  const formats = [['Backup (JSON)', '.json'], ['Markdown', '.md'], ['CSV', '.csv'], ['Plain Text', '.txt']];
+  for (const [label, ext] of formats) {
+    await openMenu(page);
+    await page.click('#menuDataHub');
+    const button = `.modal-overlay.show .btn:text-is("${label}")`;
+    await page.waitForSelector(button);
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 8000 }),
+      page.click(button)
+    ]);
+    const name = download.suggestedFilename();
+    check(`${label} export downloads a ${ext} file`, name.endsWith(ext), name);
+    if (ext !== '.json') {
+      const text = readFileSync(await download.path(), 'utf8');
+      check(`${label} export contains the card`, text.includes('Export Me'));
+    }
+  }
   check('no console/page errors', errors.length === 0, errors.join(' | '));
   await context.close();
 });

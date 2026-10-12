@@ -17,7 +17,7 @@
 
 // =============================================================
 // CardSpoke JavaScript Application (Source)
-// Version: 0.21.0
+// Version: 0.21.1
 // Creator: Jeffrey Guntly (https://github.com/jxburros)
 // Maintainer: JX Holdings, LLC (https://jxholdings.com)
 // Schema: v4

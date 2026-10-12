@@ -3,7 +3,7 @@
   "private": true,
   "productName": "CardSpoke",
   "version": "0.21.1",
-  "description": "A lightweight, local-first card-based knowledge app",
+  "description": "A private, local-first notebook where every note is a card.",
   "main": "main.js",
   "author": "Jeffrey Guntly <https://github.com/jxburros>",
   "license": "Apache-2.0",
@@ -111,7 +111,7 @@
       ],
       "category": "Office",
       "icon": "build/icons",
-      "synopsis": "Local-first card-based knowledge app",
+      "synopsis": "Private, local-first notebook of cards",
       "maintainer": "JX Holdings, LLC <https://jxholdings.com>",
       "executableName": "cardspoke"
     },
