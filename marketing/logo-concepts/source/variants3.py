@@ -98,3 +98,29 @@ MARKS = {
     "s5-cards-only": ("Cards only", lambda c="#000000": ladder(letters=False, ink_color=c, sw=24)),
     "s6-two-line": ("Two-line wordmark", lambda c="#000000": two_line(ink_color=c)),
 }
+
+
+def logo_cards(ink_color="#000000"):
+    """s3 rebuilt from 2d's two small side cards: same size, position, line weight and spoke
+    as in the wordmark, with C and S set inside them at the same scale as the cards (0.55)."""
+    L = Logo(**{**APP, "ink_color": ink_color})
+    bw, bh, pad = card_dims(L); g = bh / 10
+    k = 0.55
+    aw, ah = bw * k, bh * k
+    # the 2d layout, relative to the C card's left edge at x = 0
+    ax, ay = -3 * g - aw - 2.5 * g - aw, 0
+    bx, by = -3 * g - aw, bh - ah
+    size = L.size * k
+    from PIL import ImageFont
+    from kit import FONT_DIR, WEIGHTS
+    font = ImageFont.truetype(str(FONT_DIR / WEIGHTS[L.weight]), size)
+    cap = -ink(font, "H")[1]
+    for (x, y, ch) in ((ax, ay, "C"), (bx, by, "S")):
+        L.rect(x, y, aw, ah, name=f"card-{ch}")
+        l, t, r, b = ink(font, ch)
+        L.text(ch, x + aw / 2 - (l + r) / 2, y + (ah - cap) / 2 + cap, name=f"letter-{ch}", size=size)
+    L.wire([(ax + aw / 2, ay + ah), (ax + aw / 2, by + ah / 2), (bx, by + ah / 2)], name="spoke-c-s")
+    return L
+
+
+MARKS["s3b-logo-cards"] = ("Diagonal, logo cards", lambda c="#000000": logo_cards(ink_color=c))

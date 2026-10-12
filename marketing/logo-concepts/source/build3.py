@@ -2,7 +2,8 @@
 
 Each mark is written twice: `NAME.svg` (black on transparent, square canvas) and
 `NAME-tile.svg` (white on a full-bleed #111111 square with the mark inside the
-centre 60%, which keeps it within the maskable-icon safe zone)."""
+centre 60%, which keeps it within the maskable-icon safe zone. Marks in FAVICON also get
+`NAME-favicon.svg`, the tile with the mark filling 86% of it.)"""
 import sys
 from pathlib import Path
 from variants3 import MARKS, TILE
@@ -10,6 +11,7 @@ from variants3 import MARKS, TILE
 OUT = Path(__file__).resolve().parent.parent / "round-3"
 OUT.mkdir(exist_ok=True)
 SIZE = 1024
+FAVICON = {"s3b-logo-cards"}
 
 
 def fit(L, frac):
@@ -30,7 +32,11 @@ def fit(L, frac):
 
 for name in sys.argv[1:] or MARKS:
     _, make = MARKS[name]
-    for suffix, color, frac, tile in (("", "#000000", 0.8, None), ("-tile", "#ffffff", 0.6, TILE)):
+    outputs = [("", "#000000", 0.8, None), ("-tile", "#ffffff", 0.6, TILE)]
+    if name in FAVICON:
+        # browser tabs never crop, so the favicon fills the tile instead of keeping the safe zone
+        outputs.append(("-favicon", "#ffffff", 0.86, TILE))
+    for suffix, color, frac, tile in outputs:
         L = make(color)
         fit(L, frac)
         options = {"square": SIZE}

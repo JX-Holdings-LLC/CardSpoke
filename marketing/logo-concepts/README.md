@@ -72,6 +72,8 @@ never cut into it.
 | `s5-cards-only` | The ladder with no letters and heavier lines, for 16 px favicons. |
 | `s6-two-line` | The full 2d wordmark on two lines, for avatars and social profiles. |
 
+| `s3b-logo-cards` | **Chosen.** s3 rebuilt from 2d's two small side cards: the same boxes, line weight, position and connecting line as in the wordmark, with C and S set inside them. Also exported as `s3b-logo-cards-favicon.svg`, the tile with the mark filling 86% of it, for browser tabs (which never crop). |
+
 Rebuild with `python3 marketing/logo-concepts/source/build3.py`; the geometry is in `source/variants3.py`.
 
 ## Using one in the app
