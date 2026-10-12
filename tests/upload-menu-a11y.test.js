@@ -155,7 +155,7 @@ test('target=_blank links in settings/about carry rel="noopener noreferrer"', ()
   const blanks = systems.match(/target: '_blank'[^}]*/g) || [];
   assert.ok(blanks.length >= 2, 'expected the settings/about links');
   blanks.forEach(b => assert.ok(b.includes("rel: 'noopener noreferrer'"), `missing rel: ${b}`));
-  assert.ok(systems.includes("href: 'https://github.com/jxburros/CardSpoke'"), 'URLs unchanged');
+  assert.ok(systems.includes("href: 'https://github.com/JX-Holdings-LLC/CardSpoke'"), 'URLs unchanged');
 });
 
 test('built bundle includes the upload/menu a11y fixes', () => {

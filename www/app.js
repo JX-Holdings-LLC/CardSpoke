@@ -7563,7 +7563,7 @@ This action cannot be undone!`, {
       ));
       var loading = h("div", { style: "padding: var(--space-md); color: var(--text-muted);" }, "Loading gallery...");
       container.appendChild(loading);
-      fetch("https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/manifest.json").then(function(r) {
+      fetch("https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/manifest.json").then(function(r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       }).then(function(manifest) {
@@ -11478,9 +11478,9 @@ ${prefix}`;
               h(
                 "p",
                 { style: "font-size: var(--text-sm);" },
-                h("a", { href: "https://github.com/jxburros/CardSpoke", target: "_blank", rel: "noopener noreferrer", style: "color: var(--primary);" }, "GitHub"),
+                h("a", { href: "https://github.com/JX-Holdings-LLC/CardSpoke", target: "_blank", rel: "noopener noreferrer", style: "color: var(--primary);" }, "GitHub"),
                 " · ",
-                h("a", { href: "https://github.com/jxburros/CardSpoke/blob/main/README.md", target: "_blank", rel: "noopener noreferrer", style: "color: var(--primary);" }, "Documentation")
+                h("a", { href: "https://github.com/JX-Holdings-LLC/CardSpoke/blob/main/README.md", target: "_blank", rel: "noopener noreferrer", style: "color: var(--primary);" }, "Documentation")
               )
             )
           )

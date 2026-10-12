@@ -2057,7 +2057,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           var loading = h('div', { style: 'padding: var(--space-md); color: var(--text-muted);' }, 'Loading gallery...');
           container.appendChild(loading);
 
-          fetch('https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/manifest.json')
+          fetch('https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/manifest.json')
             .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(function(manifest) {
               loading.remove();

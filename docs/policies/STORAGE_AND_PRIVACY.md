@@ -4,7 +4,7 @@ CardSpoke is local-first. Users own their data, and the app does not silently sy
 
 ## Storage Model
 
-- **LocalStorage:** Lightweight configuration, session data, and feature toggles. Also the default driver for structured card content, relationships, histories, and plugin registries — datasets are namespaced and tracked with metadata (name, card counts, recent/bookmark counts, schema/app version) so multiple vaults can coexist.
+- **LocalStorage:** Lightweight configuration, session data, and feature toggles. Also the default driver for structured card content, relationships, histories, and plugin registries — datasets are namespaced and tracked with metadata (name, card counts, recent/bookmark counts, schema/app version) so multiple datasets can coexist.
 - **IndexedDB:** An optional, per-dataset storage driver users can select instead of LocalStorage for card content and relationships. Also used internally for Local File System handle persistence, unrelated to card storage.
 - **Local File (File System Access API):** An optional, per-dataset driver that writes the dataset to a file the user picks on their own disk. The file handle is persisted in IndexedDB so the app can reopen it; the file itself is never uploaded anywhere.
 - **Desktop data folder:** In the desktop app, every dataset is a plain JSON file in a folder the user chooses (default `Documents/CardSpoke`). The folder is the source of truth; LocalStorage keeps a cache of it. PIN-protected datasets are written as encrypted envelopes. Deleted datasets are moved to the folder's `.trash/` rather than destroyed. Data in a synced folder (for example Dropbox or OneDrive) is uploaded by that sync client, not by CardSpoke. See the [Desktop guide](../guides/DESKTOP.md#where-data-lives).
@@ -24,8 +24,9 @@ encrypted JSON envelope rather than plaintext:
 - **Applies across backends:** switching a PIN-protected dataset to the
   IndexedDB or Local File driver re-encrypts on the way out, so plaintext is
   never written to the target backend.
-- **Not covered:** user-initiated exports are written in plaintext (see Backup &
-  Export Guidance below), and a PIN protects data at rest — it is not a
+- **Exports:** a JSON backup of a PIN-protected dataset is encrypted with the
+  same envelope by default; Markdown, CSV and TXT copies are plaintext (see
+  Backup & Export Guidance below). A PIN protects data at rest — it is not a
   guarantee against someone with access to the unlocked, running app.
 
 Implementation: `www/src/core/dataset-crypto.js`.
@@ -35,7 +36,7 @@ Implementation: `www/src/core/dataset-crypto.js`.
 - No automatic cloud sync or telemetry.
 - No analytics or tracking beacons are built into the core.
 - **The one outbound connection.** Opening the Gallery tab in the Plugin Manager
-  fetches `https://raw.githubusercontent.com/jxburros/CardSpoke/main/sample-plugins/manifest.json`
+  fetches `https://raw.githubusercontent.com/JX-Holdings-LLC/CardSpoke/main/sample-plugins/manifest.json`
   to list curated sample plugins, and installing from that gallery downloads the
   chosen package. Nothing is sent but the request itself — no card data, no
   identifiers — but like any web request it does reveal the user's IP address and
@@ -57,7 +58,7 @@ Implementation: `www/src/core/dataset-crypto.js`.
 ## User Controls
 
 - Provide clear settings to opt into any off-device storage/integration.
-- Offer data export/import paths (JSON or other agreed formats) to preserve portability. The UI exports datasets as JSON, CSV, Markdown, or TXT under `cardspoke-*` filenames (JSON as `cardspoke-<type>-<timestamp>.json`, e.g. `cardspoke-instance-1719936000000.json`; CSV/Markdown/TXT as `cardspoke-<YYYY-MM-DD>.<ext>`), and maintains timestamped backups for rollback.
+- Offer data export/import paths (JSON or other agreed formats) to preserve portability. Data & Export downloads a dataset as a JSON backup, Markdown, CSV, or plain text under `cardspoke-*` filenames (JSON as `cardspoke-<type>-<timestamp>.json`, e.g. `cardspoke-instance-1719936000000.json`, or `.encrypted.json` for an encrypted backup; CSV/Markdown/TXT as `cardspoke-<YYYY-MM-DD>.<ext>`).
 - Surface active plugins and their data-touching permissions.
 
 ## Security Considerations
@@ -76,7 +77,7 @@ Implementation: `www/src/core/dataset-crypto.js`.
 
 - Recommended backup cadence: before major edits/imports/plugin installs, and at regular intervals for active datasets.
 - Supported backup/export formats in current app flows: JSON, CSV, Markdown, TXT.
-- Encryption-at-export is not built in yet. Note that this is separate from dataset encryption at rest: exporting a PIN-protected dataset writes plaintext. Users handling sensitive data should encrypt exported files using trusted external tools before sharing or cloud sync.
+- Exporting a JSON backup of a PIN-protected dataset offers an encrypted backup (the default) or an unencrypted one; the encrypted backup can only be imported with the dataset PIN. Markdown, CSV and TXT copies are always plaintext, and the app asks for confirmation before writing one from a PIN-protected dataset. Users handling sensitive data should encrypt those files with trusted external tools before sharing or cloud sync.
 
 ## Plugin trust and secondary storage
 

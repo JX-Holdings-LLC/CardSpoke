@@ -1849,9 +1849,9 @@ import {
                 h('div', { style: 'padding-top: var(--space-md); border-top: 1px solid var(--border); text-align: center; color: var(--text-secondary);' },
                   h('p', {}, `CardSpoke v${APP_VERSION}`),
                   h('p', { style: 'font-size: var(--text-sm);' },
-                    h('a', { href: 'https://github.com/jxburros/CardSpoke', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'GitHub'),
+                    h('a', { href: 'https://github.com/JX-Holdings-LLC/CardSpoke', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'GitHub'),
                     ' · ',
-                    h('a', { href: 'https://github.com/jxburros/CardSpoke/blob/main/README.md', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'Documentation')
+                    h('a', { href: 'https://github.com/JX-Holdings-LLC/CardSpoke/blob/main/README.md', target: '_blank', rel: 'noopener noreferrer', style: 'color: var(--primary);' }, 'Documentation')
                   )
                 )
               )

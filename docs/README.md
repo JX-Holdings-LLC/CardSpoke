@@ -1,14 +1,15 @@
 # CardSpoke Documentation
 
-CardSpoke is a local-first, card-based knowledge app. This documentation describes the public 0.21.1 preview, maintained by [Jeffrey Guntly](https://github.com/jxburros) and [JX Holdings, LLC](https://jxholdings.com).
+CardSpoke is a private, local-first notebook where every note is a card. This documentation describes the public 0.21.1 preview, maintained by [Jeffrey Guntly](https://github.com/jxburros) and [JX Holdings, LLC](https://jxholdings.com).
 
 ## Choose a starting point
 
 | If you are… | Start here |
 | --- | --- |
-| Using CardSpoke | [Feature Catalog](./guides/FEATURES.md), then [Storage & Privacy](./policies/STORAGE_AND_PRIVACY.md) |
-| Setting up a development environment | [Developer Guide](./guides/DEVELOPER_GUIDE.md) |
-| Building a plugin | [Standalone Authoring Guide](./guides/PLUGIN_AUTHORING_GUIDE.md), then [Advanced Examples](../sample-plugins/advanced/README.md) |
+| Using CardSpoke | [Feature Guide](./guides/FEATURES.md), then [Storage & Privacy](./policies/STORAGE_AND_PRIVACY.md) |
+| Using the desktop app | [Desktop guide](./guides/DESKTOP.md) |
+| Building a plugin | [Plugin Authoring Guide](./guides/PLUGIN_AUTHORING_GUIDE.md), then [Advanced Examples](../sample-plugins/advanced/README.md) and the [Plugin API](./api/PLUGIN_API.md) |
+| Working on CardSpoke itself | [Developer Guide](./guides/DEVELOPER_GUIDE.md) |
 | Scripting CardSpoke or driving it from an AI agent | [CLI guide](./guides/CLI.md) |
 | Reviewing a change with an AI agent or as a maintainer | [AI & Contributor Context](./AI_CONTEXT.md) |
 | Preparing a release | [Release & Versioning](./policies/RELEASE_AND_VERSIONING.md) and [CHANGELOG](../CHANGELOG.md) |
@@ -27,4 +28,4 @@ CardSpoke is a local-first, card-based knowledge app. This documentation describ
 
 The current product contract is owned by the source code, `package.json`, the app metadata in `www/src/state.js`, and the current policy/reference documents. Historical reports and changelog entries describe their release dates only. If documents disagree, follow the precedence in [AI & Contributor Context](./AI_CONTEXT.md) and correct the lower-authority document in the same change.
 
-The project repository is [jxburros/CardSpoke](https://github.com/jxburros/CardSpoke).
+The project repository is [JX-Holdings-LLC/CardSpoke](https://github.com/JX-Holdings-LLC/CardSpoke).

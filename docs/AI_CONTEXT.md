@@ -7,7 +7,7 @@ This is the compact review guide for people and AI agents changing CardSpoke 0.2
 - **Product:** CardSpoke, a lightweight local-first card-based knowledge app.
 - **Creator:** [Jeffrey Guntly](https://github.com/jxburros).
 - **Maintainer:** [JX Holdings, LLC](https://jxholdings.com).
-- **Canonical repository:** [jxburros/CardSpoke](https://github.com/jxburros/CardSpoke).
+- **Canonical repository:** [JX-Holdings-LLC/CardSpoke](https://github.com/JX-Holdings-LLC/CardSpoke).
 - **Current public preview:** 0.21.1; schema version 4.
 
 ## Source-of-truth order

@@ -8,7 +8,7 @@ CardSpoke is the main local-first web app. The public repository should focus on
 
 ## Product Definition
 
-CardSpoke is a lightweight, local-first, card-based knowledge app for organizing information in flexible card trees.
+CardSpoke is a private, local-first notebook where every note is a card, organized in flexible card trees.
 
 It should help users:
 
