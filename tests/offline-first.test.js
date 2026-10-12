@@ -1,6 +1,6 @@
 import { test } from 'uvu';
 import * as assert from 'uvu/assert';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
 function read(path) {
   return readFileSync(new URL('../' + path, import.meta.url), 'utf8');
@@ -13,6 +13,31 @@ test('web app declares an installable offline app shell', () => {
   assert.ok(index.includes('app-loader.js'));
 });
 
+test('web app declares square icons that exist', () => {
+  const index = read('www/index.html');
+  assert.ok(index.includes('rel="icon" href="favicon.svg"'));
+  assert.ok(index.includes('rel="icon" href="favicon.ico"'));
+  assert.ok(index.includes('rel="apple-touch-icon" href="apple-touch-icon.png"'));
+  const manifest = JSON.parse(read('www/manifest.webmanifest'));
+  const sizes = manifest.icons.map((icon) => icon.sizes);
+  assert.ok(sizes.includes('192x192') && sizes.includes('512x512'));
+  // The wide wordmark must not be the install icon: launchers crop it to a square.
+  assert.not.ok(manifest.icons.some((icon) => icon.src === 'CardSpoke.svg'));
+  for (const icon of manifest.icons) {
+    assert.ok(existsSync(new URL('../www/' + icon.src, import.meta.url)), icon.src);
+    if (icon.type === 'image/png') {
+      // PNG IHDR: width and height are big-endian at bytes 16 and 20.
+      const data = readFileSync(new URL('../www/' + icon.src, import.meta.url));
+      const [w, h] = icon.sizes.split('x').map(Number);
+      assert.is(data.readUInt32BE(16), w, icon.src + ' width');
+      assert.is(data.readUInt32BE(20), h, icon.src + ' height');
+    }
+  }
+  for (const file of ['favicon.svg', 'favicon.ico', 'apple-touch-icon.png']) {
+    assert.ok(existsSync(new URL('../www/' + file, import.meta.url)), file);
+  }
+});
+
 test('service worker caches app shell assets', () => {
   const worker = read('www/service-worker.js');
   assert.ok(worker.includes('CACHE_VERSION'));
@@ -20,6 +45,7 @@ test('service worker caches app shell assets', () => {
   assert.ok(worker.includes('./app.js'));
   assert.ok(worker.includes('./styles.css'));
   assert.ok(worker.includes('./offline-status.js'));
+  assert.ok(worker.includes('./favicon.svg'));
   assert.ok(worker.includes('url.origin !== self.location.origin'));
   assert.ok(worker.includes('response.status === 200'));
   assert.ok(worker.includes("response.type === 'basic'"));

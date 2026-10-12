@@ -58,6 +58,8 @@ The browser build includes a service worker for local app-shell assets. It shoul
 - `offline-status.js`
 - `app.js`
 - `CardSpoke.svg`
+- `favicon.svg`
+- `icon-192.png`
 - `manifest.webmanifest`
 
 Do not place user datasets, exports, plugin secrets, credentials, or cloud payloads in service-worker Cache Storage.

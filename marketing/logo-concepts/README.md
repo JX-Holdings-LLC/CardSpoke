@@ -71,25 +71,12 @@ never cut into it.
 | `s4-cluster` | Only the C card, fed by the two side cards. |
 | `s5-cards-only` | The ladder with no letters and heavier lines, for 16 px favicons. |
 | `s6-two-line` | The full 2d wordmark on two lines, for avatars and social profiles. |
-
 | `s3b-logo-cards` | **Chosen.** s3 rebuilt from 2d's two small side cards: the same boxes, line weight, position and connecting line as in the wordmark, with C and S set inside them. Also exported as `s3b-logo-cards-favicon.svg`, the tile with the mark filling 86% of it, for browser tabs (which never crop). |
 
 Rebuild with `python3 marketing/logo-concepts/source/build3.py`; the geometry is in `source/variants3.py`.
 
-## Using one in the app
+## The chosen logo
 
-Variants 01–09 drop in without changing the app. They are black on a transparent background with a
-tight viewBox, so the existing `.brand-logo` rules (`height: 64px; width: auto` and the dark mode
-`filter: invert(1)`) keep working. Copy the chosen SVG over `www/CardSpoke.svg` (and the root
-`CardSpoke.svg`). At 32–36 px (the mobile header) 02, 03, 05 and 08 stay legible, while 01 and 04
-get busy.
-
-`10-app-icon` can replace `desktop/build/icon.svg`. `manifest.webmanifest` currently points its
-`any maskable` icon at the wide wordmark; a square icon such as the 09/10 glyph would fit that slot better.
-
-## Rebuilding
-
-`source/` holds the generator. With Vixl installed and Inter in `/usr/share/fonts/opentype/inter`
-(edit `kit.FONT_DIR` otherwise), run `python3 marketing/logo-concepts/source/build.py`. The geometry
-for each variant is in `source/variants.py`. You can also open the `.vixl` files and edit their
-layers (`card-*`, `spoke-*`, `letter-*`, `word-*`) directly with the `vixl` CLI.
+2d is the wordmark and s3b is the icon. They are in use in the app, and the logo package built from them is in
+[`brand/`](../../brand/README.md). `source/masters.py` writes their editable masters to `brand/master/`, and
+`brand/build.py` builds the package and the app's logo and icon files from those masters.

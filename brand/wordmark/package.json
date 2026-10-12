@@ -1,0 +1,112 @@
+{
+  "package": "wordmark",
+  "lockups": [
+    "logo"
+  ],
+  "variants": [
+    "full-color",
+    "mono-black",
+    "mono-white",
+    "on-light",
+    "on-dark"
+  ],
+  "light": "#ffffff",
+  "dark": "#111111",
+  "png_sizes": [
+    256,
+    512,
+    1024
+  ],
+  "files": [
+    "wordmark/pdf/logo-full-color.pdf",
+    "wordmark/pdf/logo-mono-black.pdf",
+    "wordmark/pdf/logo-mono-white.pdf",
+    "wordmark/pdf/logo-on-dark.pdf",
+    "wordmark/pdf/logo-on-light.pdf",
+    "wordmark/png/logo-full-color-1024w@1x.png",
+    "wordmark/png/logo-full-color-1024w@2x.png",
+    "wordmark/png/logo-full-color-1024w@3x.png",
+    "wordmark/png/logo-full-color-256w@1x.png",
+    "wordmark/png/logo-full-color-256w@2x.png",
+    "wordmark/png/logo-full-color-256w@3x.png",
+    "wordmark/png/logo-full-color-512w@1x.png",
+    "wordmark/png/logo-full-color-512w@2x.png",
+    "wordmark/png/logo-full-color-512w@3x.png",
+    "wordmark/png/logo-mono-black-1024w@1x.png",
+    "wordmark/png/logo-mono-black-1024w@2x.png",
+    "wordmark/png/logo-mono-black-1024w@3x.png",
+    "wordmark/png/logo-mono-black-256w@1x.png",
+    "wordmark/png/logo-mono-black-256w@2x.png",
+    "wordmark/png/logo-mono-black-256w@3x.png",
+    "wordmark/png/logo-mono-black-512w@1x.png",
+    "wordmark/png/logo-mono-black-512w@2x.png",
+    "wordmark/png/logo-mono-black-512w@3x.png",
+    "wordmark/png/logo-mono-white-1024w@1x.png",
+    "wordmark/png/logo-mono-white-1024w@2x.png",
+    "wordmark/png/logo-mono-white-1024w@3x.png",
+    "wordmark/png/logo-mono-white-256w@1x.png",
+    "wordmark/png/logo-mono-white-256w@2x.png",
+    "wordmark/png/logo-mono-white-256w@3x.png",
+    "wordmark/png/logo-mono-white-512w@1x.png",
+    "wordmark/png/logo-mono-white-512w@2x.png",
+    "wordmark/png/logo-mono-white-512w@3x.png",
+    "wordmark/png/logo-on-dark-1024w@1x.png",
+    "wordmark/png/logo-on-dark-1024w@2x.png",
+    "wordmark/png/logo-on-dark-1024w@3x.png",
+    "wordmark/png/logo-on-dark-256w@1x.png",
+    "wordmark/png/logo-on-dark-256w@2x.png",
+    "wordmark/png/logo-on-dark-256w@3x.png",
+    "wordmark/png/logo-on-dark-512w@1x.png",
+    "wordmark/png/logo-on-dark-512w@2x.png",
+    "wordmark/png/logo-on-dark-512w@3x.png",
+    "wordmark/png/logo-on-light-1024w@1x.png",
+    "wordmark/png/logo-on-light-1024w@2x.png",
+    "wordmark/png/logo-on-light-1024w@3x.png",
+    "wordmark/png/logo-on-light-256w@1x.png",
+    "wordmark/png/logo-on-light-256w@2x.png",
+    "wordmark/png/logo-on-light-256w@3x.png",
+    "wordmark/png/logo-on-light-512w@1x.png",
+    "wordmark/png/logo-on-light-512w@2x.png",
+    "wordmark/png/logo-on-light-512w@3x.png",
+    "wordmark/social/avatar.png",
+    "wordmark/social/og-image.png",
+    "wordmark/source/logo-full-color.vixl",
+    "wordmark/source/logo-mono-black.vixl",
+    "wordmark/source/logo-mono-white.vixl",
+    "wordmark/source/logo-on-dark.vixl",
+    "wordmark/source/logo-on-light.vixl",
+    "wordmark/source/social-avatar.vixl",
+    "wordmark/source/social-og-image.vixl",
+    "wordmark/svg/logo-full-color.svg",
+    "wordmark/svg/logo-mono-black.svg",
+    "wordmark/svg/logo-mono-white.svg",
+    "wordmark/svg/logo-on-dark.svg",
+    "wordmark/svg/logo-on-light.svg",
+    "wordmark/usage.html"
+  ],
+  "usage": {
+    "full-color": "Primary logo. Use on white or light, plain backgrounds.",
+    "mono-black": "One-colour black: fax, stamps, engraving, single-ink print and light backgrounds.",
+    "mono-white": "Reversed (white): dark photos and dark brand colours. Transparent background.",
+    "on-light": "Logo on the light brand background, ready to place.",
+    "on-dark": "Logo on the dark brand background, ready to place."
+  },
+  "report": {
+    "variants": {
+      "logo-mono-black": {
+        "colors_replaced": 11
+      },
+      "logo-mono-white": {
+        "colors_replaced": 11
+      },
+      "logo-on-light": {
+        "contrast": 21.0
+      },
+      "logo-on-dark": {
+        "colors_replaced": 11,
+        "reversed": "the full-colour logo's average colour has only 1.1:1 contrast on #111111, so this variant uses the one-colour white logo"
+      }
+    },
+    "formats": "SVG (strict), PDF (RGB), PNG at 1x/2x/3x, social avatar and Open Graph image. No EPS: use the PDF or SVG."
+  }
+}

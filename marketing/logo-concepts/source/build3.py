@@ -30,20 +30,21 @@ def fit(L, frac):
     L.sw *= k
 
 
-for name in sys.argv[1:] or MARKS:
-    _, make = MARKS[name]
-    outputs = [("", "#000000", 0.8, None), ("-tile", "#ffffff", 0.6, TILE)]
-    if name in FAVICON:
-        # browser tabs never crop, so the favicon fills the tile instead of keeping the safe zone
-        outputs.append(("-favicon", "#ffffff", 0.86, TILE))
-    for suffix, color, frac, tile in outputs:
-        L = make(color)
-        fit(L, frac)
-        options = {"square": SIZE}
-        if tile:
-            options.update(tile=(0, 0, SIZE, SIZE, tile))
-        project = L.build(**options)
-        project.save(str(OUT / f"{name}{suffix}.vixl"), overwrite=True)
-        project.export(str(OUT / f"{name}{suffix}.svg"), overwrite=True)
-        project.export(str(OUT / f"{name}{suffix}.png"), overwrite=True)
-    print(name)
+if __name__ == "__main__":
+    for name in sys.argv[1:] or MARKS:
+        _, make = MARKS[name]
+        outputs = [("", "#000000", 0.8, None), ("-tile", "#ffffff", 0.6, TILE)]
+        if name in FAVICON:
+            # browser tabs never crop, so the favicon fills the tile instead of keeping the safe zone
+            outputs.append(("-favicon", "#ffffff", 0.86, TILE))
+        for suffix, color, frac, tile in outputs:
+            L = make(color)
+            fit(L, frac)
+            options = {"square": SIZE}
+            if tile:
+                options.update(tile=(0, 0, SIZE, SIZE, tile))
+            project = L.build(**options)
+            project.save(str(OUT / f"{name}{suffix}.vixl"), overwrite=True)
+            project.export(str(OUT / f"{name}{suffix}.svg"), overwrite=True)
+            project.export(str(OUT / f"{name}{suffix}.png"), overwrite=True)
+        print(name)

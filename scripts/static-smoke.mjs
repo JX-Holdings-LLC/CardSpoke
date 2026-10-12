@@ -49,7 +49,9 @@ function read(rel) {
 // ── Site completeness ────────────────────────────────────────────────────
 const SITE_FILES = [
   'www/index.html', 'www/styles.css', 'www/app.js', 'www/app-loader.js',
-  'www/service-worker.js', 'www/manifest.webmanifest', 'www/offline-status.js'
+  'www/service-worker.js', 'www/manifest.webmanifest', 'www/offline-status.js',
+  'www/CardSpoke.svg', 'www/favicon.svg', 'www/favicon.ico', 'www/apple-touch-icon.png',
+  'www/icon-192.png', 'www/icon-512.png'
 ];
 for (const file of SITE_FILES) {
   check(`${file} exists`, existsSync(resolve(ROOT, file)));

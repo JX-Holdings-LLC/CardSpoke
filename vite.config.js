@@ -488,6 +488,8 @@ export default defineConfig({
           'index.html', 'styles.css', 'manifest.webmanifest',
           'service-worker.js', 'capacitor.js', 'offline-status.js',
           'app-loader.js', 'CardSpoke.svg', 'capabilities.json',
+          // Favicons and the installable-app icons (built by brand/build.py).
+          'favicon.svg', 'favicon.ico', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png',
           // diagnostic.html / test.html are dev-only harnesses (they read
           // localStorage and fetch+eval the bundle) and are deliberately NOT
           // part of the built site — see DEV_ONLY_PAGES below.

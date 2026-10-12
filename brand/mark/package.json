@@ -1,0 +1,112 @@
+{
+  "package": "mark",
+  "lockups": [
+    "logo"
+  ],
+  "variants": [
+    "full-color",
+    "mono-black",
+    "mono-white",
+    "on-light",
+    "on-dark"
+  ],
+  "light": "#ffffff",
+  "dark": "#111111",
+  "png_sizes": [
+    64,
+    256,
+    512
+  ],
+  "files": [
+    "mark/pdf/logo-full-color.pdf",
+    "mark/pdf/logo-mono-black.pdf",
+    "mark/pdf/logo-mono-white.pdf",
+    "mark/pdf/logo-on-dark.pdf",
+    "mark/pdf/logo-on-light.pdf",
+    "mark/png/logo-full-color-256w@1x.png",
+    "mark/png/logo-full-color-256w@2x.png",
+    "mark/png/logo-full-color-256w@3x.png",
+    "mark/png/logo-full-color-512w@1x.png",
+    "mark/png/logo-full-color-512w@2x.png",
+    "mark/png/logo-full-color-512w@3x.png",
+    "mark/png/logo-full-color-64w@1x.png",
+    "mark/png/logo-full-color-64w@2x.png",
+    "mark/png/logo-full-color-64w@3x.png",
+    "mark/png/logo-mono-black-256w@1x.png",
+    "mark/png/logo-mono-black-256w@2x.png",
+    "mark/png/logo-mono-black-256w@3x.png",
+    "mark/png/logo-mono-black-512w@1x.png",
+    "mark/png/logo-mono-black-512w@2x.png",
+    "mark/png/logo-mono-black-512w@3x.png",
+    "mark/png/logo-mono-black-64w@1x.png",
+    "mark/png/logo-mono-black-64w@2x.png",
+    "mark/png/logo-mono-black-64w@3x.png",
+    "mark/png/logo-mono-white-256w@1x.png",
+    "mark/png/logo-mono-white-256w@2x.png",
+    "mark/png/logo-mono-white-256w@3x.png",
+    "mark/png/logo-mono-white-512w@1x.png",
+    "mark/png/logo-mono-white-512w@2x.png",
+    "mark/png/logo-mono-white-512w@3x.png",
+    "mark/png/logo-mono-white-64w@1x.png",
+    "mark/png/logo-mono-white-64w@2x.png",
+    "mark/png/logo-mono-white-64w@3x.png",
+    "mark/png/logo-on-dark-256w@1x.png",
+    "mark/png/logo-on-dark-256w@2x.png",
+    "mark/png/logo-on-dark-256w@3x.png",
+    "mark/png/logo-on-dark-512w@1x.png",
+    "mark/png/logo-on-dark-512w@2x.png",
+    "mark/png/logo-on-dark-512w@3x.png",
+    "mark/png/logo-on-dark-64w@1x.png",
+    "mark/png/logo-on-dark-64w@2x.png",
+    "mark/png/logo-on-dark-64w@3x.png",
+    "mark/png/logo-on-light-256w@1x.png",
+    "mark/png/logo-on-light-256w@2x.png",
+    "mark/png/logo-on-light-256w@3x.png",
+    "mark/png/logo-on-light-512w@1x.png",
+    "mark/png/logo-on-light-512w@2x.png",
+    "mark/png/logo-on-light-512w@3x.png",
+    "mark/png/logo-on-light-64w@1x.png",
+    "mark/png/logo-on-light-64w@2x.png",
+    "mark/png/logo-on-light-64w@3x.png",
+    "mark/social/avatar.png",
+    "mark/social/og-image.png",
+    "mark/source/logo-full-color.vixl",
+    "mark/source/logo-mono-black.vixl",
+    "mark/source/logo-mono-white.vixl",
+    "mark/source/logo-on-dark.vixl",
+    "mark/source/logo-on-light.vixl",
+    "mark/source/social-avatar.vixl",
+    "mark/source/social-og-image.vixl",
+    "mark/svg/logo-full-color.svg",
+    "mark/svg/logo-mono-black.svg",
+    "mark/svg/logo-mono-white.svg",
+    "mark/svg/logo-on-dark.svg",
+    "mark/svg/logo-on-light.svg",
+    "mark/usage.html"
+  ],
+  "usage": {
+    "full-color": "Primary logo. Use on white or light, plain backgrounds.",
+    "mono-black": "One-colour black: fax, stamps, engraving, single-ink print and light backgrounds.",
+    "mono-white": "Reversed (white): dark photos and dark brand colours. Transparent background.",
+    "on-light": "Logo on the light brand background, ready to place.",
+    "on-dark": "Logo on the dark brand background, ready to place."
+  },
+  "report": {
+    "variants": {
+      "logo-mono-black": {
+        "colors_replaced": 5
+      },
+      "logo-mono-white": {
+        "colors_replaced": 5
+      },
+      "logo-on-light": {
+        "contrast": 21.0
+      },
+      "logo-on-dark": {
+        "colors_replaced": 5,
+        "reversed": "the full-colour logo's average colour has only 1.1:1 contrast on #111111, so this variant uses the one-colour white logo"
+      }
+    },
+    "formats": "SVG (strict), PDF (RGB), PNG at 1x/2x/3x, social avatar and Open Graph image. No EPS: use the PDF or SVG."
+  }
+}

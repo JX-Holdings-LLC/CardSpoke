@@ -212,6 +212,7 @@ Mobile builds should be treated as experimental until platform-specific security
 - `www/src/core/` - Plugin runtime modules used by the main CardSpoke app.
 - `cli/` - Command-line interface for editing CardSpoke JSON files.
 - `desktop/` - Electron desktop shell and installer configuration.
+- `brand/` - The logo package: wordmark and icon in every format, app icons, and the usage guide.
 - `tests/` - Automated uvu tests.
 - `docs/` - User, developer, API, policy, and release documentation.
 - `sample-plugins/` - Example plugin packages.
@@ -229,6 +230,7 @@ Start with the [Documentation home](./docs/README.md) for a role-based map and t
 - [Capacitor Guide](./docs/guides/README.CAPACITOR.md)
 - [Deviation Guide](./docs/guides/DEVIATION_GUIDE.md)
 - [Feature Catalog](./docs/guides/FEATURES.md)
+- [Brand Guide](./brand/README.md): the logo, icon, colors and which file to use
 
 ### API and Schema
 
