@@ -11,8 +11,8 @@
         "duration": 5000
       },
       {
-        "source": "scenes/02-shape.vixl",
-        "duration": 6500,
+        "source": "scenes/02-origin.vixl",
+        "duration": 7000,
         "transition": 400
       },
       {
@@ -27,27 +27,27 @@
       },
       {
         "source": "scenes/05-search.vixl",
-        "duration": 6000,
+        "duration": 5500,
         "transition": 400
       },
       {
-        "source": "scenes/06-themes.vixl",
-        "duration": 7000,
+        "source": "scenes/06-you.vixl",
+        "duration": 5000,
         "transition": 400
       },
       {
-        "source": "scenes/07-local.vixl",
+        "source": "scenes/07-themes.vixl",
         "duration": 7000,
         "transition": 400
       },
       {
         "source": "scenes/08-plugins.vixl",
-        "duration": 6500,
+        "duration": 9000,
         "transition": 400
       },
       {
-        "source": "scenes/09-everywhere.vixl",
-        "duration": 6000,
+        "source": "scenes/09-yours.vixl",
+        "duration": 7000,
         "transition": 400
       },
       {
