@@ -10,6 +10,16 @@ WEIGHTS = {"Regular": "Inter-Regular.otf", "Medium": "Inter-Medium.otf",
            "SemiBold": "Inter-SemiBold.otf", "Bold": "Inter-Bold.otf"}
 
 
+def ink_tracked(font, text, tracking=0):
+    """Ink box of text with `tracking` px added after every character (Vixl's tracking)."""
+    if not tracking or len(text) < 2:
+        return ink(font, text)
+    l, t, r, b = ink(font, text)
+    first, last = ink(font, text[0]), ink(font, text[-1])
+    right = font.getlength(text[:-1]) + (len(text) - 1) * tracking + last[2]
+    return first[0], t, right, b
+
+
 def ink(font, text):
     """Ink box of text drawn with its pen origin at (0, 0) on the baseline: (l, t, r, b)."""
     img = Image.new("L", (int(font.size * (len(text) + 2)), int(font.size * 3)), 0)
@@ -43,12 +53,13 @@ class Logo:
 
     def text(self, s, x, baseline, name=None, color=None, size=None, weight=None):
         self.items.append(("text", dict(s=s, x=x, baseline=baseline, name=name, color=color,
-                                        size=size or self.size, weight=weight or self.weight)))
+                                        size=size or self.size, weight=weight or self.weight,
+                                        tracking=self.tracking if len(s) > 1 else 0)))
 
     def run_ink(self, s, size=None, weight=None):
         f = self.font if size is None and weight is None else ImageFont.truetype(
             str(FONT_DIR / WEIGHTS[weight or self.weight]), size or self.size)
-        return ink(f, s)
+        return ink_tracked(f, s, self.tracking)
 
     def advance(self, s):
         return self.font.getlength(s) + self.tracking * len(s)
@@ -87,7 +98,7 @@ class Logo:
                 while j < len(letters) and j not in idx:
                     j += 1
                 run = letters[i:j]
-                l, t, r, b = ink(self.font, run)
+                l, t, r, b = ink_tracked(self.font, run, self.tracking)
                 rx = x + (gap if i else 0) - l
                 self.text(run, rx, baseline, name=f"word-{run}", color=text_color)
                 out["runs"].append((run, rx + l, rx + r))
@@ -112,7 +123,7 @@ class Logo:
                 xs += [d["cx"] - d["d"] / 2, d["cx"] + d["d"] / 2]; ys += [d["cy"] - d["d"] / 2, d["cy"] + d["d"] / 2]
             else:
                 f = ImageFont.truetype(str(FONT_DIR / WEIGHTS[d["weight"]]), d["size"])
-                l, t, r, b = ink(f, d["s"])
+                l, t, r, b = ink_tracked(f, d["s"], d.get("tracking", 0))
                 xs += [d["x"] + l, d["x"] + r]; ys += [d["baseline"] + t, d["baseline"] + b]
         return min(xs), min(ys), max(xs), max(ys)
 
@@ -158,7 +169,7 @@ class Logo:
             else:
                 ops.append({"type": "text", "name": d["name"] or f"text-{n}", "text": d["s"], "size": d["size"],
                             "font": f"Inter{d['weight']}", "x": d["x"] + dx, "baseline_y": d["baseline"] + dy,
-                            "color": color, "tracking": 0})
+                            "color": color, "tracking": d.get("tracking", 0)})
         p.apply(ops)
         return p
 

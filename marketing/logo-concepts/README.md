@@ -28,6 +28,33 @@ of the wordmark are cards too. The cleanup in all ten:
 | `09-lockup` | A standalone card-and-spoke icon next to a plain wordmark. |
 | `10-app-icon` | That icon on the 1024 px rounded tile used by `desktop/build/icon.svg`. |
 
+## Round 2
+
+Variations on the four favorites (02, 03, 05, 09), in `round-2/`. The last version in each family
+(`-app`) matches the app's look: the wordmark uses the app's heading style (Inter Bold, letter
+spacing -0.03em) and the lines are heavier and square-cornered, like the app's 2 px button borders.
+
+| File | Idea |
+| --- | --- |
+| `02a-compact-over` | The long spoke runs above the wordmark instead of below it. |
+| `02b-compact-single` | One side card instead of two. |
+| `02c-compact-row` | The side cards grow toward the C and share one bottom edge. |
+| `02d-compact-app` | 02 matched to the app. |
+| `03a-linked-under` | The link runs below the boxes. |
+| `03b-linked-nodes` | Dots where the spoke meets each card. |
+| `03c-linked-heavy` | Double-weight lines and a SemiBold wordmark. |
+| `03d-linked-app` | 03 matched to the app. |
+| `05a-knockout-linked` | Solid C and S cards joined by one spoke (03 + 05). |
+| `05b-knockout-solid` | The side cards are solid too. |
+| `05c-knockout-shadow` | Outlined cards lifted on solid offset shadows. |
+| `05d-knockout-app` | 05 matched to the app. |
+| `09a-lockup-stacked` | The icon above the wordmark. |
+| `09b-lockup-two-weight` | Card in Bold, Spoke in Regular. |
+| `09c-lockup-mini` | A simpler two-card icon for favicon sizes. |
+| `09d-lockup-app` | 09 matched to the app. |
+
+Rebuild round 2 with `python3 marketing/logo-concepts/source/build2.py`; the geometry is in `source/variants2.py`.
+
 ## Using one in the app
 
 Variants 01–09 drop in without changing the app. They are black on a transparent background with a
