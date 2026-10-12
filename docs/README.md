@@ -23,6 +23,7 @@ CardSpoke is a private, local-first notebook where every note is a card. This do
 - [`specifications/`](./specifications/) — product scope and longer-term specification material.
 - [`analysis/`](./analysis/) — functional reviews and analysis write-ups.
 - [`reports/`](./reports/) — dated historical audits; these record past findings and are not current release documentation.
+- [`../brand/`](../brand/README.md) — the logo, icons and brand guide, and the files the app uses.
 
 ## Documentation status and authority
 

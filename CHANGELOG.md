@@ -51,6 +51,13 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
   local-first notebook where every note is a card."
 - **Data & Export dialog.** The dialog is titled Data & Export (was Dataset
   Information); **Switch Dataset** is now **Manage Datasets**.
+- **New logo and icons.** The logo is redrawn on one grid with one line
+  weight, set in Inter Bold like the app's headings. A new square icon (the C
+  and S cards from the logo, joined by a spoke) replaces the old glyph on the
+  desktop app icon. The web app now has a favicon, an iOS home screen icon and
+  square install icons; the install manifest used the wide wordmark before,
+  which launchers cropped. `brand/` holds the logo package (SVG, PDF and PNG
+  variants, social images, every icon size) and the [brand guide](brand/README.md).
 
 ### Fixed
 

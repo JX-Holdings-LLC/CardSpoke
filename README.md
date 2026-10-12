@@ -108,7 +108,7 @@ CardSpoke is a public preview. It does not currently offer:
 
 ## Working on CardSpoke itself
 
-To build CardSpoke from source, run the tests or package the desktop and mobile apps, see the [Developer Guide](./docs/guides/DEVELOPER_GUIDE.md) and [Contributing](./CONTRIBUTING.md). The [documentation home](./docs/README.md) maps everything else.
+To build CardSpoke from source, run the tests or package the desktop and mobile apps, see the [Developer Guide](./docs/guides/DEVELOPER_GUIDE.md) and [Contributing](./CONTRIBUTING.md). The [documentation home](./docs/README.md) maps everything else. The logo, icons and brand guide are in [`brand/`](./brand/README.md).
 
 ## Credits
 

@@ -31,6 +31,7 @@ Do not add OS-specific shells, alternate app suites, typed-card domain systems, 
 - `www/src/core/` - Plugin runtime modules used by the main app.
 - `cli/` - Command-line interface for editing CardSpoke JSON files.
 - `desktop/` - Electron desktop shell and installer configuration.
+- `brand/` - The logo package: wordmark and icon in every format, app icons, and the [brand guide](../../brand/README.md).
 - `tests/` - uvu test suites for the public app and plugin system.
 - `marketing/` - Promo video source, built from screenshots of the real app.
 - `docs/` - Project documentation.
