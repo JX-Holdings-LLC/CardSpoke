@@ -1,5 +1,6 @@
 /*
- * Captures the real CardSpoke app (www/) with the demo dataset for the marketing video.
+ * Captures the real CardSpoke app (www/) with the demo dataset for the marketing video. The logo the
+ * video draws comes from brand/master/wordmark.vixl (build/kit.py), not from these shots.
  *
  *   node marketing/video/capture/capture.mjs        -> marketing/video/shots/*.png
  *
@@ -169,18 +170,36 @@ async function menu(page, id) {
   await context.close();
 }
 
-// The logo in white on transparency, cropped to the artwork (SVG units 140..1375 x 575..840, at 2 px per unit).
+// Plugins: the Kanban Board app plugin, approved through the real permission dialog, and the Create tab.
 {
-  const page = await browser.newPage({ viewport: { width: 2470, height: 530 } });
-  const svg = readFileSync(join(ROOT, 'CardSpoke.svg'), 'utf8')
-    .replace(/<rect x="-150"[^>]*\/>/g, '')
-    .replace(/#000000/g, '#ffffff')
-    .replace(/width="2000"/, 'width="3000"').replace(/height="2000"/, 'height="3000"');
-  await page.setContent(`<html><body style="margin:0;background:transparent">
-    <div style="position:absolute;left:-280px;top:-1150px">${svg}</div></body></html>`);
-  await page.screenshot({ path: join(OUT, 'logo-white.png'), omitBackground: true });
-  console.log('shot logo-white');
-  await page.close();
+  const { context, page } = await session();
+  await page.click('text=GRID');
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'sample-plugins/apps/kanban-board.json'), 'utf8'));
+  await page.evaluate(p => window.CardSpoke.Plugin.install(p), pkg);  // app plugins install suspended
+  const enabling = page.evaluate(() => window.CardSpoke.Plugin.enable('kanban-board'));
+  await page.waitForSelector('.permission-modal .btn-primary');
+  await clearStatus(page);
+  await shot(page, 'plugin-consent');
+  await mark(page, 'plugin-consent', 'allow', '.permission-modal .btn-primary');
+  await page.click('.permission-modal .btn-primary');
+  await enabling;
+  await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove()));
+  await home(page); await clearStatus(page);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot(page, 'home-board');
+  await mark(page, 'home-board', 'board', '.plugin-kanban-btn');
+  await page.click('.plugin-kanban-btn');
+  await page.waitForSelector('.plugin-kanban-columns');
+  await shot(page, 'kanban');
+  await mark(page, 'kanban', 'columns', '.plugin-kanban-columns');
+  await page.click('.plugin-kanban-close');
+  await menu(page, 'menuPluginManager');
+  await page.click('.modal button:has-text("Create")');
+  await page.waitForSelector('text=Create Plugin');
+  await shot(page, 'plugin-create');
+  await mark(page, 'plugin-create', 'manifest', '.modal textarea >> nth=0');
+  await mark(page, 'plugin-create', 'code', '.modal textarea >> nth=1');
+  await context.close();
 }
 
 // Phone

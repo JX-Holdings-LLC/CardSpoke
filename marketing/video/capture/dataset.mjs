@@ -1,4 +1,5 @@
 // Demo dataset shown in the marketing video. Plain CardSpoke store JSON.
+// The todo/doing/done tags fill the Kanban Board plugin's columns.
 const T0 = Date.UTC(2026, 8, 1);
 let n = 0;
 const cards = {};
@@ -22,8 +23,8 @@ card('Mara Quinn', 'The keeper. Precise, stubborn, writes everything down.\n\nAp
 card('Elias Thorne', 'A cartographer who maps coastlines that keep moving.', ['character'], chars);
 card('The Harbourmaster', 'Knows more than he says about the missing ships.', ['character'], chars);
 const plot = card('Plot Outline', 'Three acts, one storm.', ['writing', 'structure'], novel);
-card('Act I', '**The log.** Mara notices a ship that appears in the log but never in the harbour.', ['structure'], plot);
-card('Act II', '**The map.** Elias arrives with a chart of an island that should not exist.', ['structure'], plot);
+card('Act I', '**The log.** Mara notices a ship that appears in the log but never in the harbour.', ['structure', 'done'], plot);
+card('Act II', '**The map.** Elias arrives with a chart of an island that should not exist.', ['structure', 'doing'], plot);
 card('Act III', '**The storm.** Every missing ship comes home at once.', ['structure'], plot);
 card('World & Setting', 'A tidal island off the north coast. Fog most mornings. One road.', ['worldbuilding'], novel);
 card('Research', 'Lighthouse logbooks, 1880-1920. Fresnel lenses. Tide tables.', ['research'], novel);
@@ -31,13 +32,13 @@ card('Research', 'Lighthouse logbooks, 1880-1920. Fresnel lenses. Tide tables.',
 const launch = card('Product Launch Q4',
   'Ship v2 by November 14. Owners in [[Launch Checklist]].',
   ['work', 'priority']);
-card('Roadmap', 'Beta Oct 6 · Pricing Oct 20 · Launch Nov 14', ['work', 'planning'], launch);
-card('Launch Checklist', '- [x] Landing page\n- [x] Press kit\n- [ ] Pricing page\n- [ ] Launch email', ['work'], launch);
-card('Meeting Notes', 'Oct 2: agreed on the freemium tier. See [[Roadmap]].', ['work', 'meetings'], launch);
+card('Roadmap', 'Beta Oct 6 · Pricing Oct 20 · Launch Nov 14', ['work', 'planning', 'done'], launch);
+card('Launch Checklist', '- [x] Landing page\n- [x] Press kit\n- [ ] Pricing page\n- [ ] Launch email', ['work', 'doing'], launch);
+card('Meeting Notes', 'Oct 2: agreed on the freemium tier. See [[Roadmap]].', ['work', 'meetings', 'done'], launch);
 card('Competitor Notes', 'Everyone has sync. Nobody is local-first.', ['work', 'research'], launch);
 
 const kyoto = card('Kyoto Trip', 'Ten days in April. Cherry blossoms, temples, ramen.', ['travel']);
-card('Itinerary', 'Day 1 Fushimi Inari at dawn · Day 2 Arashiyama · Day 3 Nishiki Market', ['travel', 'planning'], kyoto);
+card('Itinerary', 'Day 1 Fushimi Inari at dawn · Day 2 Arashiyama · Day 3 Nishiki Market', ['travel', 'planning', 'doing'], kyoto);
 card('Food to Try', 'Yudofu · Matcha everything · Kaiseki once · Nishiki tamagoyaki', ['travel', 'food'], kyoto);
 card('Packing List', 'Walking shoes, rail pass, a very small notebook.', ['travel'], kyoto);
 
@@ -55,7 +56,7 @@ card('Podcast about maps', 'Interview cartographers. Ask Elias? (He is fictional
 card('Tide-clock widget', 'A clock that shows high tide instead of noon.', ['idea'], ideas);
 
 const garden = card('Garden Journal', 'Tomatoes in the south bed, herbs by the door.', ['garden']);
-card('Spring Planting', 'Basil, thyme, three kinds of tomato.', ['garden', 'planning'], garden);
+card('Spring Planting', 'Basil, thyme, three kinds of tomato.', ['garden', 'planning', 'done'], garden);
 
 card('Learning Japanese', 'Twenty minutes a day. Kana done, kanji next.', ['learning', 'travel']);
 

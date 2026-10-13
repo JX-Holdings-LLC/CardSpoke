@@ -58,6 +58,14 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
   square install icons; the install manifest used the wide wordmark before,
   which launchers cropped. `brand/` holds the logo package (SVG, PDF and PNG
   variants, social images, every icon size) and the [brand guide](brand/README.md).
+- **Promo video.** The [marketing film](marketing/video/README.md) is rebuilt
+  around how CardSpoke came about: a place to keep notes as cards inside
+  cards, opened up for others, and simple enough to make your own with themes
+  and plugins. It draws the new logo from the brand master, uses new
+  screenshots (including the Kanban Board plugin, the plugin permission
+  prompt and the Create tab), and takes on the logo's look: black on white,
+  square cards, one line weight and right-angled spokes. The tagline is now
+  "Your information, your way."
 
 ### Fixed
 

@@ -2,7 +2,7 @@
 
 The music is 120 BPM (one bar = 2 s): a warm pad over Fmaj7 - Am7 - Dm9 - Bbmaj7, a sub bass, a plucked
 arpeggio, and drums that enter with the product shots and drop out for the end card. The effects
-(clicks, keystrokes, whooshes, a logo impact) are placed from the times each scene records.
+(clicks, keystrokes, whooshes, card snaps, a soft logo hit) are placed from the times each scene records.
 """
 from __future__ import annotations
 
@@ -170,6 +170,14 @@ def whoosh(length=0.7, seed=5):
     return x * shape
 
 
+def snap():
+    """A short wooden tick for a card landing or a logo part drawing in."""
+    n = int(0.09 * SR)
+    tt = np.arange(n) / SR
+    body = np.sin(2 * np.pi * 900 * tt) * np.exp(-tt / 0.02)
+    return (body * 0.7 + noise_hit(0.09, 0.006, 3000, 7) * 0.5) * np.exp(-tt / 0.03)
+
+
 def click():
     n = int(0.06 * SR)
     tt = np.arange(n) / SR
@@ -182,9 +190,9 @@ def build_audio(total, scene_starts, scenes):
     product = starts["03-cards"]
     outro = starts["10-end"]
     music = pad(total) * 1.1
-    music += arp(total, starts["02-shape"] + 0.5, outro + 1.0)
+    music += arp(total, starts["02-origin"] + 0.5, outro + 1.0)
     music += bass(total, product, outro)
-    music += drums(total, product, outro, starts["06-themes"])
+    music += drums(total, product, outro, starts["07-themes"])
     # A last held chord under the end card.
     n = int(5.5 * SR)
     chord = sum(saw(midi(f), n, d) for f in (53, 57, 60, 64, 69) for d in (-0.003, 0.004)) / 10
@@ -193,11 +201,13 @@ def build_audio(total, scene_starts, scenes):
 
     sfx = np.zeros(int(total * SR))
     add(sfx, max(0.0, starts["01-intro"] + 1.6 - 1.4), riser(1.4) * 0.35)
-    add(sfx, starts["01-intro"] + 1.6, impact() * 0.8)
+    add(sfx, starts["01-intro"] + 1.6, impact() * 0.5)
     for s in scenes:
         t0 = starts[s.name]
         for i, ms in enumerate(s.clicks):
             add(sfx, t0 + ms / 1000, click() * 0.35)
+        for ms in s.snaps:
+            add(sfx, t0 + ms / 1000, snap() * 0.22)
         for i, ms in enumerate(s.whooshes):
             add(sfx, t0 + ms / 1000 - 0.2, whoosh(seed=10 + i) * 0.25)
     return music, sfx

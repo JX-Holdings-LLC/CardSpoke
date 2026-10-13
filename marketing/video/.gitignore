@@ -7,3 +7,4 @@ render.log
 .vixl-jobs/
 __pycache__/
 .vixl-cache.seen
+build/.logo/
