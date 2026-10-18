@@ -349,7 +349,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
 
       function showDatasetStorageSettings() {
         const overlay = h('div', { className: 'modal-overlay show' });
-        const modal = h('div', { className: 'modal', style: 'max-width: 560px;' });
+        const modal = h('div', { className: 'modal', style: 'max-width: 35rem;' });
         const header = h('div', { className: 'modal-header' });
         header.appendChild(h('div', { className: 'modal-title' }, 'Dataset Storage Settings'));
         header.appendChild(h('button', { className: 'modal-close', 'aria-label': 'Close dialog', onclick: () => overlay.remove() }, '✕'));
@@ -1157,7 +1157,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
 
       function showDatasetManager() {
         const overlay = h('div', { className: 'modal-overlay show' });
-        const modal = h('div', { className: 'modal', style: 'max-width: 700px;' });
+        const modal = h('div', { className: 'modal', style: 'max-width: 43.75rem;' });
         const modalHeader = h('div', { className: 'modal-header' });
         modalHeader.appendChild(h('div', { className: 'modal-title' }, 'Dataset Manager'));
         const closeBtn = h('button', { className: 'modal-close', 'aria-label': 'Close dialog', onclick: () => overlay.remove() }, '✕');
@@ -1753,7 +1753,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           role: 'dialog',
           'aria-modal': 'true',
           'aria-labelledby': 'pluginManagerTitle',
-          style: 'max-width: 800px; max-height: 90vh;'
+          style: 'max-width: 50rem; max-height: 90vh;'
         });
 
         var modalHeader = h('div', { className: 'modal-header' });
@@ -1775,7 +1775,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           var btn = h('button', {
             className: 'tab-btn',
             role: 'tab',
-            style: 'padding: var(--space-md) var(--space-lg); border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 500; color: var(--text);',
+            style: 'padding: var(--space-md) var(--space-lg); border: none; background: none; cursor: pointer; border-bottom: 0.1875rem solid transparent; font-weight: 500; color: var(--text);',
             onclick: function() { switchTab(tabName); }
           }, tabName.charAt(0).toUpperCase() + tabName.slice(1));
           tabButtons[tabName] = btn;
@@ -1799,7 +1799,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           tabs.forEach(function(t) {
             // --accent-strong keeps active-tab text at >= 4.5:1 contrast in
             // light and dark themes (QA A11Y-5).
-            tabButtons[t].style.borderBottom = t === tabName ? '3px solid var(--accent-strong, #1d4ed8)' : '3px solid transparent';
+            tabButtons[t].style.borderBottom = t === tabName ? '0.1875rem solid var(--accent-strong, #1d4ed8)' : '0.1875rem solid transparent';
             tabButtons[t].style.color = t === tabName ? 'var(--accent-strong, #1d4ed8)' : 'var(--text)';
             tabButtons[t].setAttribute('aria-selected', t === tabName ? 'true' : 'false');
             tabContents[t].style.display = t === tabName ? 'block' : 'none';
@@ -1841,7 +1841,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
               title: risk === 'SAFE'
                 ? 'CSS-only theme — runs no JavaScript'
                 : 'Contains JavaScript. It runs in a separate worker and only uses the permissions you approve, but it can read your unlocked cards. Only enable plugins from authors you trust.',
-              style: 'font-size: var(--text-xs); padding: 2px 8px; border-radius: 4px; font-weight: 600; ' +
+              style: 'font-size: var(--text-xs); padding: 2px 0.5rem; border-radius: 0.25rem; font-weight: 600; ' +
                 (risk === 'SAFE' ? 'background: #d1fae5; color: #065f46;' :
                  risk === 'LOW' ? 'background: #dbeafe; color: #1e40af;' :
                  risk === 'MEDIUM' ? 'background: #fef3c7; color: #92400e;' :
@@ -1856,7 +1856,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
             card.appendChild(info);
 
             var stateBadge = h('span', {
-              style: 'font-size: var(--text-xs); padding: 2px 8px; border-radius: 4px; font-weight: 600; ' +
+              style: 'font-size: var(--text-xs); padding: 2px 0.5rem; border-radius: 0.25rem; font-weight: 600; ' +
                 (plugin.enabled ? 'background: #d1fae5; color: #065f46;' : 'background: #e5e7eb; color: #374151;')
             }, plugin.enabled ? 'Active' : 'Suspended');
             card.appendChild(stateBadge);
@@ -2010,7 +2010,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           var urlInput = h('input', {
             type: 'url',
             placeholder: 'https://example.com/plugin.json',
-            style: 'width: 100%; padding: var(--space-sm); margin-bottom: var(--space-sm); border: 1px solid var(--border); border-radius: 4px;'
+            style: 'width: 100%; padding: var(--space-sm); margin-bottom: var(--space-sm); border: 1px solid var(--border); border-radius: 0.25rem;'
           });
           
           var urlBtn = h('button', {
@@ -2108,7 +2108,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           form.appendChild(h('h4', { style: 'margin-bottom: var(--space-sm);' }, 'Manifest (JSON)'));
           var manifestInput = h('textarea', {
             placeholder: '{\n  "name": "My Plugin",\n  "version": "1.0.0",\n  "author": "Your Name",\n  "layer": "feature",\n  "permissions": []\n}',
-            style: 'width: 100%; min-height: 120px; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 4px;'
+            style: 'width: 100%; min-height: 7.5rem; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 0.25rem;'
           });
           form.appendChild(manifestInput);
 
@@ -2116,7 +2116,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           form.appendChild(h('h4', { style: 'margin-bottom: var(--space-sm);' }, 'JavaScript (setup function)'));
           var jsInput = h('textarea', {
             placeholder: '// Access APIs via ctx parameter\nconst cards = ctx.api.data.listCards();\nctx.api.ui.showToast(`Loaded ${cards.length} cards`, \'info\');',
-            style: 'width: 100%; min-height: 150px; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 4px;'
+            style: 'width: 100%; min-height: 9.375rem; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 0.25rem;'
           });
           form.appendChild(jsInput);
 
@@ -2124,7 +2124,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           form.appendChild(h('h4', { style: 'margin-bottom: var(--space-sm);' }, 'CSS (optional)'));
           var cssInput = h('textarea', {
             placeholder: '/* Custom styles */\n.my-element {\n  color: var(--primary);\n}',
-            style: 'width: 100%; min-height: 100px; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 4px;'
+            style: 'width: 100%; min-height: 6.25rem; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 0.25rem;'
           });
           form.appendChild(cssInput);
 
@@ -2181,7 +2181,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
 
       function showAppearanceSettings() {
         const overlay = h('div', { className: 'modal-overlay show' });
-        const modal = h('div', { className: 'modal', style: 'max-width: 600px;' });
+        const modal = h('div', { className: 'modal', style: 'max-width: 37.5rem;' });
         const modalHeader = h('div', { className: 'modal-header' });
         modalHeader.appendChild(h('div', { className: 'modal-title' }, 'Appearance Settings'));
         const closeBtn = h('button', { className: 'modal-close', onclick: () => overlay.remove(), 'aria-label': 'Close' }, '✕');
@@ -2200,7 +2200,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         const richTextEnabled = localStorage.getItem('cardspoke_richtext') === 'true';
         const richTextRow = h('div', { 
           className: 'menu-item-toggle',
-          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px; margin-bottom: var(--space-md);'
+          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem; margin-bottom: var(--space-md);'
         });
         const richTextLabel = h('div', { className: 'menu-item-label' });
         richTextLabel.appendChild(h('span', { style: 'display: block;' }, 'Rich Text'));
@@ -2226,7 +2226,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         const compactViewEnabled = store.viewMode === 'compact';
         const compactRow = h('div', { 
           className: 'menu-item-toggle',
-          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px; margin-bottom: var(--space-md);'
+          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem; margin-bottom: var(--space-md);'
         });
         const compactLabel = h('label', { className: 'menu-item-label' }, 'Compact View');
         const compactToggle = h('label', { className: 'switch-toggle' });
@@ -2250,7 +2250,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         const gridViewEnabled = localStorage.getItem('cardspoke_gridView') === 'true';
         const gridRow = h('div', { 
           className: 'menu-item-toggle',
-          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px; margin-bottom: var(--space-md);'
+          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem; margin-bottom: var(--space-md);'
         });
         const gridLabel = h('label', { className: 'menu-item-label' }, 'Grid View');
         const gridToggle = h('label', { className: 'switch-toggle' });
@@ -2273,7 +2273,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         const highContrastEnabled = localStorage.getItem('cardspoke_highcontrast') === 'true';
         const contrastRow = h('div', { 
           className: 'menu-item-toggle',
-          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px;'
+          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem;'
         });
         const contrastLabel = h('label', { className: 'menu-item-label' }, 'High Contrast');
         const contrastToggle = h('label', { className: 'switch-toggle' });
@@ -2300,7 +2300,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         const devModeEnabled = localStorage.getItem('cardspoke_devmode') === 'true';
         const devRow = h('div', { 
           className: 'menu-item-toggle',
-          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px; margin-top: var(--space-md);'
+          style: 'padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem; margin-top: var(--space-md);'
         });
         const devLabel = h('label', { className: 'menu-item-label' }, 'Developer Mode');
         const devToggle = h('label', { className: 'switch-toggle' });
@@ -2342,7 +2342,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         typographyPresets.forEach(function(preset) {
           const isActive = currentTypography === preset.id;
           const presetOption = h('div', {
-            style: 'padding: var(--space-md); border: 2px solid ' + (isActive ? 'var(--text)' : 'var(--border)') + '; border-radius: 4px; margin-bottom: var(--space-md); cursor: pointer;',
+            style: 'padding: var(--space-md); border: 2px solid ' + (isActive ? 'var(--text)' : 'var(--border)') + '; border-radius: 0.25rem; margin-bottom: var(--space-md); cursor: pointer;',
             onclick: function() {
               localStorage.setItem('cardspoke_typography', preset.id);
               document.documentElement.setAttribute('data-typography', preset.id);
@@ -2369,7 +2369,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         // Light mode option
         const lightOption = h('div', { 
           className: 'theme-option',
-          style: 'padding: var(--space-lg); border: 2px solid ' + (currentTheme === 'light' ? 'var(--text)' : 'var(--border)') + '; margin-bottom: var(--space-md); cursor: pointer; border-radius: 4px; background: white; color: black;',
+          style: 'padding: var(--space-lg); border: 2px solid ' + (currentTheme === 'light' ? 'var(--text)' : 'var(--border)') + '; margin-bottom: var(--space-md); cursor: pointer; border-radius: 0.25rem; background: white; color: black;',
           onclick: function() {
             applyTheme('light');
             overlay.remove();
@@ -2383,7 +2383,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         // Dark mode option
         const darkOption = h('div', { 
           className: 'theme-option',
-          style: 'padding: var(--space-lg); border: 2px solid ' + (currentTheme === 'dark' ? 'white' : 'var(--border)') + '; margin-bottom: var(--space-md); cursor: pointer; border-radius: 4px; background: #1a1a1a; color: white;',
+          style: 'padding: var(--space-lg); border: 2px solid ' + (currentTheme === 'dark' ? 'white' : 'var(--border)') + '; margin-bottom: var(--space-md); cursor: pointer; border-radius: 0.25rem; background: #1a1a1a; color: white;',
           onclick: function() {
             applyTheme('dark');
             overlay.remove();
@@ -2434,7 +2434,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
         if (themeExtensions.length > 0) {
           // Default Theme option (no theme plugin enabled)
           const defaultThemeOption = h('div', {
-            style: 'padding: var(--space-md); border: 2px solid ' + (!anyThemeEnabled ? 'var(--text)' : 'var(--border)') + '; border-radius: 4px; margin-bottom: var(--space-sm); cursor: pointer;',
+            style: 'padding: var(--space-md); border: 2px solid ' + (!anyThemeEnabled ? 'var(--text)' : 'var(--border)') + '; border-radius: 0.25rem; margin-bottom: var(--space-sm); cursor: pointer;',
             onclick: async function() {
               try {
                 await activateThemePlugin(null);
@@ -2453,7 +2453,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           themeExtensions.forEach(function(theme) {
             const isActive = theme.enabled;
             const themeOption = h('div', {
-              style: 'padding: var(--space-md); border: 2px solid ' + (isActive ? 'var(--text)' : 'var(--border)') + '; border-radius: 4px; margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;',
+              style: 'padding: var(--space-md); border: 2px solid ' + (isActive ? 'var(--text)' : 'var(--border)') + '; border-radius: 0.25rem; margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;',
               onclick: async function() {
                 if (!theme.isModern) {
                   showToast('This theme uses the legacy format and cannot be enabled. Re-install it from the Plugin Manager.', 'error');
@@ -2480,7 +2480,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
             
             // Status badge
             const statusBadge = h('span', {
-              style: 'font-size: var(--text-xs); padding: 2px 8px; border-radius: 10px; background: ' + (theme.enabled ? 'var(--success, #28a745)' : 'var(--text-muted)') + '; color: white;'
+              style: 'font-size: var(--text-xs); padding: 2px 0.5rem; border-radius: 0.625rem; background: ' + (theme.enabled ? 'var(--success, #28a745)' : 'var(--text-muted)') + '; color: white;'
             }, theme.enabled ? 'Enabled' : 'Disabled');
             themeOption.appendChild(statusBadge);
             
@@ -2488,7 +2488,7 @@ import { migrateCard as coreMigrateCard } from '@core/migrations.js';
           });
         } else {
           themeSection.appendChild(h('div', { 
-            style: 'padding: var(--space-lg); background: var(--bg-secondary); border-radius: 4px; text-align: center; color: var(--text-muted);'
+            style: 'padding: var(--space-lg); background: var(--bg-secondary); border-radius: 0.25rem; text-align: center; color: var(--text-muted);'
           },
             h('div', { style: 'margin-bottom: var(--space-sm);' }, 'No custom themes installed'),
             h('div', { style: 'font-size: var(--text-sm);' }, 'Install theme plugins from the Plugin Manager')

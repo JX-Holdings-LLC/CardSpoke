@@ -47,6 +47,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
           return;
         }
         if (navState.page === 'edit') {
+          breadcrumbs.appendChild(h('button', { className: 'breadcrumb', onclick: () => goTo('list', { cardId: null }), 'aria-label': 'Go to All Cards' }, 'All Cards'));
           breadcrumbs.appendChild(h('span', { className: 'breadcrumb current', 'aria-current': 'page' }, getEditPageLabel()));
           return;
         }
@@ -63,9 +64,9 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
           path.unshift(c);
           current = c.parentId;
         }
-        if (path.length === 0) {
-          breadcrumbs.appendChild(h('span', { className: 'breadcrumb current', 'aria-current': 'page' }, 'All Cards'));
-        } else {
+        // At the top level the page title already says where you are, so the
+        // trail stays empty (and .breadcrumbs:empty collapses).
+        if (path.length > 0) {
           const home = h('button', { className: 'breadcrumb', onclick: () => goTo('list', { cardId: null }), 'aria-label': 'Go to All Cards' }, 'All Cards');
           breadcrumbs.appendChild(home);
           path.forEach((c, i) => {
@@ -97,7 +98,14 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         }
         searchContainer.style.display = 'block';
         const title = parentId ? (store.cards[parentId]?.title || 'Card') : 'Top Level Cards';
-        main.appendChild(h('div', { className: 'page-title' }, title));
+        const heading = h('div', { className: 'page-heading' });
+        const headingText = h('div', { className: 'page-heading-text' });
+        headingText.appendChild(h('div', { className: 'page-title' }, title));
+        if (kids.length > 0) {
+          headingText.appendChild(h('div', { className: 'page-subtitle' }, kids.length === 1 ? '1 card' : `${kids.length} cards`));
+        }
+        heading.appendChild(headingText);
+        main.appendChild(heading);
         
         kids.sort((a, b) => (a.title || '').toLowerCase().localeCompare((b.title || '').toLowerCase()));
         
@@ -114,7 +122,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
           const isCompactMode = store.viewMode === 'compact';
 
           // Density picker bar
-          const densityBar = h('div', { className: 'density-bar', 'aria-label': 'Card density' });
+          const densityBar = h('div', { className: 'density-bar', role: 'group', 'aria-label': 'Card density' });
           const densityOptions = [
             { key: 'default', label: 'Default', active: !gridViewEnabled && !isCompactMode },
             { key: 'compact', label: 'Compact', active: !gridViewEnabled && isCompactMode },
@@ -140,7 +148,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
             }, opt.label);
             densityBar.appendChild(btn);
           });
-          main.appendChild(densityBar);
+          heading.appendChild(densityBar);
 
           const gridClass = gridViewEnabled ? 'card-grid grid-view' : 'card-grid';
           const grid = h('div', { className: gridClass, role: 'list' });
@@ -198,12 +206,9 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         const contentEl = h('div', { className: 'card-content' });
         
         // Add bookmark indicator if bookmarked
-        const titleWrapper = h('div', { style: 'display: flex; align-items: center; gap: 8px; min-width: 0;' });
+        const titleWrapper = h('div', { style: 'display: flex; align-items: center; gap: 0.5rem; min-width: 0;' });
         if (isBookmarked(card.id)) {
-          titleWrapper.appendChild(h('span', { 
-            style: 'color: gold; font-size: 18px;',
-            title: 'Bookmarked'
-          }, '★'));
+          titleWrapper.appendChild(h('span', { className: 'card-bookmark', title: 'Bookmarked' }, '★'));
         }
         const titleContent = opts.highlightQuery ? highlightText(card.title || '(Untitled)', opts.highlightQuery) : document.createTextNode(card.title || '(Untitled)');
         const titleDiv = h('div', { className: 'card-title' });
@@ -212,7 +217,9 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         contentEl.appendChild(titleWrapper);
 
         if (card.body && !isCompact) {
-          const previewText = card.body.substring(0, 140) + (card.body.length > 140 ? '...' : '');
+          // Show [[Card Name]] links as their plain names in the preview.
+          const plainBody = card.body.replace(/\[\[([^\]]+)\]\]/g, '$1');
+          const previewText = plainBody.substring(0, 140) + (plainBody.length > 140 ? '...' : '');
           const desc = h('div', { className: 'card-description' });
           if (opts.highlightQuery) {
             desc.appendChild(highlightText(previewText, opts.highlightQuery));
@@ -237,7 +244,10 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
 
         // Right side count
         if (card.children && card.children.length > 0) {
-          cardEl.appendChild(h('div', { className: 'card-count' }, String(card.children.length)));
+          const countEl = h('div', { className: 'card-count' });
+          countEl.appendChild(h('span', { className: 'card-count-number' }, String(card.children.length)));
+          countEl.appendChild(h('span', { className: 'card-count-label' }, card.children.length === 1 ? 'card' : 'cards'));
+          cardEl.appendChild(countEl);
         }
 
         if (opts.lazyBody) {
@@ -528,7 +538,9 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         detail.appendChild(actions);
         if (card.children && card.children.length > 0) {
           const childrenSection = h('div', { className: 'children-section' });
-          childrenSection.appendChild(h('div', { className: 'children-title' }, `Children (${card.children.length})`));
+          const childrenTitle = h('div', { className: 'children-title' }, 'Children ');
+          childrenTitle.appendChild(h('span', { className: 'children-count' }, String(card.children.length)));
+          childrenSection.appendChild(childrenTitle);
           const childrenGrid = h('div', { className: 'card-grid' });
           const childUpgradeEntries = [];
           card.children.forEach(cid => {
@@ -669,7 +681,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         // Add upload button for importing text from files (v0.12.3)
         const importBodyBtn = h('button', {
           type: 'button',
-          className: 'btn',
+          className: 'btn btn-link',
           style: 'font-size: var(--text-sm);',
           onclick: function() {
             const fileInput = h('input', { type: 'file', accept: '.txt,.md,.text', style: 'display: none' });
@@ -716,7 +728,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         
         const richToggleRow = h('div', { className: 'form-row' });
         const richToggle = h('input', { type: 'checkbox', id: 'cardRich', checked: card.isRichText });
-        const richLabel = h('label', { for: 'cardRich', style: 'margin-left: 6px;' }, 'Enable formatting (Markdown)');
+        const richLabel = h('label', { for: 'cardRich' }, 'Enable formatting (Markdown)');
         richToggle.addEventListener('change', () => { setDirty(true); });
         richToggleRow.appendChild(richToggle);
         richToggleRow.appendChild(richLabel);
@@ -774,7 +786,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         form.appendChild(formGroup2);
         // Tags input with autocomplete
         const formGroupTags = h('div', { className: 'form-group' });
-        formGroupTags.appendChild(h('label', { className: 'form-label' }, 'Tags (comma-separated)'));
+        formGroupTags.appendChild(h('label', { className: 'form-label' }, 'Tags'));
         
         // Create datalist with all existing tags for autocomplete
         const tagsDatalistId = 'tags-datalist-' + Date.now();
@@ -788,6 +800,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         tagEditor.addEventListener('focusin', () => { setDirty(true); });
 
         formGroupTags.appendChild(tagEditor);
+        formGroupTags.appendChild(h('div', { className: 'form-hint' }, 'Press Enter or comma to add a tag.'));
         formGroupTags.appendChild(tagsDatalist);
         form.appendChild(formGroupTags);
         
@@ -887,7 +900,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
           const newKidsWrap = h('div', { className: 'form-children', id: 'addChildList' });
           const addChildRow = (title = '') => {
             const r = h('div', { className: 'form-child-row' });
-            const t = h('input', { type: 'text', value: title, placeholder: 'Child title...', className: 'form-input form-child-input', 'aria-label': 'New child card title' });
+            const t = h('input', { type: 'text', value: title, placeholder: 'Child title', className: 'form-input form-child-input', 'aria-label': 'New child card title' });
             t.addEventListener('input', () => { setDirty(true); });
             const d = h('button', { type: 'button', className: 'form-child-delete', 'aria-label': 'Remove child row', title: 'Remove child row', onclick: () => { r.remove(); } }, '✕');
             r.appendChild(t);
@@ -896,15 +909,15 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
           };
           addChildRow();
           formGroup5.appendChild(newKidsWrap);
-          formGroup5.appendChild(h('button', { type: 'button', className: 'btn', onclick: () => addChildRow() }, '+ Add Another Child'));
+          formGroup5.appendChild(h('button', { type: 'button', className: 'btn', onclick: () => addChildRow() }, '+ Add another child'));
           form.appendChild(formGroup5);
         } else {
           const formGroup4 = h('div', { className: 'form-group' });
-          formGroup4.appendChild(h('label', { className: 'form-label form-section-title' }, 'Add Children Now (title only)'));
+          formGroup4.appendChild(h('label', { className: 'form-label form-section-title' }, 'Child cards (optional, title only)'));
           const kidsWrap = h('div', { className: 'form-children', id: 'addChildList' });
           const addChildRow = (title = '') => {
             const r = h('div', { className: 'form-child-row' });
-            const t = h('input', { type: 'text', value: title, placeholder: 'Child title...', className: 'form-input form-child-input', 'aria-label': 'New child card title' });
+            const t = h('input', { type: 'text', value: title, placeholder: 'Child title', className: 'form-input form-child-input', 'aria-label': 'New child card title' });
             t.addEventListener('input', () => { setDirty(true); });
             const d = h('button', { type: 'button', className: 'form-child-delete', 'aria-label': 'Remove child row', title: 'Remove child row', onclick: () => { r.remove(); } }, '✕');
             r.appendChild(t);
@@ -913,7 +926,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
           };
           addChildRow();
           formGroup4.appendChild(kidsWrap);
-          formGroup4.appendChild(h('button', { type: 'button', className: 'btn', onclick: () => addChildRow() }, '+ Add Another Child'));
+          formGroup4.appendChild(h('button', { type: 'button', className: 'btn', onclick: () => addChildRow() }, '+ Add another child'));
           form.appendChild(formGroup4);
         }
         const formActions = h('div', { className: 'form-actions' });
@@ -967,7 +980,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
         main.appendChild(h('div', { className: 'page-title' }, `Search: "${navState.searchQuery}"`));
         const loadingDiv = h('div', { 
           className: 'search-info',
-          style: 'padding: 12px; margin-bottom: 12px; background: var(--bg-secondary); border-radius: 8px; font-size: 14px; color: var(--text-secondary);'
+          style: 'padding: 0.75rem; margin-bottom: 0.75rem; background: var(--bg-secondary); border-radius: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);'
         }, 'Searching...');
         main.appendChild(loadingDiv);
         
@@ -1037,7 +1050,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
             const scopeText = scope === 'all' ? ' across all datasets' : '';
             const resultInfo = h('div', {
               className: 'search-info',
-              style: 'padding: 12px; margin-bottom: 8px; background: var(--bg-secondary); border-radius: 8px; font-size: 14px; color: var(--text-secondary);'
+              style: 'padding: 0.75rem; margin-bottom: 0.5rem; background: var(--bg-secondary); border-radius: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);'
             }, `Found ${fuzzyResults.length} result${fuzzyResults.length === 1 ? '' : 's'}${scopeText}${fuzzyResults.some(result => result.approximate) ? ' (approximate matches marked with ~)' : ''}`);
             main.appendChild(resultInfo);
 
@@ -1082,15 +1095,15 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
             // Keyboard navigation hint (v1.0.0)
             const keyboardHint = h('div', {
               className: 'search-keyboard-hint',
-              style: 'padding: 8px 12px; margin-bottom: 12px; background: var(--bg-alt, var(--bg-secondary)); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 12px;'
+              style: 'padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; background: var(--bg-alt, var(--bg-secondary)); border: 1px solid var(--border); border-radius: 0.375rem; font-size: 0.8125rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.75rem;'
             },
               h('span', { style: 'opacity: 0.7;' }, '💡'),
               h('span', {},
-                h('kbd', { style: 'background: var(--bg-primary); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; font-family: monospace;' }, '↑'),
+                h('kbd', { style: 'background: var(--bg-primary); padding: 2px 0.375rem; border-radius: 0.25rem; border: 1px solid var(--border); font-size: 0.75rem; font-family: monospace;' }, '↑'),
                 ' / ',
-                h('kbd', { style: 'background: var(--bg-primary); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; font-family: monospace;' }, '↓'),
+                h('kbd', { style: 'background: var(--bg-primary); padding: 2px 0.375rem; border-radius: 0.25rem; border: 1px solid var(--border); font-size: 0.75rem; font-family: monospace;' }, '↓'),
                 ' to navigate • ',
-                h('kbd', { style: 'background: var(--bg-primary); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; font-family: monospace;' }, 'Enter'),
+                h('kbd', { style: 'background: var(--bg-primary); padding: 2px 0.375rem; border-radius: 0.25rem; border: 1px solid var(--border); font-size: 0.75rem; font-family: monospace;' }, 'Enter'),
                 ' to open'
               )
             );
@@ -1120,7 +1133,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
                 // Add dataset badge for multi-dataset search
                 if (scope === 'all' && result.datasetName) {
                   const datasetBadge = h('span', {
-                    style: 'position: absolute; top: 8px; left: 8px; background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;'
+                    style: 'position: absolute; top: 0.5rem; left: 0.5rem; background: #3b82f6; color: #fff; padding: 2px 0.375rem; border-radius: 0.25rem; font-size: 0.625rem; font-weight: 600;'
                   }, result.datasetName);
                   cardEl.style.position = 'relative';
                   cardEl.appendChild(datasetBadge);
@@ -1152,7 +1165,7 @@ import { vnodeToDOM, applyPatch } from '@core/plugin-vnode.js';
                 // Add match quality indicator
                 if (result.approximate) {
                   const matchBadge = h('span', {
-                    style: 'position: absolute; top: 8px; right: 8px; background: #fbbf24; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;'
+                    style: 'position: absolute; top: 0.5rem; right: 0.5rem; background: #fbbf24; color: #000; padding: 2px 0.375rem; border-radius: 0.25rem; font-size: 0.625rem; font-weight: 600;'
                   }, '~');
                   cardEl.style.position = 'relative';
                   cardEl.appendChild(matchBadge);

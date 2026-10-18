@@ -23,6 +23,8 @@ const APP_SHELL = [
   // precached explicitly like any other app-shell asset).
   './plugin-worker-bootstrap.js',
   './CardSpoke.svg',
+  './fonts/inter-latin.woff2',
+  './fonts/inter-latin-ext.woff2',
   './favicon.svg',
   './icon-192.png',
   './manifest.webmanifest'

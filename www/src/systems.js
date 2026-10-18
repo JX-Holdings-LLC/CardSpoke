@@ -379,7 +379,7 @@ import {
        */
       function showTrashBin() {
         const overlay = h('div', { className: 'modal-overlay show' });
-        const modal = h('div', { className: 'modal', style: 'max-width: 600px;' });
+        const modal = h('div', { className: 'modal', style: 'max-width: 37.5rem;' });
         const modalHeader = h('div', { className: 'modal-header' });
         modalHeader.appendChild(h('div', { className: 'modal-title' }, 'Trash Bin'));
         const closeBtn = h('button', { className: 'modal-close', 'aria-label': 'Close trash bin', onclick: () => overlay.remove() }, '✕');
@@ -561,7 +561,7 @@ import {
        */
       function showTagManager() {
         const overlay = h('div', { className: 'modal-overlay show' });
-        const modal = h('div', { className: 'modal', style: 'max-width: 700px;' });
+        const modal = h('div', { className: 'modal', style: 'max-width: 43.75rem;' });
         const modalHeader = h('div', { className: 'modal-header' });
         modalHeader.appendChild(h('div', { className: 'modal-title' }, 'Tag Manager'));
         const closeBtn = h('button', { 
@@ -701,7 +701,7 @@ import {
        */
       function showAdvancedSearch() {
         const overlay = h('div', { className: 'modal-overlay show' });
-        const modal = h('div', { className: 'modal', style: 'max-width: 600px;' });
+        const modal = h('div', { className: 'modal', style: 'max-width: 37.5rem;' });
         const modalHeader = h('div', { className: 'modal-header' });
         modalHeader.appendChild(h('div', { className: 'modal-title' }, 'Advanced Search'));
         const closeBtn = h('button', { 
@@ -734,7 +734,7 @@ import {
         
         // Add help text at the top
         const helpText = h('div', { 
-          style: 'background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius); margin-bottom: var(--space-lg); font-size: 14px; color: var(--text-secondary);'
+          style: 'background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius); margin-bottom: var(--space-lg); font-size: 0.875rem; color: var(--text-secondary);'
         }, '💡 Tip: Use advanced filters to narrow down your search results by tag, bookmark status, or date.');
         modalBody.appendChild(helpText);
         
@@ -1285,10 +1285,10 @@ import {
             h('div', { className: 'typography-presets' },
               h('div', { className: 'preset-description' }, 'Choose a reading mode that suits your preference:'),
               ...[
-                { id: 'default', name: 'Default', desc: '16px, comfortable line height' },
-                { id: 'comfortable', name: 'Comfortable', desc: '18px, extra line height for relaxed reading' },
-                { id: 'compact', name: 'Compact', desc: '14px, tighter spacing for more content' },
-                { id: 'dyslexia', name: 'Dyslexia-Friendly', desc: '18px, wider spacing, readable font' }
+                { id: 'default', name: 'Default', desc: 'Your browser\'s text size, comfortable line height' },
+                { id: 'comfortable', name: 'Comfortable', desc: 'Larger text, extra line height for relaxed reading' },
+                { id: 'compact', name: 'Compact', desc: 'Smaller text, tighter spacing for more content' },
+                { id: 'dyslexia', name: 'Dyslexia-Friendly', desc: 'Larger text, wider spacing, readable font' }
               ].map(preset => 
                 h('div', { 
                   className: `preset-option ${currentTypography === preset.id ? 'active' : ''}`,
@@ -1501,7 +1501,7 @@ import {
           className: 'modal-overlay show',
           onclick: (e) => { if (e.target === modal) modal.remove(); }
         },
-          h('div', { className: 'modal', style: 'max-width: 600px;' },
+          h('div', { className: 'modal', style: 'max-width: 37.5rem;' },
             h('div', { className: 'modal-header' },
               h('div', { className: 'modal-title' }, 'Share Card'),
               h('button', {
@@ -1609,7 +1609,7 @@ import {
             className: 'menu-overlay',
             onclick: (e) => { if (e.target === modal) modal.classList.remove('show'); }
           },
-            h('div', { className: 'menu-panel', style: 'max-width: 700px; max-height: 85vh; overflow-y: auto;' },
+            h('div', { className: 'menu-panel', style: 'max-width: 43.75rem; max-height: 85vh; overflow-y: auto;' },
               h('div', { className: 'menu-header' },
                 h('div', { className: 'menu-title' }, 'Getting Started with CardSpoke'),
                 h('button', {
@@ -1641,7 +1641,7 @@ import {
                 // Creating Cards
                 h('div', { style: 'margin-bottom: var(--space-xl);' },
                   h('h3', { style: 'margin-bottom: var(--space-md); color: var(--primary);' }, 'Creating Cards'),
-                  h('div', { style: 'background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius); border-left: 3px solid var(--primary); margin-bottom: var(--space-md);' },
+                  h('div', { style: 'background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius); border-left: 0.1875rem solid var(--primary); margin-bottom: var(--space-md);' },
                     h('p', { style: 'font-weight: 600; margin-bottom: var(--space-xs);' }, 'To create your first card:'),
                     h('ol', { style: 'margin-left: var(--space-lg);' },
                       h('li', { style: 'margin-bottom: var(--space-xs);' }, 'Click the menu button (☰) in the top right'),
@@ -1752,7 +1752,7 @@ import {
             className: 'menu-overlay',
             onclick: (e) => { if (e.target === helpModal) helpModal.classList.remove('show'); }
           },
-            h('div', { className: 'menu-panel', style: 'max-width: 600px; max-height: 80vh; overflow-y: auto;' },
+            h('div', { className: 'menu-panel', style: 'max-width: 37.5rem; max-height: 80vh; overflow-y: auto;' },
               h('div', { className: 'menu-header' },
                 h('div', { className: 'menu-title' }, 'Help & Documentation'),
                 h('button', { 
@@ -1789,15 +1789,15 @@ import {
                 h('div', { style: 'margin-bottom: var(--space-lg);' },
                   h('h3', { style: 'margin-bottom: var(--space-sm); color: var(--primary);' }, 'Keyboard Shortcuts'),
                   h('div', { style: 'display: grid; grid-template-columns: auto 1fr; gap: var(--space-xs) var(--space-md);' },
-                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;' }, 'Ctrl+N'),
+                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;' }, 'Ctrl+N'),
                     h('span', {}, 'New card'),
-                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;' }, 'Ctrl+F'),
+                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;' }, 'Ctrl+F'),
                     h('span', {}, 'Search'),
-                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;' }, 'Ctrl+Z'),
+                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;' }, 'Ctrl+Z'),
                     h('span', {}, 'Undo'),
-                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;' }, 'Ctrl+Y'),
+                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;' }, 'Ctrl+Y'),
                     h('span', {}, 'Redo'),
-                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;' }, 'Ctrl+/'),
+                    h('kbd', { style: 'background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;' }, 'Ctrl+/'),
                     h('span', {}, 'All shortcuts')
                   )
                 ),
@@ -1980,7 +1980,7 @@ import {
        */
       function showDeveloperConsole() {
         const overlay = h('div', { className: 'modal-overlay show' });
-        const modal = h('div', { className: 'modal', style: 'max-width: 800px;' });
+        const modal = h('div', { className: 'modal', style: 'max-width: 50rem;' });
         const modalHeader = h('div', { className: 'modal-header' });
         modalHeader.appendChild(h('div', { className: 'modal-title' }, '🔧 Developer Console'));
         const closeBtn = h('button', { 

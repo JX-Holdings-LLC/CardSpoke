@@ -601,7 +601,7 @@
         content.setAttribute("aria-modal", "true");
         const titleId = "permission-dialog-title-" + Date.now().toString(36);
         content.setAttribute("aria-labelledby", titleId);
-        content.style.cssText = "background:var(--bg-primary,#fff);padding:2rem;border-radius:8px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.2);";
+        content.style.cssText = "background:var(--bg-primary,#fff);padding:2rem;border-radius:0.5rem;max-width:31.25rem;box-shadow:0 0.25rem 1.25rem rgba(0,0,0,0.2);";
         const title = document.createElement("h2");
         title.id = titleId;
         title.textContent = opts.titleText;
@@ -644,14 +644,14 @@
         const denyBtn = document.createElement("button");
         denyBtn.textContent = opts.denyLabel;
         denyBtn.className = "btn btn-secondary";
-        denyBtn.style.cssText = "padding:0.5rem 1.5rem;border:1px solid #ccc;background:#fff;border-radius:4px;cursor:pointer;";
+        denyBtn.style.cssText = "padding:0.5rem 1.5rem;border:1px solid #ccc;background:#fff;border-radius:0.25rem;cursor:pointer;";
         denyBtn.onclick = function() {
           finish(false);
         };
         const allowBtn = document.createElement("button");
         allowBtn.textContent = opts.allowLabel;
         allowBtn.className = "btn btn-primary";
-        allowBtn.style.cssText = "padding:0.5rem 1.5rem;border:none;background:var(--accent,#007bff);color:#fff;border-radius:4px;cursor:pointer;";
+        allowBtn.style.cssText = "padding:0.5rem 1.5rem;border:none;background:var(--accent,#007bff);color:#fff;border-radius:0.25rem;cursor:pointer;";
         allowBtn.onclick = function() {
           finish(true);
         };
@@ -3811,7 +3811,7 @@
       content = null,
       actions = [],
       dismissValue = null,
-      width = "520px",
+      width = "32.5rem",
       ariaLabelledBy = "",
       onOpen = null
     } = options;
@@ -3906,7 +3906,7 @@
     return showModalDialog({
       title: options.title || "Confirm Action",
       message,
-      width: options.width || "520px",
+      width: options.width || "32.5rem",
       dismissValue: false,
       actions: [
         {
@@ -3928,7 +3928,7 @@
     return showModalDialog({
       title: options.title || "Choose Action",
       message,
-      width: options.width || "520px",
+      width: options.width || "32.5rem",
       dismissValue: options.dismissValue ?? null,
       actions: options.actions || []
     });
@@ -3971,7 +3971,7 @@
       title: options.title || "Enter Value",
       message: options.message || "",
       content: inputWrap,
-      width: options.width || "520px",
+      width: options.width || "32.5rem",
       dismissValue: null,
       actions: [
         {
@@ -5537,7 +5537,7 @@
       role: "dialog",
       "aria-modal": "true",
       "aria-labelledby": "datasetLockTitle",
-      style: "max-width: 480px;"
+      style: "max-width: 30rem;"
     });
     const header2 = h("div", { className: "modal-header" });
     header2.appendChild(h("div", { className: "modal-title", id: "datasetLockTitle" }, "Dataset Locked"));
@@ -5588,7 +5588,7 @@
       role: "dialog",
       "aria-modal": "true",
       "aria-labelledby": "corruptRecoveryTitle",
-      style: "max-width: 560px;"
+      style: "max-width: 35rem;"
     });
     const header2 = h("div", { className: "modal-header" });
     header2.appendChild(h("div", { className: "modal-title", id: "corruptRecoveryTitle" }, "Stored Data Could Not Be Read"));
@@ -6176,7 +6176,7 @@
   }
   function showDatasetStorageSettings() {
     const overlay = h("div", { className: "modal-overlay show" });
-    const modal = h("div", { className: "modal", style: "max-width: 560px;" });
+    const modal = h("div", { className: "modal", style: "max-width: 35rem;" });
     const header2 = h("div", { className: "modal-header" });
     header2.appendChild(h("div", { className: "modal-title" }, "Dataset Storage Settings"));
     header2.appendChild(h("button", { className: "modal-close", "aria-label": "Close dialog", onclick: () => overlay.remove() }, "✕"));
@@ -6793,7 +6793,7 @@ Do you want to import the plugins?
   }
   function showDatasetManager() {
     const overlay = h("div", { className: "modal-overlay show" });
-    const modal = h("div", { className: "modal", style: "max-width: 700px;" });
+    const modal = h("div", { className: "modal", style: "max-width: 43.75rem;" });
     const modalHeader = h("div", { className: "modal-header" });
     modalHeader.appendChild(h("div", { className: "modal-title" }, "Dataset Manager"));
     const closeBtn = h("button", { className: "modal-close", "aria-label": "Close dialog", onclick: () => overlay.remove() }, "✕");
@@ -7307,7 +7307,7 @@ This action cannot be undone!`, {
       role: "dialog",
       "aria-modal": "true",
       "aria-labelledby": "pluginManagerTitle",
-      style: "max-width: 800px; max-height: 90vh;"
+      style: "max-width: 50rem; max-height: 90vh;"
     });
     var modalHeader = h("div", { className: "modal-header" });
     modalHeader.appendChild(h("div", { className: "modal-title", id: "pluginManagerTitle" }, "Plugin Manager"));
@@ -7327,7 +7327,7 @@ This action cannot be undone!`, {
       var btn = h("button", {
         className: "tab-btn",
         role: "tab",
-        style: "padding: var(--space-md) var(--space-lg); border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 500; color: var(--text);",
+        style: "padding: var(--space-md) var(--space-lg); border: none; background: none; cursor: pointer; border-bottom: 0.1875rem solid transparent; font-weight: 500; color: var(--text);",
         onclick: function() {
           switchTab(tabName);
         }
@@ -7347,7 +7347,7 @@ This action cannot be undone!`, {
     });
     function switchTab(tabName) {
       tabs.forEach(function(t) {
-        tabButtons[t].style.borderBottom = t === tabName ? "3px solid var(--accent-strong, #1d4ed8)" : "3px solid transparent";
+        tabButtons[t].style.borderBottom = t === tabName ? "0.1875rem solid var(--accent-strong, #1d4ed8)" : "0.1875rem solid transparent";
         tabButtons[t].style.color = t === tabName ? "var(--accent-strong, #1d4ed8)" : "var(--text)";
         tabButtons[t].setAttribute("aria-selected", t === tabName ? "true" : "false");
         tabContents[t].style.display = t === tabName ? "block" : "none";
@@ -7382,7 +7382,7 @@ This action cannot be undone!`, {
         headerRow.appendChild(h("div", { style: "font-weight: 700; font-size: var(--text-lg);" }, manifest.name || plugin.id));
         var riskBadge = h("span", {
           title: risk === 'SAFE' ? "CSS-only theme — runs no JavaScript" : "Contains JavaScript. It runs in a separate worker and only uses the permissions you approve, but it can read your unlocked cards. Only enable plugins from authors you trust.",
-          style: "font-size: var(--text-xs); padding: 2px 8px; border-radius: 4px; font-weight: 600; " + (risk === 'SAFE' ? "background: #d1fae5; color: #065f46;" : risk === 'LOW' ? "background: #dbeafe; color: #1e40af;" : risk === 'MEDIUM' ? "background: #fef3c7; color: #92400e;" : "background: #fee2e2; color: #991b1b;")
+          style: "font-size: var(--text-xs); padding: 2px 0.5rem; border-radius: 0.25rem; font-weight: 600; " + (risk === 'SAFE' ? "background: #d1fae5; color: #065f46;" : risk === 'LOW' ? "background: #dbeafe; color: #1e40af;" : risk === 'MEDIUM' ? "background: #fef3c7; color: #92400e;" : "background: #fee2e2; color: #991b1b;")
         }, risk);
         headerRow.appendChild(riskBadge);
         card.appendChild(headerRow);
@@ -7390,7 +7390,7 @@ This action cannot be undone!`, {
         info.textContent = "v" + (manifest.version || "1.0.0") + " by " + (manifest.author || "Unknown") + (manifest.description ? " — " + manifest.description : "");
         card.appendChild(info);
         var stateBadge = h("span", {
-          style: "font-size: var(--text-xs); padding: 2px 8px; border-radius: 4px; font-weight: 600; " + (plugin.enabled ? "background: #d1fae5; color: #065f46;" : "background: #e5e7eb; color: #374151;")
+          style: "font-size: var(--text-xs); padding: 2px 0.5rem; border-radius: 0.25rem; font-weight: 600; " + (plugin.enabled ? "background: #d1fae5; color: #065f46;" : "background: #e5e7eb; color: #374151;")
         }, plugin.enabled ? "Active" : "Suspended");
         card.appendChild(stateBadge);
         var actions = h("div", { style: "display: flex; gap: var(--space-sm); margin-top: var(--space-md);" });
@@ -7525,7 +7525,7 @@ This action cannot be undone!`, {
       var urlInput = h("input", {
         type: "url",
         placeholder: "https://example.com/plugin.json",
-        style: "width: 100%; padding: var(--space-sm); margin-bottom: var(--space-sm); border: 1px solid var(--border); border-radius: 4px;"
+        style: "width: 100%; padding: var(--space-sm); margin-bottom: var(--space-sm); border: 1px solid var(--border); border-radius: 0.25rem;"
       });
       var urlBtn = h("button", {
         className: "btn",
@@ -7611,19 +7611,19 @@ This action cannot be undone!`, {
       form.appendChild(h("h4", { style: "margin-bottom: var(--space-sm);" }, "Manifest (JSON)"));
       var manifestInput = h("textarea", {
         placeholder: '{\n  "name": "My Plugin",\n  "version": "1.0.0",\n  "author": "Your Name",\n  "layer": "feature",\n  "permissions": []\n}',
-        style: "width: 100%; min-height: 120px; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 4px;"
+        style: "width: 100%; min-height: 7.5rem; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 0.25rem;"
       });
       form.appendChild(manifestInput);
       form.appendChild(h("h4", { style: "margin-bottom: var(--space-sm);" }, "JavaScript (setup function)"));
       var jsInput = h("textarea", {
         placeholder: "// Access APIs via ctx parameter\nconst cards = ctx.api.data.listCards();\nctx.api.ui.showToast(`Loaded ${cards.length} cards`, 'info');",
-        style: "width: 100%; min-height: 150px; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 4px;"
+        style: "width: 100%; min-height: 9.375rem; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 0.25rem;"
       });
       form.appendChild(jsInput);
       form.appendChild(h("h4", { style: "margin-bottom: var(--space-sm);" }, "CSS (optional)"));
       var cssInput = h("textarea", {
         placeholder: "/* Custom styles */\n.my-element {\n  color: var(--primary);\n}",
-        style: "width: 100%; min-height: 100px; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 4px;"
+        style: "width: 100%; min-height: 6.25rem; padding: var(--space-sm); margin-bottom: var(--space-md); font-family: monospace; border: 1px solid var(--border); border-radius: 0.25rem;"
       });
       form.appendChild(cssInput);
       var saveBtn = h("button", {
@@ -7668,7 +7668,7 @@ This action cannot be undone!`, {
   }
   function showAppearanceSettings() {
     const overlay = h("div", { className: "modal-overlay show" });
-    const modal = h("div", { className: "modal", style: "max-width: 600px;" });
+    const modal = h("div", { className: "modal", style: "max-width: 37.5rem;" });
     const modalHeader = h("div", { className: "modal-header" });
     modalHeader.appendChild(h("div", { className: "modal-title" }, "Appearance Settings"));
     const closeBtn = h("button", { className: "modal-close", onclick: () => overlay.remove(), "aria-label": "Close" }, "✕");
@@ -7682,7 +7682,7 @@ This action cannot be undone!`, {
     const richTextEnabled = localStorage.getItem("cardspoke_richtext") === "true";
     const richTextRow = h("div", {
       className: "menu-item-toggle",
-      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px; margin-bottom: var(--space-md);"
+      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem; margin-bottom: var(--space-md);"
     });
     const richTextLabel = h("div", { className: "menu-item-label" });
     richTextLabel.appendChild(h("span", { style: "display: block;" }, "Rich Text"));
@@ -7706,7 +7706,7 @@ This action cannot be undone!`, {
     const compactViewEnabled = store.viewMode === "compact";
     const compactRow = h("div", {
       className: "menu-item-toggle",
-      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px; margin-bottom: var(--space-md);"
+      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem; margin-bottom: var(--space-md);"
     });
     const compactLabel = h("label", { className: "menu-item-label" }, "Compact View");
     const compactToggle = h("label", { className: "switch-toggle" });
@@ -7728,7 +7728,7 @@ This action cannot be undone!`, {
     const gridViewEnabled = localStorage.getItem("cardspoke_gridView") === "true";
     const gridRow = h("div", {
       className: "menu-item-toggle",
-      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px; margin-bottom: var(--space-md);"
+      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem; margin-bottom: var(--space-md);"
     });
     const gridLabel = h("label", { className: "menu-item-label" }, "Grid View");
     const gridToggle = h("label", { className: "switch-toggle" });
@@ -7749,7 +7749,7 @@ This action cannot be undone!`, {
     const highContrastEnabled = localStorage.getItem("cardspoke_highcontrast") === "true";
     const contrastRow = h("div", {
       className: "menu-item-toggle",
-      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px;"
+      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem;"
     });
     const contrastLabel = h("label", { className: "menu-item-label" }, "High Contrast");
     const contrastToggle = h("label", { className: "switch-toggle" });
@@ -7774,7 +7774,7 @@ This action cannot be undone!`, {
     const devModeEnabled = localStorage.getItem("cardspoke_devmode") === "true";
     const devRow = h("div", {
       className: "menu-item-toggle",
-      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 4px; margin-top: var(--space-md);"
+      style: "padding: var(--space-md); border: 1px solid var(--border); border-radius: 0.25rem; margin-top: var(--space-md);"
     });
     const devLabel = h("label", { className: "menu-item-label" }, "Developer Mode");
     const devToggle = h("label", { className: "switch-toggle" });
@@ -7811,7 +7811,7 @@ This action cannot be undone!`, {
     typographyPresets.forEach(function(preset) {
       const isActive = currentTypography === preset.id;
       const presetOption = h("div", {
-        style: "padding: var(--space-md); border: 2px solid " + (isActive ? "var(--text)" : "var(--border)") + "; border-radius: 4px; margin-bottom: var(--space-md); cursor: pointer;",
+        style: "padding: var(--space-md); border: 2px solid " + (isActive ? "var(--text)" : "var(--border)") + "; border-radius: 0.25rem; margin-bottom: var(--space-md); cursor: pointer;",
         onclick: function() {
           localStorage.setItem("cardspoke_typography", preset.id);
           document.documentElement.setAttribute("data-typography", preset.id);
@@ -7832,7 +7832,7 @@ This action cannot be undone!`, {
     const currentTheme = store.activeTheme || "light";
     const lightOption = h("div", {
       className: "theme-option",
-      style: "padding: var(--space-lg); border: 2px solid " + (currentTheme === "light" ? "var(--text)" : "var(--border)") + "; margin-bottom: var(--space-md); cursor: pointer; border-radius: 4px; background: white; color: black;",
+      style: "padding: var(--space-lg); border: 2px solid " + (currentTheme === "light" ? "var(--text)" : "var(--border)") + "; margin-bottom: var(--space-md); cursor: pointer; border-radius: 0.25rem; background: white; color: black;",
       onclick: function() {
         applyTheme("light");
         overlay.remove();
@@ -7844,7 +7844,7 @@ This action cannot be undone!`, {
     modeSection.appendChild(lightOption);
     const darkOption = h("div", {
       className: "theme-option",
-      style: "padding: var(--space-lg); border: 2px solid " + (currentTheme === "dark" ? "white" : "var(--border)") + "; margin-bottom: var(--space-md); cursor: pointer; border-radius: 4px; background: #1a1a1a; color: white;",
+      style: "padding: var(--space-lg); border: 2px solid " + (currentTheme === "dark" ? "white" : "var(--border)") + "; margin-bottom: var(--space-md); cursor: pointer; border-radius: 0.25rem; background: #1a1a1a; color: white;",
       onclick: function() {
         applyTheme("dark");
         overlay.remove();
@@ -7886,7 +7886,7 @@ This action cannot be undone!`, {
     });
     if (themeExtensions.length > 0) {
       const defaultThemeOption = h("div", {
-        style: "padding: var(--space-md); border: 2px solid " + (!anyThemeEnabled ? "var(--text)" : "var(--border)") + "; border-radius: 4px; margin-bottom: var(--space-sm); cursor: pointer;",
+        style: "padding: var(--space-md); border: 2px solid " + (!anyThemeEnabled ? "var(--text)" : "var(--border)") + "; border-radius: 0.25rem; margin-bottom: var(--space-sm); cursor: pointer;",
         onclick: async function() {
           try {
             await activateThemePlugin(null);
@@ -7904,7 +7904,7 @@ This action cannot be undone!`, {
       themeExtensions.forEach(function(theme) {
         const isActive = theme.enabled;
         const themeOption = h("div", {
-          style: "padding: var(--space-md); border: 2px solid " + (isActive ? "var(--text)" : "var(--border)") + "; border-radius: 4px; margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;",
+          style: "padding: var(--space-md); border: 2px solid " + (isActive ? "var(--text)" : "var(--border)") + "; border-radius: 0.25rem; margin-bottom: var(--space-sm); cursor: pointer; display: flex; justify-content: space-between; align-items: center;",
           onclick: async function() {
             if (!theme.isModern) {
               showToast("This theme uses the legacy format and cannot be enabled. Re-install it from the Plugin Manager.", "error");
@@ -7928,7 +7928,7 @@ This action cannot be undone!`, {
         }
         themeOption.appendChild(themeInfo);
         const statusBadge = h("span", {
-          style: "font-size: var(--text-xs); padding: 2px 8px; border-radius: 10px; background: " + (theme.enabled ? "var(--success, #28a745)" : "var(--text-muted)") + "; color: white;"
+          style: "font-size: var(--text-xs); padding: 2px 0.5rem; border-radius: 0.625rem; background: " + (theme.enabled ? "var(--success, #28a745)" : "var(--text-muted)") + "; color: white;"
         }, theme.enabled ? "Enabled" : "Disabled");
         themeOption.appendChild(statusBadge);
         themeSection.appendChild(themeOption);
@@ -7937,7 +7937,7 @@ This action cannot be undone!`, {
       themeSection.appendChild(h(
         "div",
         {
-          style: "padding: var(--space-lg); background: var(--bg-secondary); border-radius: 4px; text-align: center; color: var(--text-muted);"
+          style: "padding: var(--space-lg); background: var(--bg-secondary); border-radius: 0.25rem; text-align: center; color: var(--text-muted);"
         },
         h("div", { style: "margin-bottom: var(--space-sm);" }, "No custom themes installed"),
         h("div", { style: "font-size: var(--text-sm);" }, "Install theme plugins from the Plugin Manager")
@@ -8232,6 +8232,7 @@ This action cannot be undone!`, {
       return;
     }
     if (navState.page === "edit") {
+      breadcrumbs.appendChild(h("button", { className: "breadcrumb", onclick: () => goTo('list', { cardId: null }), "aria-label": "Go to All Cards" }, "All Cards"));
       breadcrumbs.appendChild(h("span", { className: "breadcrumb current", "aria-current": "page" }, getEditPageLabel()));
       return;
     }
@@ -8246,9 +8247,7 @@ This action cannot be undone!`, {
       path.unshift(c);
       current = c.parentId;
     }
-    if (path.length === 0) {
-      breadcrumbs.appendChild(h("span", { className: "breadcrumb current", "aria-current": "page" }, "All Cards"));
-    } else {
+    if (path.length > 0) {
       const home = h("button", { className: "breadcrumb", onclick: () => goTo('list', { cardId: null }), "aria-label": "Go to All Cards" }, "All Cards");
       breadcrumbs.appendChild(home);
       path.forEach((c, i) => {
@@ -8274,7 +8273,14 @@ This action cannot be undone!`, {
     }
     searchContainer.style.display = "block";
     const title = parentId ? store.cards[parentId]?.title || "Card" : "Top Level Cards";
-    main.appendChild(h("div", { className: "page-title" }, title));
+    const heading = h("div", { className: "page-heading" });
+    const headingText = h("div", { className: "page-heading-text" });
+    headingText.appendChild(h("div", { className: "page-title" }, title));
+    if (kids.length > 0) {
+      headingText.appendChild(h("div", { className: "page-subtitle" }, kids.length === 1 ? "1 card" : `${kids.length} cards`));
+    }
+    heading.appendChild(headingText);
+    main.appendChild(heading);
     kids.sort((a, b) => (a.title || "").toLowerCase().localeCompare((b.title || "").toLowerCase()));
     if (kids.length === 0) {
       const emptyEl = h("div", { className: "empty empty-state" });
@@ -8287,7 +8293,7 @@ This action cannot be undone!`, {
     } else {
       const gridViewEnabled = localStorage.getItem("cardspoke_gridView") === "true";
       const isCompactMode = store.viewMode === "compact";
-      const densityBar = h("div", { className: "density-bar", "aria-label": "Card density" });
+      const densityBar = h("div", { className: "density-bar", role: "group", "aria-label": "Card density" });
       const densityOptions = [
         { key: "default", label: "Default", active: !gridViewEnabled && !isCompactMode },
         { key: "compact", label: "Compact", active: !gridViewEnabled && isCompactMode },
@@ -8313,7 +8319,7 @@ This action cannot be undone!`, {
         }, opt.label);
         densityBar.appendChild(btn);
       });
-      main.appendChild(densityBar);
+      heading.appendChild(densityBar);
       const gridClass = gridViewEnabled ? "card-grid grid-view" : "card-grid";
       const grid = h("div", { className: gridClass, role: "list" });
       let renderIndex = 0;
@@ -8352,12 +8358,9 @@ This action cannot be undone!`, {
     cardEl.dataset.cardId = card.id;
     cardEl.dataset.renderType = "list";
     const contentEl = h("div", { className: "card-content" });
-    const titleWrapper = h("div", { style: "display: flex; align-items: center; gap: 8px; min-width: 0;" });
+    const titleWrapper = h("div", { style: "display: flex; align-items: center; gap: 0.5rem; min-width: 0;" });
     if (isBookmarked(card.id)) {
-      titleWrapper.appendChild(h("span", {
-        style: "color: gold; font-size: 18px;",
-        title: "Bookmarked"
-      }, "★"));
+      titleWrapper.appendChild(h("span", { className: "card-bookmark", title: "Bookmarked" }, "★"));
     }
     const titleContent = opts.highlightQuery ? highlightText(card.title || "(Untitled)", opts.highlightQuery) : document.createTextNode(card.title || "(Untitled)");
     const titleDiv = h("div", { className: "card-title" });
@@ -8365,7 +8368,8 @@ This action cannot be undone!`, {
     titleWrapper.appendChild(titleDiv);
     contentEl.appendChild(titleWrapper);
     if (card.body && !isCompact) {
-      const previewText = card.body.substring(0, 140) + (card.body.length > 140 ? "..." : "");
+      const plainBody = card.body.replace(/\[\[([^\]]+)\]\]/g, "$1");
+      const previewText = plainBody.substring(0, 140) + (plainBody.length > 140 ? "..." : "");
       const desc = h("div", { className: "card-description" });
       if (opts.highlightQuery) {
         desc.appendChild(highlightText(previewText, opts.highlightQuery));
@@ -8386,7 +8390,10 @@ This action cannot be undone!`, {
     }
     cardEl.appendChild(contentEl);
     if (card.children && card.children.length > 0) {
-      cardEl.appendChild(h("div", { className: "card-count" }, String(card.children.length)));
+      const countEl = h("div", { className: "card-count" });
+      countEl.appendChild(h("span", { className: "card-count-number" }, String(card.children.length)));
+      countEl.appendChild(h("span", { className: "card-count-label" }, card.children.length === 1 ? "card" : "cards"));
+      cardEl.appendChild(countEl);
     }
     if (opts.lazyBody) {
       if (!previewObserver) {
@@ -8615,7 +8622,9 @@ This action cannot be undone!`, {
     detail.appendChild(actions);
     if (card.children && card.children.length > 0) {
       const childrenSection = h("div", { className: "children-section" });
-      childrenSection.appendChild(h("div", { className: "children-title" }, `Children (${card.children.length})`));
+      const childrenTitle = h("div", { className: "children-title" }, "Children ");
+      childrenTitle.appendChild(h("span", { className: "children-count" }, String(card.children.length)));
+      childrenSection.appendChild(childrenTitle);
       const childrenGrid = h("div", { className: "card-grid" });
       const childUpgradeEntries = [];
       card.children.forEach((cid) => {
@@ -8742,7 +8751,7 @@ This action cannot be undone!`, {
     bodyLabelRow.appendChild(h("label", { className: "form-label", style: "margin-bottom: 0;" }, "Body"));
     const importBodyBtn = h("button", {
       type: "button",
-      className: "btn",
+      className: "btn btn-link",
       style: "font-size: var(--text-sm);",
       onclick: function() {
         const fileInput = h("input", { type: "file", accept: ".txt,.md,.text", style: "display: none" });
@@ -8788,7 +8797,7 @@ This action cannot be undone!`, {
     formGroup2.appendChild(bodyLabelRow);
     const richToggleRow = h("div", { className: "form-row" });
     const richToggle = h("input", { type: "checkbox", id: "cardRich", checked: card.isRichText });
-    const richLabel = h("label", { for: "cardRich", style: "margin-left: 6px;" }, "Enable formatting (Markdown)");
+    const richLabel = h("label", { for: "cardRich" }, "Enable formatting (Markdown)");
     richToggle.addEventListener("change", () => {
       setDirty(true);
     });
@@ -8847,7 +8856,7 @@ ${prefix}`;
     formGroup2.appendChild(bodyTextarea);
     form.appendChild(formGroup2);
     const formGroupTags = h("div", { className: "form-group" });
-    formGroupTags.appendChild(h("label", { className: "form-label" }, "Tags (comma-separated)"));
+    formGroupTags.appendChild(h("label", { className: "form-label" }, "Tags"));
     const tagsDatalistId = "tags-datalist-" + Date.now();
     const tagsDatalist = h("datalist", { id: tagsDatalistId });
     const existingTags = getAllTags();
@@ -8859,6 +8868,7 @@ ${prefix}`;
       setDirty(true);
     });
     formGroupTags.appendChild(tagEditor);
+    formGroupTags.appendChild(h("div", { className: "form-hint" }, "Press Enter or comma to add a tag."));
     formGroupTags.appendChild(tagsDatalist);
     form.appendChild(formGroupTags);
     if (editing && card.id) {
@@ -8957,7 +8967,7 @@ ${prefix}`;
       const newKidsWrap = h("div", { className: "form-children", id: "addChildList" });
       const addChildRow = (title = "") => {
         const r = h("div", { className: "form-child-row" });
-        const t = h("input", { type: "text", value: title, placeholder: "Child title...", className: "form-input form-child-input", "aria-label": "New child card title" });
+        const t = h("input", { type: "text", value: title, placeholder: "Child title", className: "form-input form-child-input", "aria-label": "New child card title" });
         t.addEventListener("input", () => {
           setDirty(true);
         });
@@ -8970,15 +8980,15 @@ ${prefix}`;
       };
       addChildRow();
       formGroup5.appendChild(newKidsWrap);
-      formGroup5.appendChild(h("button", { type: "button", className: "btn", onclick: () => addChildRow() }, "+ Add Another Child"));
+      formGroup5.appendChild(h("button", { type: "button", className: "btn", onclick: () => addChildRow() }, "+ Add another child"));
       form.appendChild(formGroup5);
     } else {
       const formGroup4 = h("div", { className: "form-group" });
-      formGroup4.appendChild(h("label", { className: "form-label form-section-title" }, "Add Children Now (title only)"));
+      formGroup4.appendChild(h("label", { className: "form-label form-section-title" }, "Child cards (optional, title only)"));
       const kidsWrap = h("div", { className: "form-children", id: "addChildList" });
       const addChildRow = (title = "") => {
         const r = h("div", { className: "form-child-row" });
-        const t = h("input", { type: "text", value: title, placeholder: "Child title...", className: "form-input form-child-input", "aria-label": "New child card title" });
+        const t = h("input", { type: "text", value: title, placeholder: "Child title", className: "form-input form-child-input", "aria-label": "New child card title" });
         t.addEventListener("input", () => {
           setDirty(true);
         });
@@ -8991,7 +9001,7 @@ ${prefix}`;
       };
       addChildRow();
       formGroup4.appendChild(kidsWrap);
-      formGroup4.appendChild(h("button", { type: "button", className: "btn", onclick: () => addChildRow() }, "+ Add Another Child"));
+      formGroup4.appendChild(h("button", { type: "button", className: "btn", onclick: () => addChildRow() }, "+ Add another child"));
       form.appendChild(formGroup4);
     }
     const formActions = h("div", { className: "form-actions" });
@@ -9035,7 +9045,7 @@ ${prefix}`;
     main.appendChild(h("div", { className: "page-title" }, `Search: "${navState.searchQuery}"`));
     const loadingDiv = h("div", {
       className: "search-info",
-      style: "padding: 12px; margin-bottom: 12px; background: var(--bg-secondary); border-radius: 8px; font-size: 14px; color: var(--text-secondary);"
+      style: "padding: 0.75rem; margin-bottom: 0.75rem; background: var(--bg-secondary); border-radius: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);"
     }, "Searching...");
     main.appendChild(loadingDiv);
     fuzzySearchMultiDataset(query, scope).then((fuzzyResults) => {
@@ -9086,7 +9096,7 @@ ${prefix}`;
         const scopeText = scope === "all" ? " across all datasets" : "";
         const resultInfo = h("div", {
           className: "search-info",
-          style: "padding: 12px; margin-bottom: 8px; background: var(--bg-secondary); border-radius: 8px; font-size: 14px; color: var(--text-secondary);"
+          style: "padding: 0.75rem; margin-bottom: 0.5rem; background: var(--bg-secondary); border-radius: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);"
         }, `Found ${fuzzyResults.length} result${fuzzyResults.length === 1 ? "" : "s"}${scopeText}${fuzzyResults.some((result) => result.approximate) ? " (approximate matches marked with ~)" : ""}`);
         main.appendChild(resultInfo);
         let currentSortMode = "relevance";
@@ -9129,17 +9139,17 @@ ${prefix}`;
           "div",
           {
             className: "search-keyboard-hint",
-            style: "padding: 8px 12px; margin-bottom: 12px; background: var(--bg-alt, var(--bg-secondary)); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 12px;"
+            style: "padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; background: var(--bg-alt, var(--bg-secondary)); border: 1px solid var(--border); border-radius: 0.375rem; font-size: 0.8125rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.75rem;"
           },
           h("span", { style: "opacity: 0.7;" }, "💡"),
           h(
             "span",
             {},
-            h("kbd", { style: "background: var(--bg-primary); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; font-family: monospace;" }, "↑"),
+            h("kbd", { style: "background: var(--bg-primary); padding: 2px 0.375rem; border-radius: 0.25rem; border: 1px solid var(--border); font-size: 0.75rem; font-family: monospace;" }, "↑"),
             " / ",
-            h("kbd", { style: "background: var(--bg-primary); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; font-family: monospace;" }, "↓"),
+            h("kbd", { style: "background: var(--bg-primary); padding: 2px 0.375rem; border-radius: 0.25rem; border: 1px solid var(--border); font-size: 0.75rem; font-family: monospace;" }, "↓"),
             " to navigate • ",
-            h("kbd", { style: "background: var(--bg-primary); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; font-family: monospace;" }, "Enter"),
+            h("kbd", { style: "background: var(--bg-primary); padding: 2px 0.375rem; border-radius: 0.25rem; border: 1px solid var(--border); font-size: 0.75rem; font-family: monospace;" }, "Enter"),
             " to open"
           )
         );
@@ -9166,7 +9176,7 @@ ${prefix}`;
             });
             if (scope === "all" && result.datasetName) {
               const datasetBadge = h("span", {
-                style: "position: absolute; top: 8px; left: 8px; background: #3b82f6; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;"
+                style: "position: absolute; top: 0.5rem; left: 0.5rem; background: #3b82f6; color: #fff; padding: 2px 0.375rem; border-radius: 0.25rem; font-size: 0.625rem; font-weight: 600;"
               }, result.datasetName);
               cardEl.style.position = "relative";
               cardEl.appendChild(datasetBadge);
@@ -9191,7 +9201,7 @@ ${prefix}`;
             }
             if (result.approximate) {
               const matchBadge = h("span", {
-                style: "position: absolute; top: 8px; right: 8px; background: #fbbf24; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;"
+                style: "position: absolute; top: 0.5rem; right: 0.5rem; background: #fbbf24; color: #000; padding: 2px 0.375rem; border-radius: 0.25rem; font-size: 0.625rem; font-weight: 600;"
               }, "~");
               cardEl.style.position = "relative";
               cardEl.appendChild(matchBadge);
@@ -10103,7 +10113,7 @@ ${prefix}`;
   window.endUndoGroup = endUndoGroup;
   function showTrashBin() {
     const overlay = h("div", { className: "modal-overlay show" });
-    const modal = h("div", { className: "modal", style: "max-width: 600px;" });
+    const modal = h("div", { className: "modal", style: "max-width: 37.5rem;" });
     const modalHeader = h("div", { className: "modal-header" });
     modalHeader.appendChild(h("div", { className: "modal-title" }, "Trash Bin"));
     const closeBtn = h("button", { className: "modal-close", "aria-label": "Close trash bin", onclick: () => overlay.remove() }, "✕");
@@ -10241,7 +10251,7 @@ ${prefix}`;
   }
   function showTagManager() {
     const overlay = h("div", { className: "modal-overlay show" });
-    const modal = h("div", { className: "modal", style: "max-width: 700px;" });
+    const modal = h("div", { className: "modal", style: "max-width: 43.75rem;" });
     const modalHeader = h("div", { className: "modal-header" });
     modalHeader.appendChild(h("div", { className: "modal-title" }, "Tag Manager"));
     const closeBtn = h("button", {
@@ -10369,7 +10379,7 @@ ${prefix}`;
   }
   function showAdvancedSearch() {
     const overlay = h("div", { className: "modal-overlay show" });
-    const modal = h("div", { className: "modal", style: "max-width: 600px;" });
+    const modal = h("div", { className: "modal", style: "max-width: 37.5rem;" });
     const modalHeader = h("div", { className: "modal-header" });
     modalHeader.appendChild(h("div", { className: "modal-title" }, "Advanced Search"));
     const closeBtn = h("button", {
@@ -10399,7 +10409,7 @@ ${prefix}`;
       submitSearch();
     };
     const helpText = h("div", {
-      style: "background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius); margin-bottom: var(--space-lg); font-size: 14px; color: var(--text-secondary);"
+      style: "background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius); margin-bottom: var(--space-lg); font-size: 0.875rem; color: var(--text-secondary);"
     }, "💡 Tip: Use advanced filters to narrow down your search results by tag, bookmark status, or date.");
     modalBody.appendChild(helpText);
     const queryGroup = h("div", { style: "margin-bottom: var(--space-lg);" });
@@ -10854,10 +10864,10 @@ ${prefix}`;
           { className: "typography-presets" },
           h("div", { className: "preset-description" }, "Choose a reading mode that suits your preference:"),
           ...[
-            { id: "default", name: "Default", desc: "16px, comfortable line height" },
-            { id: "comfortable", name: "Comfortable", desc: "18px, extra line height for relaxed reading" },
-            { id: "compact", name: "Compact", desc: "14px, tighter spacing for more content" },
-            { id: "dyslexia", name: "Dyslexia-Friendly", desc: "18px, wider spacing, readable font" }
+            { id: "default", name: "Default", desc: "Your browser's text size, comfortable line height" },
+            { id: "comfortable", name: "Comfortable", desc: "Larger text, extra line height for relaxed reading" },
+            { id: "compact", name: "Compact", desc: "Smaller text, tighter spacing for more content" },
+            { id: "dyslexia", name: "Dyslexia-Friendly", desc: "Larger text, wider spacing, readable font" }
           ].map(
             (preset) => h(
               "div",
@@ -11040,7 +11050,7 @@ ${prefix}`;
       },
       h(
         "div",
-        { className: "modal", style: "max-width: 600px;" },
+        { className: "modal", style: "max-width: 37.5rem;" },
         h(
           "div",
           { className: "modal-header" },
@@ -11153,7 +11163,7 @@ ${prefix}`;
         },
         h(
           "div",
-          { className: "menu-panel", style: "max-width: 700px; max-height: 85vh; overflow-y: auto;" },
+          { className: "menu-panel", style: "max-width: 43.75rem; max-height: 85vh; overflow-y: auto;" },
           h(
             "div",
             { className: "menu-header" },
@@ -11199,7 +11209,7 @@ ${prefix}`;
               h("h3", { style: "margin-bottom: var(--space-md); color: var(--primary);" }, "Creating Cards"),
               h(
                 "div",
-                { style: "background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius); border-left: 3px solid var(--primary); margin-bottom: var(--space-md);" },
+                { style: "background: var(--bg-secondary); padding: var(--space-md); border-radius: var(--radius); border-left: 0.1875rem solid var(--primary); margin-bottom: var(--space-md);" },
                 h("p", { style: "font-weight: 600; margin-bottom: var(--space-xs);" }, "To create your first card:"),
                 h(
                   "ol",
@@ -11349,7 +11359,7 @@ ${prefix}`;
         },
         h(
           "div",
-          { className: "menu-panel", style: "max-width: 600px; max-height: 80vh; overflow-y: auto;" },
+          { className: "menu-panel", style: "max-width: 37.5rem; max-height: 80vh; overflow-y: auto;" },
           h(
             "div",
             { className: "menu-header" },
@@ -11398,15 +11408,15 @@ ${prefix}`;
               h(
                 "div",
                 { style: "display: grid; grid-template-columns: auto 1fr; gap: var(--space-xs) var(--space-md);" },
-                h("kbd", { style: "background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;" }, "Ctrl+N"),
+                h("kbd", { style: "background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;" }, "Ctrl+N"),
                 h("span", {}, "New card"),
-                h("kbd", { style: "background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;" }, "Ctrl+F"),
+                h("kbd", { style: "background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;" }, "Ctrl+F"),
                 h("span", {}, "Search"),
-                h("kbd", { style: "background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;" }, "Ctrl+Z"),
+                h("kbd", { style: "background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;" }, "Ctrl+Z"),
                 h("span", {}, "Undo"),
-                h("kbd", { style: "background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;" }, "Ctrl+Y"),
+                h("kbd", { style: "background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;" }, "Ctrl+Y"),
                 h("span", {}, "Redo"),
-                h("kbd", { style: "background: var(--bg-alt); padding: 2px 6px; border-radius: 4px;" }, "Ctrl+/"),
+                h("kbd", { style: "background: var(--bg-alt); padding: 2px 0.375rem; border-radius: 0.25rem;" }, "Ctrl+/"),
                 h("span", {}, "All shortcuts")
               )
             ),
@@ -11602,7 +11612,7 @@ ${prefix}`;
   });
   function showDeveloperConsole() {
     const overlay = h("div", { className: "modal-overlay show" });
-    const modal = h("div", { className: "modal", style: "max-width: 800px;" });
+    const modal = h("div", { className: "modal", style: "max-width: 50rem;" });
     const modalHeader = h("div", { className: "modal-header" });
     modalHeader.appendChild(h("div", { className: "modal-title" }, "🔧 Developer Console"));
     const closeBtn = h("button", {

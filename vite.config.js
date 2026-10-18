@@ -16,7 +16,7 @@
 
 
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import fs from 'fs';
 
 // Read the version once so banner and restoration can reference it.
@@ -490,6 +490,8 @@ export default defineConfig({
           'app-loader.js', 'CardSpoke.svg', 'capabilities.json',
           // Favicons and the installable-app icons (built by brand/build.py).
           'favicon.svg', 'favicon.ico', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png',
+          // Bundled UI font (styles.css @font-face) and its licence.
+          'fonts/inter-latin.woff2', 'fonts/inter-latin-ext.woff2', 'fonts/Inter-OFL.txt',
           // diagnostic.html / test.html are dev-only harnesses (they read
           // localStorage and fetch+eval the bundle) and are deliberately NOT
           // part of the built site — see DEV_ONLY_PAGES below.
@@ -503,7 +505,9 @@ export default defineConfig({
         for (const file of SITE_FILES) {
           const from = resolve(__dirname, 'www', file);
           if (fs.existsSync(from)) {
-            fs.copyFileSync(from, resolve(distDir, file));
+            const to = resolve(distDir, file);
+            fs.mkdirSync(dirname(to), { recursive: true });
+            fs.copyFileSync(from, to);
           }
         }
         // emptyOutDir is false, so remove copies left by older builds.

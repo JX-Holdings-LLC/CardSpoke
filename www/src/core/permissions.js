@@ -310,7 +310,7 @@ const grantedPermissions = new Map();
         content.setAttribute('aria-modal', 'true');
         const titleId = 'permission-dialog-title-' + Date.now().toString(36);
         content.setAttribute('aria-labelledby', titleId);
-        content.style.cssText = 'background:var(--bg-primary,#fff);padding:2rem;border-radius:8px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.2);';
+        content.style.cssText = 'background:var(--bg-primary,#fff);padding:2rem;border-radius:0.5rem;max-width:31.25rem;box-shadow:0 0.25rem 1.25rem rgba(0,0,0,0.2);';
 
         const title = document.createElement('h2');
         title.id = titleId;
@@ -364,13 +364,13 @@ const grantedPermissions = new Map();
         const denyBtn = document.createElement('button');
         denyBtn.textContent = opts.denyLabel;
         denyBtn.className = 'btn btn-secondary';
-        denyBtn.style.cssText = 'padding:0.5rem 1.5rem;border:1px solid #ccc;background:#fff;border-radius:4px;cursor:pointer;';
+        denyBtn.style.cssText = 'padding:0.5rem 1.5rem;border:1px solid #ccc;background:#fff;border-radius:0.25rem;cursor:pointer;';
         denyBtn.onclick = function() { finish(false); };
 
         const allowBtn = document.createElement('button');
         allowBtn.textContent = opts.allowLabel;
         allowBtn.className = 'btn btn-primary';
-        allowBtn.style.cssText = 'padding:0.5rem 1.5rem;border:none;background:var(--accent,#007bff);color:#fff;border-radius:4px;cursor:pointer;';
+        allowBtn.style.cssText = 'padding:0.5rem 1.5rem;border:none;background:var(--accent,#007bff);color:#fff;border-radius:0.25rem;cursor:pointer;';
         allowBtn.onclick = function() { finish(true); };
 
         buttons.appendChild(denyBtn);
