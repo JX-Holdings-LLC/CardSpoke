@@ -61,7 +61,7 @@ There is no account to create and no cloud to trust. Your cards are saved on you
 
 - Install themes from the built-in plugin gallery, such as Forest, Cyberpunk and Monochrome.
 - Add features such as a Kanban board, a daily journal or a Pomodoro timer.
-- Use the [command-line tool](./docs/guides/CLI.md) to read and edit your cards from scripts or AI agents. It works on the desktop app's data folder, even while the app is open, and never touches the network.
+- Use the experimental [command-line tool](./docs/guides/CLI.md) to read and edit your cards from scripts. It works on the desktop app's data folder, even while the app is open, and never touches the network.
 
 ## Your data and privacy
 
@@ -102,7 +102,7 @@ CardSpoke is a public preview. It does not currently offer:
 
 ## Help and feedback
 
-- In the app, open the menu (☰) and choose **Getting Started** or **Help & Documentation**.
+- New here? Follow [Your first ten minutes](./docs/guides/GETTING_STARTED.md), or open the menu (☰) in the app and choose **Getting Started** or **Help & Documentation**.
 - Found a bug or have an idea? [Open an issue](https://github.com/JX-Holdings-LLC/CardSpoke/issues).
 - See what changed in each release in the [changelog](./CHANGELOG.md).
 

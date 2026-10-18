@@ -4,21 +4,38 @@ CardSpoke is a private, local-first notebook where every note is a card. This do
 
 ## Choose a starting point
 
-| If you are… | Start here |
+### For people using CardSpoke
+
+| If you want to… | Start here |
 | --- | --- |
-| Using CardSpoke | [Feature Guide](./guides/FEATURES.md), then [Storage & Privacy](./policies/STORAGE_AND_PRIVACY.md) |
-| Using the desktop app | [Desktop guide](./guides/DESKTOP.md) |
-| Building a plugin | [Plugin Authoring Guide](./guides/PLUGIN_AUTHORING_GUIDE.md), then [Advanced Examples](../sample-plugins/advanced/README.md) and the [Plugin API](./api/PLUGIN_API.md) |
-| Working on CardSpoke itself | [Developer Guide](./guides/DEVELOPER_GUIDE.md) |
-| Scripting CardSpoke or driving it from an AI agent | [CLI guide](./guides/CLI.md) |
-| Reviewing a change with an AI agent or as a maintainer | [AI & Contributor Context](./AI_CONTEXT.md) |
-| Preparing a release | [Release & Versioning](./policies/RELEASE_AND_VERSIONING.md) and [CHANGELOG](../CHANGELOG.md) |
+| Try it for the first time | [Your first ten minutes](./guides/GETTING_STARTED.md) |
+| See everything it can do | [Feature Guide](./guides/FEATURES.md) |
+| Know where your cards live | [Storage & Privacy](./policies/STORAGE_AND_PRIVACY.md) |
+| Use the desktop app | [Desktop guide](./guides/DESKTOP.md) |
+| Script your cards from a terminal | [CLI guide](./guides/CLI.md) (experimental) |
+
+### For plugin authors
+
+| If you want to… | Start here |
+| --- | --- |
+| Build a plugin | [Plugin Authoring Guide](./guides/PLUGIN_AUTHORING_GUIDE.md), then the [sample plugins](../sample-plugins/advanced/README.md) |
+| Look up the `ctx` API, permissions or lifecycle | [Plugin System](./architecture/PLUGIN_SYSTEM.md) and [Plugin API](./api/PLUGIN_API.md) |
+
+### For contributors and maintainers
+
+| If you want to… | Start here |
+| --- | --- |
+| Work on CardSpoke itself | [Developer Guide](./guides/DEVELOPER_GUIDE.md) |
+| Understand how the source and plugin runtime fit together | [Code & Plugin System Handbook](./guides/CODE_AND_PLUGIN_SYSTEM_HANDBOOK.md) |
+| Review a change, with or without an AI agent | [AI & Contributor Context](./AI_CONTEXT.md) |
+| Prepare a release | [Release & Versioning](./policies/RELEASE_AND_VERSIONING.md) and [CHANGELOG](../CHANGELOG.md) |
+| Build for phones (experimental, unpublished) | [Capacitor guide](./guides/README.CAPACITOR.md) |
 
 ## Documentation map
 
 - [`architecture/`](./architecture/) — implementation boundaries, plugin design, and compatibility invariants.
 - [`api/`](./api/) — public plugin, schema, middleware, component, and storage contracts.
-- [`guides/`](./guides/) — development, testing, Capacitor, offline-first, feature, and deviation guides.
+- [`guides/`](./guides/) — getting started, features, plugins, development, testing, offline-first and deviation guides, plus the experimental Capacitor guide.
 - [`policies/`](./policies/) — release, security, privacy, and community policies.
 - [`specifications/`](./specifications/) — product scope and longer-term specification material.
 - [`analysis/`](./analysis/) — functional reviews and analysis write-ups.

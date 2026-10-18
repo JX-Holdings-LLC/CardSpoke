@@ -1,9 +1,9 @@
 # CardSpoke Plugin System
 
-This is the canonical guide to CardSpoke's plugin system: what plugins are,
-how to build one for each of the three layers, how the lifecycle works
-(install, enable, suspend, delete, reload), and the complete `ctx` API
-reference.
+This is the reference for CardSpoke's plugin system: what plugins are, the
+three layers, how the lifecycle works (install, enable, suspend, delete,
+reload), and the complete `ctx` API. For a step-by-step build, start with the
+[Plugin Authoring Guide](../guides/PLUGIN_AUTHORING_GUIDE.md).
 
 **App Version:** 0.21.1 | **Schema Version:** 4
 
