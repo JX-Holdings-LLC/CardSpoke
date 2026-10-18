@@ -1,5 +1,7 @@
 # CardSpoke Capacitor Guide
 
+**Status:** experimental. Native mobile apps are not published, and the browser version is the supported way to use CardSpoke on phones and tablets.
+
 This guide covers platform prerequisites and workflows for building and running CardSpoke with Capacitor. The web assets are already in `www/`, so the focus is on syncing and opening native shells.
 
 ## Prerequisites

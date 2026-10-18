@@ -1,6 +1,6 @@
 # CardSpoke Feature Guide
 
-Everything CardSpoke 0.21.1 (Public Preview) can do, and where to find it. Open the menu with the ☰ button in the top right.
+Everything CardSpoke 0.21.1 (Public Preview) can do, and where to find it. Open the menu with the ☰ button in the top right. New to CardSpoke? [Your first ten minutes](./GETTING_STARTED.md) is a shorter tour.
 
 ## Cards
 
@@ -121,7 +121,7 @@ If a plugin causes trouble, add `?safemode` to the end of the address (in the br
 
 ## Command-line tool
 
-The [CardSpoke CLI](./CLI.md) reads and edits datasets from a terminal: list, search, create, move, tag and export cards. Every command can print JSON, so scripts and AI agents can use it. It works on the desktop app's data folder (even while the app is open) or on any exported backup, and it never uses the network.
+The experimental [CardSpoke CLI](./CLI.md) reads and edits datasets from a terminal: list, search, create, move, tag and export cards. Every command can print JSON, so it suits scripts and automation. It works on the desktop app's data folder (even while the app is open) or on any exported backup, and it never uses the network.
 
 ## Privacy
 

@@ -1,6 +1,6 @@
 # Build a CardSpoke plugin: standalone guide for people and AI agents
 
-Verified against CardSpoke **0.21.1, schema 4**, with the plugin-lab runtime fixes in this change. Written 2026-09-24. This document is designed to be handed to an author who has never opened CardSpoke. It contains the product model, package contract, worker API, complete starting packages, implementation patterns, and acceptance criteria. You do not need the application source to produce an installable package. You do need a running CardSpoke to verify its behavior.
+Verified against CardSpoke **0.21.1, schema 4**, including the plugin runtime fixes listed under Unreleased in the [changelog](../../CHANGELOG.md). Written 2026-09-24. This guide is written so that someone who has never opened CardSpoke, or an AI agent working for them, can build a plugin from it. It contains the product model, package contract, worker API, complete starting packages, implementation patterns, and acceptance criteria. You do not need the application source to produce an installable package. You do need a running CardSpoke to verify its behavior.
 
 ## 1. The application you are extending
 
@@ -481,7 +481,7 @@ For repository contributors run `npm test`, `npm run build`, `npm run smoke`, `n
 | `... is not a function` or unknown RPC method | Invented API or treating a Promise as data. Use this reference and await calls. |
 | Plugin installed but nothing appears | App suspended, denied consent, missing selector, setup error, or stale bundle. Check Installed state and console. |
 | Hook seems registered but never runs | Await unregister `.ready`; check permission and operation; card.render uses different arguments. |
-| Card decorators absent on old 0.21.1 build | Install host fixes from this change; earlier first-batch attachment bug skips them. |
+| Card decorators absent on the released 0.21.1 build | Update to a build that includes the fix listed under Unreleased in the changelog; the released build skips first-batch decorators. |
 | Control loses focus while typing | Full vnode update rebuilt the input. Preserve draft state and avoid redraw on input. |
 | State disappears on reload | Session-only registration, unawaited storage, or reload before host save completed. |
 | Delete plugin did not delete created cards | Expected. Uninstall cleans runtime resources, not user content. |

@@ -322,7 +322,7 @@ Changing anything above? Then in the same PR:
 
 ## 0.21.1 trust migration and UI validation
 
-Every JS-bearing package now requires the persisted `plugin-code` grant in addition to manifest permissions. Existing packages prompt once at their next enable. No schema migration is needed (schema 4); the old trust key does not grant this permission. CSS-only themes are unaffected. Worker UI permits a safe element/attribute set; code that attempted active elements must use supported vnode UI. RPC paths cannot traverse inherited properties. See the canonical Plugin System trust model for limitations; do not describe workers as a complete hostile-code sandbox.
+Every JS-bearing package now requires the persisted `plugin-code` grant in addition to manifest permissions. Existing packages prompt once at their next enable. No schema migration is needed (schema 4); the old trust key does not grant this permission. CSS-only themes are unaffected. Worker UI permits a safe element/attribute set; code that attempted active elements must use supported vnode UI. RPC paths cannot traverse inherited properties. See the Plugin System trust model for limitations; do not describe workers as a complete hostile-code sandbox.
 
 ## Security-audit hardening (post-0.21.1)
 
@@ -332,8 +332,8 @@ Every JS-bearing package now requires the persisted `plugin-code` grant in addit
   (`Permissions.computeFingerprint`, FNV-1a over `js` + `teardownJs` + sorted
   `manifest.permissions`) is change detection, not crypto. A same-id plugin
   whose code or permissions differ gets a fresh consent prompt, and runtime
-  permission checks fail for it until then. Grants saved before this change
-  have no binding and prompt once more.
+  permission checks fail for it until then. Grants saved before fingerprint binding
+  existed have no binding and prompt once more.
 - **Function-form code is host-only (#370).** `Plugin.register()` rejects a
   definition whose only code is `setup`/`teardown` functions; trusted
   session-only host code must use `CardSpoke.registerPlugin()` (which calls

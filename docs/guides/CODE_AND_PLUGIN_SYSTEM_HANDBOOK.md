@@ -3,7 +3,7 @@
 For new distributed JSON plugins, start with the [standalone authoring guide](./PLUGIN_AUTHORING_GUIDE.md).
 It distinguishes worker-package APIs from session-only host-code examples and includes tested templates.
 
-This handbook is the implementation-level guide to how CardSpoke works and how to build plugins for it safely.
+This handbook is for contributors. It is the implementation-level guide to how CardSpoke's source fits together and how the plugin runtime works.
 
 It is intentionally specific: you’ll find concrete field names, hook signatures, storage keys, runtime APIs, and practical examples tied to the current architecture.
 
@@ -504,88 +504,19 @@ Interpretation guidance:
 
 ## 11) Safe Mode and Recovery
 
-Launching with `?safemode` boots with every stored plugin **registered but disabled** — no plugin `setup` runs, so a broken plugin cannot break startup.
-
-Practical use:
-
-1. Open app with `?safemode`
-2. Disable/uninstall problematic plugin(s)
-3. Reload normally
-
-In safe mode:
-
-- Runtime warns in console
-- A warning toast indicates plugins are disabled
-- `CardSpoke.Plugin.syncFromStore(true)` still runs — it re-registers stored plugins (so the Plugin Manager can list them) but enables none of them
+Launching with `?safemode` boots with every stored plugin **registered but disabled**: no plugin `setup` runs, so a broken plugin cannot break startup. `CardSpoke.Plugin.syncFromStore(true)` still re-registers stored plugins so the Plugin Manager can list them, and the runtime shows a warning toast. The user-facing steps are in the [Feature Guide](./FEATURES.md#plugins).
 
 ---
 
-## 12) Concrete Plugin Development Workflow
+## 12) Building a plugin
 
-## Step 1: Pick minimal layer
+This handbook describes how the host is built. To write a plugin, use the guides that are kept for that purpose:
 
-- Visual-only change → `theme` (CSS only, SAFE risk)
-- Add behavior/UI that composes with core → `feature` (CSS+JS, LOW risk)
-- Need global/app-level transformation → `app` (CSS+JS+overrides, HIGH risk)
+- [Plugin Authoring Guide](./PLUGIN_AUTHORING_GUIDE.md): the step-by-step workflow, complete templates and acceptance checks for worker-based JSON packages.
+- [Plugin System](../architecture/PLUGIN_SYSTEM.md): the `ctx` API reference, lifecycle and permissions.
+- [`sample-plugins/`](../../sample-plugins/): themes, features and apps to copy from.
 
-## Step 2: Start from examples
-
-Use `sample-plugins/` closest to your target behavior:
-
-- themes: `sample-plugins/themes/*.json`
-- feature-style plugins: `sample-plugins/features/*.json`
-- app-layer patterns: `sample-plugins/apps/*.json`
-
-## Step 3: Build iteratively
-
-1. Implement basic `setup()` with logging
-2. Add one functional behavior (often injecting UI or registering middleware)
-3. Add cleanup in `teardown()` if needed (most cleanup is automatic)
-4. Validate install/enable/disable cycle
-
-Example progression:
-
-```js
-// Iteration 1: Basic logging
-setup: async (ctx) => {
-  ctx.logger.info('Plugin enabled');
-}
-
-// Iteration 2: Add functionality
-setup: async (ctx) => {
-  ctx.logger.info('Plugin enabled');
-  const cards = ctx.api.data.listCards();
-  ctx.logger.info(`Found ${cards.length} cards`);
-}
-
-// Iteration 3: Add UI injection
-setup: async (ctx) => {
-  ctx.logger.info('Plugin enabled');
-  const element = document.createElement('div');
-  element.textContent = 'Plugin UI';
-  ctx.api.ui.inject('#sidebar', element, 'append');
-}
-```
-
-## Step 4: Validate with dev tools
-
-In console:
-
-```js
-// Get plugin instance
-window.CardSpoke.Plugin.get('my-plugin');
-
-// List all plugins
-window.CardSpoke.Plugin.list();
-
-// Check plugin details
-const plugin = window.CardSpoke.Plugin.get('my-plugin');
-console.log(plugin.enabled, plugin.definition);
-```
-
-## Step 5: Test safe mode fallback
-
-Ensure app remains functional with your plugin fully bypassed by loading with `?safemode`.
+Older snippets in this document that call `document.createElement` or pass `setup` functions describe session-only host code. Distributed JSON plugins run in a worker and cannot touch the DOM directly.
 
 ---
 
