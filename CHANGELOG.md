@@ -10,6 +10,10 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Added
 
+- **Bundled Inter font.** The UI now ships Inter (SIL OFL, `www/fonts/`)
+  instead of naming fonts that were never loaded, so every platform renders
+  the same face. Card tiles, which are buttons, now inherit it too.
+
 - **Markdown, CSV and plain-text export in the app.** Data & Export now has
   Backup (JSON), Markdown, CSV and Plain Text buttons. The Markdown and CSV
   exporters existed but no button reached them, although the docs and
@@ -44,6 +48,19 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
 
 ### Changed
 
+- **UI cleanup.** Header, content, footer and search bar now share one
+  centred column. Cards have a visible border instead of a fading shadow.
+  Tags show as `#tag` chips, and child counts are labelled. Card actions,
+  Save and Cancel are real buttons, with Delete set apart. Header icons
+  match, including the menu button. The save status is a dot plus text.
+  On the card view, children are compact rows. The New Card form lines up
+  with its title. The top-level page no longer repeats its title as a
+  breadcrumb.
+- **Relative sizing throughout.** Sizes are in `rem` (headings and gutters
+  scale with `clamp()`), so the Typography presets now scale the whole UI,
+  and the Default preset follows the browser's own text size instead of
+  a fixed 16px.
+
 - **User-focused copy.** The README and Feature Guide now speak to people
   using CardSpoke and writing plugins for it; build, packaging and
   troubleshooting notes moved to the Developer Guide. The app, manifest,
@@ -68,6 +85,11 @@ The format follows Keep a Changelog and the project uses semantic versioning whe
   "Your information, your way."
 
 ### Fixed
+
+- `[[Card Name]]` links show as plain names in card previews instead of
+  raw brackets.
+- Footer links were default browser blue, unreadable in dark mode.
+- The search bar's dataset picker no longer truncates ("Currer") on phones.
 
 - In-app copy that contradicted the app: the plugin risk tooltip said plugins
   are not sandboxed (they run in a permission-checked worker); privacy notes

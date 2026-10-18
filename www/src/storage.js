@@ -1715,7 +1715,7 @@ import {
           role: 'dialog',
           'aria-modal': 'true',
           'aria-labelledby': 'datasetLockTitle',
-          style: 'max-width: 480px;'
+          style: 'max-width: 30rem;'
         });
         const header = h('div', { className: 'modal-header' });
         header.appendChild(h('div', { className: 'modal-title', id: 'datasetLockTitle' }, 'Dataset Locked'));
@@ -1776,7 +1776,7 @@ import {
           role: 'dialog',
           'aria-modal': 'true',
           'aria-labelledby': 'corruptRecoveryTitle',
-          style: 'max-width: 560px;'
+          style: 'max-width: 35rem;'
         });
         const header = h('div', { className: 'modal-header' });
         header.appendChild(h('div', { className: 'modal-title', id: 'corruptRecoveryTitle' }, 'Stored Data Could Not Be Read'));

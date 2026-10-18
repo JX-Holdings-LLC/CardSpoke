@@ -452,7 +452,7 @@ function showToast(message, type = 'success', duration = 3000) {
         content = null,
         actions = [],
         dismissValue = null,
-        width = '520px',
+        width = '32.5rem',
         ariaLabelledBy = '',
         onOpen = null
       } = options;
@@ -568,7 +568,7 @@ function showToast(message, type = 'success', duration = 3000) {
       return showModalDialog({
         title: options.title || 'Confirm Action',
         message,
-        width: options.width || '520px',
+        width: options.width || '32.5rem',
         dismissValue: false,
         actions: [
           {
@@ -597,7 +597,7 @@ function showToast(message, type = 'success', duration = 3000) {
       return showModalDialog({
         title: options.title || 'Choose Action',
         message,
-        width: options.width || '520px',
+        width: options.width || '32.5rem',
         dismissValue: options.dismissValue ?? null,
         actions: options.actions || []
       });
@@ -650,7 +650,7 @@ function showToast(message, type = 'success', duration = 3000) {
         title: options.title || 'Enter Value',
         message: options.message || '',
         content: inputWrap,
-        width: options.width || '520px',
+        width: options.width || '32.5rem',
         dismissValue: null,
         actions: [
           {
