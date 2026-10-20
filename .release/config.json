@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "bumpPolicy": "every-main-change",
+  "apps": {
+    "cardspoke": {
+      "tagPrefix": "v",
+      "paths": [
+        "**"
+      ],
+      "versionFiles": [
+        {
+          "path": "package.json",
+          "format": "json",
+          "key": "version"
+        },
+        {
+          "path": "package-lock.json",
+          "format": "json",
+          "key": "version"
+        },
+        {
+          "path": "desktop/package.json",
+          "format": "json",
+          "key": "version"
+        },
+        {
+          "path": "package-lock.json",
+          "format": "json",
+          "key": "packages..version"
+        }
+      ],
+      "notes": ".release/notes/{app}/{version}.md",
+      "assets": [
+        "CardSpoke-{version}-win-x64.exe",
+        "CardSpoke-{version}-win-arm64.exe",
+        "CardSpoke-{version}-mac-x64.dmg",
+        "CardSpoke-{version}-mac-arm64.dmg",
+        "CardSpoke-{version}-mac-x64.zip",
+        "CardSpoke-{version}-mac-arm64.zip",
+        "CardSpoke-{version}-linux-x64.AppImage",
+        "CardSpoke-{version}-linux-x64.deb",
+        "latest.yml",
+        "latest-mac.yml",
+        "latest-linux.yml"
+      ],
+      "security": "standard",
+      "checksumFile": "SHA256SUMS.txt",
+      "legacyLatest": true,
+      "optionalAssets": [
+        {
+          "pattern": "^CardSpoke-{version}-(?:win-(?:x64|arm64)\\.exe|mac-(?:x64|arm64)\\.(?:dmg|zip))\\.blockmap$",
+          "min": 0,
+          "max": 6
+        }
+      ]
+    }
+  }
+}

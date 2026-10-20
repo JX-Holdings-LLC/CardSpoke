@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "apps": {
+    "cardspoke": {
+      "title": "CardSpoke",
+      "version": "0.21.1"
+    }
+  }
+}

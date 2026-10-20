@@ -1,171 +1,198 @@
-name: Desktop app
-
-# Builds the Electron desktop app and its installers:
-#   Windows  -> NSIS installer (.exe, x64 + arm64)
-#   macOS    -> .dmg and .zip (x64 + arm64)
-#   Linux    -> AppImage and .deb (x64)
-#
-# Pull requests that touch the desktop shell get a Linux build + smoke test.
-# Pushing a v* tag (or running the workflow manually with "release" checked)
-# builds every platform and attaches the installers to a draft GitHub Release.
-
-on:
-  pull_request:
-    paths:
-      - 'desktop/**'
-      - '.github/workflows/desktop.yml'
-  push:
-    tags: ['v*']
+name: Release
+'on':
   workflow_dispatch:
     inputs:
-      release:
-        description: 'Upload installers to a draft GitHub Release'
+      channel:
+        description: Release channel
+        type: choice
+        options:
+        - stable
+        - preview
+        default: stable
+      dry_run:
+        description: Build and verify without publishing
         type: boolean
-        default: false
-
+        default: true
+      app:
+        description: Optional app ID; empty selects every advanced app
+        type: string
+        default: ''
 permissions:
   contents: read
-
 concurrency:
-  group: desktop-${{ github.ref }}
-  cancel-in-progress: true
-
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
 jobs:
+  plan:
+    uses: JX-Holdings-LLC/release-infrastructure/.github/workflows/plan.yml@e219396d4dcab9a14c9d7ee1730320fc94006dcc
+    with:
+      toolkit-ref: e219396d4dcab9a14c9d7ee1730320fc94006dcc
+      channel: ${{ inputs.channel }}
+      app: ${{ inputs.app }}
   build:
     name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Linux
-            os: [self-hosted, Linux, X64]
-            target: --linux
-            pr: true
-          - name: Windows
-            os: windows-latest
-            target: --win
-            pr: false
-          - name: macOS
-            os: macos-latest
-            target: --mac
-            pr: false
+        - name: Linux
+          os: ubuntu-latest
+          target: --linux
+          pr: true
+        - name: Windows
+          os: windows-latest
+          target: --win
+          pr: false
+        - name: macOS
+          os: macos-latest
+          target: --mac
+          pr: false
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write
+      contents: read
     steps:
-      - name: Skip non-Linux builds on pull requests
-        id: gate
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ matrix.pr }}" != "true" ]; then
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Container jobs run as root and leave root-owned files in the
-      # self-hosted runner's shared workspace and tool cache, which breaks
-      # checkout for every later job. Hand them back to the runner user.
-      - name: Reclaim workspace from container jobs
-        if: runner.os == 'Linux' && steps.gate.outputs.run == 'true'
-        run: |
-          mkdir -p "$GITHUB_WORKSPACE" "$RUNNER_TOOL_CACHE"
-          docker run --rm -v "$GITHUB_WORKSPACE:/w" -v "$RUNNER_TOOL_CACHE:/t" \
-            alpine:3.20 chown -R "$(id -u):$(id -g)" /w /t
-
-      - uses: actions/checkout@v4
-        if: steps.gate.outputs.run == 'true'
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@v4
-        if: steps.gate.outputs.run == 'true'
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            desktop/package-lock.json
-
-      - name: Install web app dependencies
-        if: steps.gate.outputs.run == 'true'
-        run: npm ci
-
-      - name: Install desktop dependencies
-        if: steps.gate.outputs.run == 'true'
-        run: npm ci
-        working-directory: desktop
-
-      - name: Desktop unit tests
-        if: steps.gate.outputs.run == 'true'
-        run: npm test
-        working-directory: desktop
-
-      - name: Build web bundle for the desktop app
-        if: steps.gate.outputs.run == 'true'
-        run: node scripts/prepare-web.mjs
-        working-directory: desktop
-
-      # Unsigned builds by default. To sign, add repository secrets:
-      #   Windows: WIN_CSC_LINK (base64 .pfx) + WIN_CSC_KEY_PASSWORD
-      #   macOS:   CSC_LINK (base64 .p12) + CSC_KEY_PASSWORD, and for
-      #            notarization APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER
-      # Without a macOS certificate the app is ad-hoc signed so it still
-      # launches on Apple silicon (users confirm it once via right-click > Open).
-      - name: Build installers
-        if: steps.gate.outputs.run == 'true'
-        shell: bash
-        working-directory: desktop
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: |
-          publish=never
-          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event.inputs.release }}" = "true" ]; then
-            publish=always
-          fi
-          extra=()
-          if [ "${{ runner.os }}" = "macOS" ] && [ -z "$CSC_LINK" ]; then
-            export CSC_IDENTITY_AUTO_DISCOVERY=false
-            extra+=(-c.mac.identity=- -c.mac.hardenedRuntime=false)
-          fi
-          # Empty secrets must not be passed through as empty strings.
-          for v in CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER; do
-            [ -z "${!v}" ] && unset "$v"
-          done
-          npx electron-builder ${{ matrix.target }} --publish "$publish" "${extra[@]}"
-
-      - name: Smoke test the packaged app (Linux)
-        if: steps.gate.outputs.run == 'true' && runner.os == 'Linux'
-        working-directory: desktop
-        run: |
-          if command -v xvfb-run >/dev/null; then
-            xvfb-run -a node scripts/smoke.mjs --packaged release/linux-unpacked/cardspoke
-          else
-            echo "::warning::xvfb-run not available on this runner; skipping the packaged-app smoke test"
-          fi
-
-      - name: Smoke test the packaged app (Windows)
-        if: steps.gate.outputs.run == 'true' && runner.os == 'Windows'
-        working-directory: desktop
-        run: node scripts/smoke.mjs --packaged release/win-unpacked/CardSpoke.exe
-
-      - name: Upload installers
-        if: steps.gate.outputs.run == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: cardspoke-desktop-${{ runner.os }}
-          path: |
-            desktop/release/*.exe
-            desktop/release/*.dmg
-            desktop/release/*.zip
-            desktop/release/*.AppImage
-            desktop/release/*.deb
-            desktop/release/latest*.yml
-          if-no-files-found: error
+    - name: Install Linux smoke-test libraries
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64
+    - name: Skip non-Linux builds on pull requests
+      id: gate
+      shell: bash
+      run: echo "run=true" >> "$GITHUB_OUTPUT"
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      if: steps.gate.outputs.run == 'true'
+      with:
+        persist-credentials: false
+        ref: ${{ needs.plan.outputs.sha }}
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      if: steps.gate.outputs.run == 'true'
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: |
+          package-lock.json
+          desktop/package-lock.json
+    - name: Install web app dependencies
+      if: steps.gate.outputs.run == 'true'
+      run: npm ci
+    - name: Install desktop dependencies
+      if: steps.gate.outputs.run == 'true'
+      run: npm ci
+      working-directory: desktop
+    - name: Desktop unit tests
+      if: steps.gate.outputs.run == 'true'
+      run: npm test
+      working-directory: desktop
+    - name: Build web bundle for the desktop app
+      if: steps.gate.outputs.run == 'true'
+      run: node scripts/prepare-web.mjs
+      working-directory: desktop
+    - name: Build installers
+      if: steps.gate.outputs.run == 'true'
+      shell: bash
+      working-directory: desktop
+      env:
+        CSC_LINK: ${{ secrets.CSC_LINK }}
+        CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+        WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      run: |
+        publish=never
+        extra=()
+        if [ "${{ runner.os }}" = "macOS" ] && [ -z "$CSC_LINK" ]; then
+          export CSC_IDENTITY_AUTO_DISCOVERY=false
+          extra+=(-c.mac.identity=- -c.mac.hardenedRuntime=false)
+        fi
+        # Empty secrets must not be passed through as empty strings.
+        for v in CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER; do
+          [ -z "${!v}" ] && unset "$v"
+        done
+        npx electron-builder ${{ matrix.target }} --publish "$publish" "${extra[@]}"
+    - name: Smoke test the packaged app (Linux)
+      if: steps.gate.outputs.run == 'true' && runner.os == 'Linux'
+      working-directory: desktop
+      run: |
+        if command -v xvfb-run >/dev/null; then
+          xvfb-run -a node scripts/smoke.mjs --packaged release/linux-unpacked/cardspoke
+        else
+          echo "::warning::xvfb-run not available on this runner; skipping the packaged-app smoke test"
+        fi
+    - name: Smoke test the packaged app (Windows)
+      if: steps.gate.outputs.run == 'true' && runner.os == 'Windows'
+      working-directory: desktop
+      run: node scripts/smoke.mjs --packaged release/win-unpacked/CardSpoke.exe
+    - name: Upload installers
+      if: steps.gate.outputs.run == 'true'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: cardspoke-desktop-${{ runner.os }}
+        path: |
+          desktop/release/*.exe
+          desktop/release/*.dmg
+          desktop/release/*.zip
+          desktop/release/*.AppImage
+          desktop/release/*.deb
+          desktop/release/latest*.yml
+          desktop/release/*.blockmap
+        if-no-files-found: error
+    needs:
+    - plan
+    if: needs.plan.outputs.selected == 'true' && fromJSON(needs.plan.outputs.apps)['cardspoke'].selected
+    env:
+      RELEASE_TAG: ${{ fromJSON(needs.plan.outputs.apps)['cardspoke'].tag }}
+      RELEASE_VERSION: ${{ fromJSON(needs.plan.outputs.apps)['cardspoke'].version }}
+      RELEASE_SOURCE_SHA: ${{ needs.plan.outputs.sha }}
+  assemble:
+    runs-on: ubuntu-latest
+    needs:
+    - plan
+    - build
+    if: needs.plan.outputs.selected == 'true' && fromJSON(needs.plan.outputs.apps)['cardspoke'].selected
+    env:
+      RELEASE_SOURCE_SHA: ${{ needs.plan.outputs.sha }}
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        ref: ${{ needs.plan.outputs.sha }}
+        persist-credentials: false
+        fetch-depth: 0
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        path: artifacts
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      with:
+        repository: JX-Holdings-LLC/release-infrastructure
+        ref: e219396d4dcab9a14c9d7ee1730320fc94006dcc
+        path: .toolkit
+        persist-credentials: false
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: 24
+    - name: Stage the complete configured release inventory
+      shell: bash
+      env:
+        RELEASE_APP: cardspoke
+      run: node .toolkit/src/release.mjs stage --app "$RELEASE_APP" --from artifacts --bundle unified-bundle --sha
+        "$RELEASE_SOURCE_SHA"
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: bundle-cardspoke
+        path: unified-bundle
+        if-no-files-found: error
+  publish-cardspoke:
+    needs:
+    - plan
+    - assemble
+    if: needs.plan.outputs.selected == 'true' && fromJSON(needs.plan.outputs.apps)['cardspoke'].selected
+    uses: JX-Holdings-LLC/release-infrastructure/.github/workflows/finish.yml@e219396d4dcab9a14c9d7ee1730320fc94006dcc
+    permissions:
+      contents: write
+    with:
+      toolkit-ref: e219396d4dcab9a14c9d7ee1730320fc94006dcc
+      source-sha: ${{ needs.plan.outputs.sha }}
+      app: cardspoke
+      security: standard
+      artifact: bundle-cardspoke
+      dry-run: ${{ inputs.dry_run }}
