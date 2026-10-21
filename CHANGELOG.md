@@ -634,3 +634,13 @@ First public release of the main CardSpoke web app.
 ## [0.16.x and earlier]
 
 Earlier releases predated this changelog file. See the Git log for historical changes.
+
+## 2026-10-21 — Release check fixes
+
+### Changed
+
+- Refresh Vite to its patched 7.3 release.
+
+### Notes
+
+- Unit tests, production build and all 139 browser checks pass locally.
